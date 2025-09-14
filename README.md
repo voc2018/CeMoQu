@@ -46,5 +46,3 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 
 ---
 
-👉 Do you want me to also prepare a **short GitHub repo description** (one-liner) separately from this README?
-
