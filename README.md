@@ -45,4 +45,7 @@
 Distributed under the **MIT License**. See `LICENSE` for details.
 
 ---
-
+## Code
+* Ataxia -> diagnostic test
+* Test2 -> finger excercise
+* SARA-Q -> audio recorder
