@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ataxia Diagnostic Suite</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+         :root {
+            --bg: #f4f4f4;
+            --text: #222;
+            --accent: #1976d2;
+        }
+        
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        header {
+            padding: 10px 20px;
+            background-color: var(--accent);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 700;
+        }
+        
+        #main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        #canvas-container {
+            flex: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: white;
+            border-right: 1px solid #ccc;
+            position: relative;
+        }
+        
+        canvas {
+            border: 1px solid #ccc;
+            background: #fff;
+            touch-action: none;
+        }
+        
+        #stats-panel {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            background: var(--bg);
+        }
+        
+        #sidebar {
+            width: 250px;
+            background-color: #eee;
+            border-left: 1px solid #ccc;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        
+        label,
+        select,
+        button,
+        input {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            font-family: 'Roboto', sans-serif;
+        }
+        
+        .patient-info {
+            font-weight: 700;
+            margin-bottom: 5px;
+            font-size: 1.2em;
+        }
+
+        #timer-label {
+            font-weight: 400;
+            margin-bottom: 15px;
+            font-size: 1em;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 200px;
+            margin-top: 20px;
+        }
+
+        /* Dark mode inversion */
+        .invert-colors {
+            filter: invert(1) hue-rotate(180deg);
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #999;
+            padding: 5px;
+            text-align: center;
+        }
+        th {
+            background: #ddd;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div><strong>Ataxia Diagnostic Suite</strong></div>
+        <div>
+            <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
+        </div>
+    </header>
+    <div id="main">
+        <div id="canvas-container">
+            <canvas id="testCanvas"></canvas>
+        </div>
+        <div id="stats-panel">
+            <div class="patient-info" id="patientInfo">No patient selected</div>
+            <div id="timer-label">Time: <span id="timer">0.00</span> s</div>
+            
+            <!-- Stats Table -->
+            <table id="statsTable">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                        <th>Mode</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Discontinuities</td>
+                        <td id="discontValue">0</td>
+                        <td>—</td>
+                    </tr>
+                    <tr>
+                        <td>Turns (Vertical)</td>
+                        <td id="verticalTurnValue">0</td>
+                        <td>—</td>
+                    </tr>
+                    <tr>
+                        <td>Reverses (Horizontal)</td>
+                        <td id="horizontalTurnValue">0</td>
+                        <td>—</td>
+                    </tr>
+                    <tr>
+                        <td>Off-by</td>
+                        <td id="offByValue">0</td>
+                        <td>
+                            <input type="number" id="offByThreshold" value="10" style="width:60px" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Deviation Area</td>
+                        <td id="deviationValue">0</td>
+                        <td><button id="deviationModeBtn" onclick="toggleDeviationMode()">Total</button></td>
+                    </tr>
+                    <tr>
+                        <td>Turn Avg</td>
+                        <td id="turnValue">0</td>
+                        <td><button id="turnModeBtn" onclick="toggleTurnMode()">Avg Vertical</button></td>
+                    </tr>
+                    <tr>
+                        <td>Out-of-Bounds</td>
+                        <td id="outOfBoundsValue">0</td>
+                        <td>—</td>
+                    </tr>
+                    <tr>
+                        <td>Start Fails</td>
+                        <td id="startFailsValue">0</td>
+                        <td>—</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="sidebar">
+            <button onclick="openPatientDialog()">New Patient</button>
+            <select id="previousPatients" onchange="loadPreviousPatient(this.value)">
+                <option value="">Select Previous Patient</option>
+            </select>
+            <button onclick="clearAllPatients()">Clear All Patients</button>
+            
+            <hr>
+
+            <select id="testSelector" onchange="changeTest()">
+                <option value="vertical">Vertical Test</option>
+                <option value="horizontal">Horizontal Test</option>
+                <option value="diagonal1">Diagonal Test 1</option>
+                <option value="diagonal2">Diagonal Test 2</option>
+            </select>
+            <button onclick="stopTest()">Stop Test</button>
+            <button onclick="resetTest()">Reset Test</button>
+            <!-- 
+            <label>
+                <input type="checkbox" id="timedMode" /> Timed Mode
+            </label>
+            -->
+            <button onclick="exportData()">Export Data</button>
+            <!-- 
+            <button onclick="openChatDialog()">Chat</button>
+            Upload Data <input type="file" id="upload" onchange="uploadFile()"/>
+            -->
+        </div>
+    </div>
+
+    <!-- Modal for Patient Info -->
+    <dialog id="patientDialog">
+        <form method="dialog">
+            <label>Name: <input type="text" id="patientName" required /></label>
+            <label>ID: <input type="text" id="patientID" required /></label>
+            <menu>
+                <button type="submit" onclick="setPatientInfo()">Confirm</button>
+                <button onclick="patientDialog.close()">Cancel</button>
+            </menu>
+        </form>
+    </dialog>
+
+    <!-- Modal for Chat -->
+    <dialog id="chatDialog">
+        <p>Select a question:</p>
+        <select onchange="answerQuestion(this.value)">
+            <option value="">-- Select --</option>
+            <option value="measure">What does this test measure?</option>
+            <option value="interpret">How do I interpret my results?</option>
+        </select>
+        <p id="chatResponse"></p>
+        <menu>
+            <button onclick="chatDialog.close()">Close</button>
+        </menu>
+    </dialog>
+
+    <script>
+        let currentPatient = null;
+        let currentTest = null;
+        let testActive = false;
+
+        const canvas = document.getElementById("testCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const WIDTH = 900, HEIGHT = 600;
+        const BOX_SIZE = 50;
+
+        canvas.width = WIDTH;
+        canvas.height = HEIGHT;
+
+        let touches = [], turns = [];
+        let pointerdown = false;
+        let canDraw = false;
+        let startBox, finishBox;
+        let startHit = false;
+        let finishHit = false;
+        let success = false;
+
+        function toggleDarkMode() {
+            document.body.classList.toggle("invert-colors");
+        }
+
+        function getCoordinatesFromEvent(e) {
+            const rect = canvas.getBoundingClientRect();
+            return [e.clientX - rect.left, e.clientY - rect.top];
+        }
+        function getCurrentTouch() {
+            return touches[touches.length - 1];
+        }
+        function isInsideBox(x, y, box) {
+            return x >= box[0] && x <= box[0] + BOX_SIZE &&
+                   y >= box[1] && y <= box[1] + BOX_SIZE;
+        }
+        
+        let statistics = {
+        	discontinuities: 0,
+        	verticalTurns: 0,
+        	deviationArea: 0,  // sum of distances from ideal line
+        	horizontalTurns: 0,
+        	outOfBounds: 0,
+        	startFails: 0,
+        };
+        
+        let dx = 0, dy = 0;
+
+        // Table update modes
+        let deviationMode = "total";   // total | average
+        let turnMode = "avgVertical";  // avgVertical | avgHorizontal
+
+        function toggleDeviationMode() {
+            deviationMode = (deviationMode === "total") ? "average" : "total";
+            document.getElementById("deviationModeBtn").innerText = 
+                deviationMode.charAt(0).toUpperCase() + deviationMode.slice(1);
+            updateStats();
+        }
+
+        function toggleTurnMode() {
+            turnMode = (turnMode === "avgVertical") ? "avgHorizontal" : "avgVertical";
+            document.getElementById("turnModeBtn").innerText =
+                (turnMode === "avgVertical") ? "Avg Vertical" : "Avg Horizontal";
+            updateStats();
+        }
+
+        function totalPointCount() {
+            return touches.reduce((acc, t) => acc + t.points.length, 0);
+        }
+
+        function updateStats() {
+            // Off-by: recompute using threshold
+            const thresholdEl = document.getElementById("offByThreshold");
+            const threshold = parseFloat(thresholdEl.value) || 10;
+            document.getElementById("offByValue").innerText = updateOffBy(threshold);
+
+            // Deviation value: total or average per sampled point
+            let deviationVal = statistics.deviationArea;
+            if (deviationMode === "average") {
+                const n = totalPointCount();
+                deviationVal = n > 0 ? deviationVal / n : 0;
+            }
+            document.getElementById("deviationValue").innerText = deviationVal.toFixed(2);
+
+            // Turns average per stroke (touch)
+            const touchCount = Math.max(1, touches.length); // avoid div by zero
+            let turnVal = 0;
+            
+            // average DISTANCE FROM THE LINE when the turn occurs
+            if (turnMode === "avgVertical") {
+            	for (let turn of turns)
+            		if (turn.horizontal === false)
+            			turnVal += turn.distance;
+            	if (statistics.verticalTurns !== 0)
+            		turnVal /= statistics.verticalTurns;
+            } else {
+            	for (let turn of turns)
+            		if (turn.horizontal === true)
+            			turnVal += turn.distance;
+            	if (statistics.horizontalTurns !== 0) 
+            	turnVal /= statistics.horizontalTurns;
+            }
+            document.getElementById("turnValue").innerText = turnVal.toFixed(2);
+
+            // Other stats
+            document.getElementById("outOfBoundsValue").innerText = statistics.outOfBounds;
+            document.getElementById("startFailsValue").innerText = statistics.startFails;
+            
+            document.getElementById("discontValue").innerText = statistics.discontinuities;
+            document.getElementById("verticalTurnValue").innerText = statistics.verticalTurns;
+            document.getElementById("horizontalTurnValue").innerText = statistics.horizontalTurns;
+        }
+
+        // Update on threshold change live
+        document.getElementById("offByThreshold").addEventListener("input", updateStats);
+        document.getElementById("offByThreshold").addEventListener("change", updateStats);
+
+        function updateOffBy(threshold) {
+        	let count = 0;
+        	for (const touch of touches) {
+        		const points = touch.points;
+        		let lastDistance = 0;
+        		for (const point of points) {
+        			const distance = calcDeviation(point);
+        			if (distance > threshold && lastDistance <= threshold) count++;
+        			lastDistance = distance;
+        		}
+        	}
+        	return count;
+        }
+        
+        function calcDeviation(coords) {
+        	const x = coords[0], y = coords[1];
+        	const startX = startBox[0] + BOX_SIZE/2, startY = startBox[1] + BOX_SIZE/2;
+        	const endX   = finishBox[0] + BOX_SIZE/2, endY   = finishBox[1] + BOX_SIZE/2;
+        	
+        	if (startX !== endX) {
+		    	const m = (endY - startY) / (endX - startX);
+				const a = -m;
+				const b = 1;
+				const c = -startY + m * startX;
+				const distance = Math.abs(a * x + b * y + c) / Math.sqrt(a*a + b*b);
+				return distance;
+			} else {
+				// vertical line special case
+				return Math.abs(x - startX);
+			}
+        }
+
+        // ====== EVENTS ======
+        canvas.addEventListener("pointerdown", (e) => {
+            pointerdown = true;
+            const coords = getCoordinatesFromEvent(e);
+
+            if (testActive && !success) {
+		        const distance = calcDeviation(coords);
+
+           		if (isInsideBox(coords[0], coords[1], startBox)) {
+           			if (startHit === true) {
+                		statistics.discontinuities++; 
+                		console.log(statistics.discontinuities);
+           			} else {
+		        		startTimer();
+				        canDraw = true;
+				        startHit = true;
+				        redrawTest();
+		            }
+				    touches.push({ points: [[coords[0], coords[1], Date.now()]] });
+                } else {
+                	if (!startHit) {
+		            	statistics.startFails++;
+		            	updateStats();
+                	} else {
+                		statistics.discontinuities++; 
+		            	updateStats();
+		            	touches.push({ points: [[coords[0], coords[1], Date.now()]] });
+						statistics.deviationArea += distance;
+                	}
+                }
+                updateStats();
+            }
+        });
+        
+        canvas.addEventListener("pointerleave", () => {
+        	if (pointerdown && canDraw && !success) {
+        		statistics.outOfBounds++;
+		        updateStats();
+		        pointerdown = false;
+        	}
+        });
+
+        canvas.addEventListener("pointermove", (e) => {
+            if (pointerdown && canDraw && !success) {
+                const coords = getCoordinatesFromEvent(e);
+                const lastPoint = getCurrentTouch().points[getCurrentTouch().points.length - 1];
+
+                // Draw path
+                ctx.beginPath();
+                ctx.moveTo(lastPoint[0], lastPoint[1]);
+                ctx.lineTo(coords[0], coords[1]);
+                ctx.stroke();
+                ctx.closePath();
+
+		        const distance = calcDeviation(coords);
+				statistics.deviationArea += distance;
+                
+                function normalize(a) {
+                	if (a > 0) return 1;
+                	if (a < 0) return -1;
+                	return 0;
+                }
+                
+                const dxNow = normalize(coords[0] - lastPoint[0]);
+                const dyNow = normalize(coords[1] - lastPoint[1]);
+                
+                // sensitivity rating field? # of pixels
+                // right how it works is that it looks at the signs and checks if they're different
+                // a * b < 0
+                // (a ^ b) >> 31 == -1 <-- fun way to do it
+                // (a ^ b) >>> 31 == 1 <-- fun way to do it
+                
+                // check if they're different signs AND make sure that dx > 5 or something
+                if (dx !== dxNow) {
+                	statistics.horizontalTurns++;
+                	turns.push( { horizontal: true, distance } );
+                }
+                if (dy !== dyNow) {
+                	statistics.verticalTurns++;
+                	turns.push( { horizontal: false, distance } );
+                }
+                
+                dx = dxNow; 
+                dy = dyNow;
+                
+                getCurrentTouch().points.push([coords[0], coords[1], Date.now()]);
+
+                if (isInsideBox(coords[0], coords[1], finishBox)) {
+                    stopTimer();
+                    canDraw = false;
+                    pointerdown = false;
+                    finishHit = true;
+                    success = true;
+                    redrawTest(false);
+                    drawSuccessText();
+                }
+                updateStats();
+            }
+        });
+
+        canvas.addEventListener("pointerup", () => { pointerdown = false; });
+
+        // ====== TIMER ======
+        let timerId = 0;
+        function startTimer(){
+            const time = document.getElementById("timer");
+            const now = Date.now();
+            clearInterval(timerId);
+            timerId = setInterval(() => {
+                time.innerText = ((Date.now() - now)/1000).toFixed(2);
+            }, 10);
+        }
+        function stopTimer(){
+            clearInterval(timerId);
+        }
+
+        // ====== TEST DEFINITIONS ======
+        const tests = {
+            horizontal: {
+                name: "Horizontal Test",
+                position: () => [
+                    [10, HEIGHT / 2 - BOX_SIZE / 2],
+                    [WIDTH - 10 - BOX_SIZE, HEIGHT / 2 - BOX_SIZE / 2]
+                ]
+            },
+            vertical: {
+                name: "Vertical Test",
+                position: () => [
+                    [WIDTH / 2 - BOX_SIZE / 2, 10],
+                    [WIDTH / 2 - BOX_SIZE / 2, HEIGHT - 10 - BOX_SIZE]
+                ]
+            },
+            diagonal1: {
+                name: "Diagonal Test 1",
+                position: () => [
+                    [10, 10],
+                    [WIDTH - 10 - BOX_SIZE, HEIGHT - 10 - BOX_SIZE]
+                ]
+            },
+            diagonal2: {
+                name: "Diagonal Test 2",
+                position: () => [
+                    [10, HEIGHT - 10 - BOX_SIZE],
+                    [WIDTH - 10 - BOX_SIZE, 10]
+                ]
+            }
+        };
+
+        // ====== UI / PATIENT MGMT ======
+        function openPatientDialog() {
+            document.getElementById("patientDialog").showModal();
+        }
+
+        function savePatient(name, id) {
+            const patients = JSON.parse(localStorage.getItem("patients") || "[]");
+            if (!patients.find(p => p.name === name && p.id === id)) {
+                patients.push({ name, id });
+                localStorage.setItem("patients", JSON.stringify(patients));
+                populatePreviousPatients();
+                
+                // this will allow us to start the test automatically
+                upDatePatientInfo(name, id);
+                
+                changeTest(); // start the test display automatically
+            }
+        }
+
+        function populatePreviousPatients() {
+            const patients = JSON.parse(localStorage.getItem("patients") || "[]");
+            const select = document.getElementById("previousPatients");
+            select.innerHTML = '<option value="">Select Previous Patient</option>';
+            patients.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.name;
+                opt.text = `${p.name}`;
+                select.add(opt);
+            });
+        }
+
+        function loadPreviousPatient(name) {
+            if (!name) return;
+            const patients = JSON.parse(localStorage.getItem("patients") || "[]");
+            const patient = patients.find(p => p.name === name);
+            if (patient) {
+                const enteredId = prompt(`Enter ID for ${patient.name}:`);
+                if (enteredId === patient.id) {
+                    upDatePatientInfo(patient.name, patient.id);
+            		changeTest();
+                } else {
+                    alert("Incorrect ID. Access denied.");
+                }
+            }
+            document.getElementById("previousPatients").value = "";
+        }
+        
+        function clearAllPatients() {
+        	localStorage.clear();
+        	populatePreviousPatients();
+        }
+
+        function setPatientInfo() {
+            const name = document.getElementById("patientName").value;
+            const id = document.getElementById("patientID").value;
+            localStorage.setItem("name", name);
+            localStorage.setItem("id", id);
+
+			let nameElement = document.getElementById("patientName");
+            nameElement.value = "";
+            document.getElementById("patientID").value = "";
+            savePatient(name, id);
+            upDatePatientInfo(name, id);
+        }
+
+        function upDatePatientInfo(name, id){
+            currentPatient = { name, id, timestamp: new Date().toISOString() };
+            document.getElementById("patientInfo").innerText = `Patient: ${name} (ID: ${id})`;
+        }
+
+        if(localStorage.getItem("name") != null){
+            const name = localStorage.getItem("name");
+            const id = localStorage.getItem("id");
+            upDatePatientInfo(name, id);
+        }
+        populatePreviousPatients();
+
+        function changeTest() {
+            const testKey = document.getElementById("testSelector").value;
+            currentTest = tests[testKey];
+            resetTest();
+            startTest();
+        }
+
+        function startTest() {
+            if (!currentPatient) {
+            	ctx.clearRect(0, 0, canvas.width, canvas.height);
+            	drawBox(900 / 4, 600 / 2, 400, 50, "darkgray", "Please select a patient.");
+                canDraw = false;
+                testActive = false;
+                //alert("Please select or create a patient first.");
+                return;
+            }
+            if (!currentTest) return;
+            testActive = true;
+            resetTest();
+        }
+
+        function stopTest() {
+        	testActive = false;
+        	stopTimer();
+        	
+        	pointerdown = false;
+        	canDraw = false;
+        }
+
+        // ====== DRAWING HELPERS ======
+        function drawBox(x, y, w, h, color = "red", text = "") {
+            // (this was the cut-off line you pointed out — fully implemented below)
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w, h);
+
+            if (text) {
+                ctx.fillStyle = "white";
+                ctx.font = "30px Roboto";
+                const t = ctx.measureText(text);
+                ctx.fillText(text, x + w / 2 - t.width / 2, y + h - 15);
+            }
+        }
+
+        function drawLine(sx, sy, ex, ey, width = 1) {
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(ex, ey);
+            ctx.lineWidth = width;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        function drawSuccessText() {
+            ctx.fillStyle = "green";
+            ctx.font = "bold 60px Roboto";
+            ctx.textAlign = "center";
+            ctx.fillText("Success!", WIDTH / 2, HEIGHT / 2);
+            ctx.textAlign = "start";
+        }
+
+        function redrawTest(clear = true) {
+            if (clear) ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // ideal line is center-to-center of boxes
+            drawLine(
+                startBox[0] + BOX_SIZE / 2,
+                startBox[1] + BOX_SIZE / 2,
+                finishBox[0] + BOX_SIZE / 2,
+                finishBox[1] + BOX_SIZE / 2,
+                0.5
+            );
+
+            const startColor = startHit ? "green" : "red";
+            const finishColor = finishHit ? "green" : "red";
+
+            drawBox(startBox[0], startBox[1], BOX_SIZE, BOX_SIZE, startColor, "S");
+            drawBox(finishBox[0], finishBox[1], BOX_SIZE, BOX_SIZE, finishColor, "F");
+
+            if (success) drawSuccessText();
+        }
+
+        function resetStats() {
+            statistics = {
+                discontinuities: 0,
+                verticalTurns: 0,
+                deviationArea: 0,
+                horizontalTurns: 0,
+                outOfBounds: 0,
+                startFails: 0,
+            };
+            dx = 0; dy = 0;
+        }
+
+        function resetTest() {
+            if (!currentTest) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const points = currentTest.position();
+            startBox = points[0];
+            finishBox = points[1];
+
+            touches = [];
+            canDraw = false;
+            startHit = false;
+            finishHit = false;
+            success = false;
+
+            resetStats();
+            redrawTest();
+            updateStats();
+        }
+
+        function exportData() {
+            if (!currentTest || !currentPatient) {
+                alert("Please select a test and enter patient info.");
+                return;
+            }
+            const exportObj = {
+                patient: currentPatient,
+                test: currentTest.name,
+                timestamp: new Date().toISOString(),
+                stats: {
+                    ...statistics,
+                    offByThreshold: parseFloat(document.getElementById("offByThreshold").value) || 10,
+                    offByCount: parseFloat(document.getElementById("offByValue").innerText) || 0,
+                    deviationMode,
+                    deviationShown: parseFloat(document.getElementById("deviationValue").innerText) || 0,
+                    turnMode,
+                    turnShown: parseFloat(document.getElementById("turnValue").innerText) || 0
+                }
+            };
+            const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            const filename = `${currentPatient.name.replace(/\s+/g, "_")}_${currentPatient.id}_${Date.now()}.json`;
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function openChatDialog() {
+            document.getElementById("chatDialog").showModal();
+        }
+
+        function answerQuestion(value) {
+            const response = document.getElementById("chatResponse");
+            if (value === "measure") {
+                response.innerText = "Each test measures aspects of motor control including accuracy, timing, smoothness, and response delay.";
+            } else if (value === "interpret") {
+                response.innerText = "Higher deviation, slower reaction times, or inconsistent motion can indicate greater severity of ataxia.";
+            } else {
+                response.innerText = "";
+            }
+        }
+
+        function uploadFile(){
+            const element = document.getElementById("upload");
+            if (element.files.length === 0) return;
+            const file = element.files[0];
+
+            // Example: parse filename "First_Last_ID_169214233.json"
+            const nameParts = file.name.split("_");
+            if (nameParts.length >= 3) {
+                const timePart = nameParts[nameParts.length - 1];
+                const idPart = nameParts[nameParts.length - 2];
+                nameParts.pop(); // time
+                nameParts.pop(); // id
+                const guessedName = nameParts.join(" ").replace(/\.[^/.]+$/, ""); // strip extension if any
+                // Optionally set patient fields (commented to avoid auto-overwrite)
+                // upDatePatientInfo(guessedName, idPart);
+            }
+
+            if (file.type !== "application/json") {
+                alert("Uploaded file is not a JSON file.");
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = () => {
+                try{
+                    const result = JSON.parse(reader.result);
+                    console.log("Parsed JSON:", result);
+                } catch(e){
+                    alert("There was an error parsing the JSON file.");
+                }
+            };
+            reader.onerror = () => {
+                alert("Could not read the file.");
+            };
+            reader.readAsText(file);
+        }
+
+        // Initialize default test
+        function init() {
+            // Set an initial test selection
+            document.getElementById("testSelector").value = "vertical";
+            changeTest();
+            updateStats();
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>
