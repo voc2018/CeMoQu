@@ -47,5 +47,6 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 ---
 ## Code
 * Ataxia -> diagnostic test
+* ** No compiler needed. Download the file and run it in a browser such as the google search engine.
 * Test2 -> finger excercise
 * SARA-Q -> audio recorder
