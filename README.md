@@ -49,4 +49,5 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 ## Uploaded Code
 
 Autaxia.html -> Ataxia Diagnostic -> functional
+Tests2.py -> finger excercise -> functional
 
