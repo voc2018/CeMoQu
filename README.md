@@ -48,5 +48,5 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 
 ## Uploaded Code
 
-Autaxia.html -> Autaxia Diagnostic -> functional
+Autaxia.html -> Ataxia Diagnostic -> functional
 
