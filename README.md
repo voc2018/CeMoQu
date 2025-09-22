@@ -47,7 +47,33 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 ---
 ## Code
 * Ataxia -> diagnostic test
-  * No compiler needed.
+  * No setup instructions needed.
   * Download the file and run it in a browser such as the google search engine.
 * Test2 -> finger excercise
 * SARA-Q -> audio recorder
+
+---
+## Setup Instructions
+1. Install Python 3.10
+ * Download Python 3.10 (higher versions are not supported).
+* During installation:
+ * Select Add Python 3.10 to PATH
+ * In Advanced Options, select Install for all users
+ * Choose and remember your installation path (e.g., C:\python310).
+ * Verify installation in terminal:
+  * python3.10 --version
+2. Create Project Folder
+* Example:
+ * C:\Users\wonup\Documents\saraq
+3. Create Virtual Environment
+* Inside the project folder, run:
+ * python3.10 -m venv saraq-env
+ * If you get an error, ensure Python 3.10 is properly installed and accessible.
+4. Activate Virtual Environment
+* Run:
+ * .\saraq-env\Scripts\Activate.ps1
+ * If you encounter an activation error, adjust PowerShell execution policies.
+ * Successful activation shows:
+  * (saraq-env) PS C:\Users\wonup\Documents\saraq>
+5. Install Required Packages
+* pip install mediapipe opencv-python
