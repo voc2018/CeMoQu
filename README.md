@@ -46,7 +46,7 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 
 ---
 ## Code
-* Ataxia -> diagnostic test
+* AtaxiaPt2 -> diagnostic test
   * No setup instructions needed.
   * Download the file and run it in a browser such as the google search engine.
 * Test2 -> finger excercise
