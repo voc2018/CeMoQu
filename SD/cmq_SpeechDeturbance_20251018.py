@@ -40,4 +40,5 @@ def sara_speech_from_four(duration_sec, silence_ratio, tempo_bpm, intelligibilit
         "sara_speech_pred": int(sara),
         "sara_speech_cont": round(sara_cont, 2)
     }
+
 print(sara_speech_from_four(duration, silence_ratio, tempo, intelligibility_pct))
