@@ -14,19 +14,26 @@ Digital biomarkers for ataxia. CeMoQu extends selected SARA subtests and lets pa
 ---
 
 ## Repository Structure
+
+```text
 CeMoQu/
 ├── index.html
-├── LD/cmq_LineDrawing.html  # Line Drawing Test (SARA Test 6 Finger-to-Nose extension) 
-│ └── data/LD_P003_20251026.csv  # CSV outputs, format #MOD_PID_YYYYMMDD.csv 
-├── RT/cmq_RandomTarget.html # Random Target Touch Test (SARA Test 5 Finger-to-Finger extension) cmq_RandomTargetTouch.html
-│ └── data/RT_P003_20251026.csv  # CSV outputs, format #MOD_PID_YYYYMMDD.csv 
-├── SD/cmq_SpeechDisturbance.html # Speech Disturbance Test (SARA Test 4 Speech Disturbance extension) cmq_SpeechDisturbance.html
-│ └── data/SD_P003_20251026.csv  # CSV outputs, format #MOD_PID_YYYYMMDD.csv 
-├── common/ # Shared utils (unit conversion, scoring, logging)
-├── draft/ # Experimental / WIP code
+├── LD/                               # Line Drawing Test (SARA Test 6 Finger-to-Nose extension)
+│   ├── cmq_LineDrawing.html
+│   └── data/
+│       └── LD_P003_20251026.csv      # CSV outputs, format: MOD_PID_YYYYMMDD.csv
+├── RTT/                              # Random Target Touch Test (SARA Test 5 Finger-to-Finger extension)
+│   ├── cmq_RandomTarget.html
+│   └── data/
+│       └── RTT_P003_20251026.csv     # CSV outputs, format: MOD_PID_YYYYMMDD.csv
+├── SD/                               # Speech Disturbance Test (SARA Test 4 Speech extension)
+│   ├── cmq_SpeechDisturbance.html
+│   └── data/
+│       └── SD_P003_20251026.csv      # CSV outputs, format: MOD_PID_YYYYMMDD.csv
+├── common/                           # Shared utils (unit conversion, scoring, logging)
+├── draft/                            # Experimental / WIP code
 ├── LICENSE
 └── README.md
-
 
 ---
 
