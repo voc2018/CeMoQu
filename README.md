@@ -22,10 +22,10 @@ CeMoQu/
 │   ├── cmq_LineDrawing.html
 │   └── data/
 │       └── LD_P003_20251026.csv      # CSV outputs, format: MOD_PID_YYYYMMDD.csv
-├── RTT/                              # Random Target Touch Test (SARA Test 5 Finger-to-Finger extension)
+├── RT/                              # Random Target Touch Test (SARA Test 5 Finger-to-Finger extension)
 │   ├── cmq_RandomTarget.html
 │   └── data/
-│       └── RTT_P003_20251026.csv     # CSV outputs, format: MOD_PID_YYYYMMDD.csv
+│       └── RT_P003_20251026.csv     # CSV outputs, format: MOD_PID_YYYYMMDD.csv
 ├── SD/                               # Speech Disturbance Test (SARA Test 4 Speech extension)
 │   ├── cmq_SpeechDisturbance.html
 │   └── data/
