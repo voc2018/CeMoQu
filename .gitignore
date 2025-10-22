@@ -1,0 +1,8 @@
+# Ignore all raw data from each module
+LD/raw/**
+RT/raw/**
+SD/raw/**
+
+# Optional: ignore any temporary or local outputs
+**/tmp/**
+**/cache/**
