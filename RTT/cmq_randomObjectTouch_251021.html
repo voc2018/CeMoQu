@@ -75,8 +75,8 @@
     <div class="panel">
       <label>Calibration (pixels per cm)</label>
       <div style="display:flex;gap:8px">
-        <input id="knownLengthCm" type="number" value="60.0" step="0.1" />
-        <input id="measuredPx" type="number" value="1200.0" step="1" />
+        <input id="knownLengthCm" type="number" value="40.0" step="0.1" />
+        <input id="measuredPx" type="number" value="600.0" step="1" />
         <button id="recalcBtn">Recalc</button>
       </div>
       <div style="margin-top:8px;color:var(--muted)">Pixels/cm: <span id="ppc">30.00</span></div>
@@ -371,6 +371,7 @@ function handleFrameForTrial(results){
     const tip = results.multiHandLandmarks[0][8];
     cx = Math.round((1 - tip.x) * WINDOW_W);
     cy = Math.round(tip.y * WINDOW_H);
+
     fingertip_present = true;
   }
   if(fingertip_present){
