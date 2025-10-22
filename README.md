@@ -34,7 +34,7 @@ CeMoQu/
 ├── draft/                            # Experimental / WIP code
 ├── LICENSE
 └── README.md
-
+```
 ---
 
 ## 🧩 Modules
