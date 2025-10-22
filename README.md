@@ -18,27 +18,27 @@ Digital biomarkers for ataxia. CeMoQu extends selected SARA subtests and lets pa
 ```text
 CeMoQu/
 ├── index.html
-├── LD/                               # Line Drawing Test (SARA Test 6 Finger-to-Nose extension)
+├── LD/                                       # Line Drawing Test (SARA Test 6 Finger-to-Nose extension)
 │   ├── cmq_LineDrawing.html
 │   └── raw/
 │       └── LD_P003_20251026_141523.json      # Raw trajectory or event log, format:MOD_PID_YYYYMMDD_HHMMSS.ext (LD_P003_20251026_141523.csv)
-├── RT/                               # Random Target Touch Test (SARA Test 5 Finger-to-Finger extension)
+├── RT/                                       # Random Target Touch Test (SARA Test 5 Finger-to-Finger extension)
 │   ├── cmq_RandomTarget.html
 │   └── raw/
 │       └── RT_P003_20251026_141455.csv       # Raw touch log
-├── SD/                               # Speech Disturbance Test (SARA Test 4 Speech extension)
+├── SD/                                       # Speech Disturbance Test (SARA Test 4 Speech extension)
 │   ├── cmq_SpeechDisturbance.html
 │   └── raw/
 │       └── SD_P003_20251026_141700.wav       # Raw speech data
-├── data/                             # Aggregated / processed data for all modules
+├── data/                                     # Aggregated / processed data for all modules
 │   ├── csv/
 │   │   ├── LD_P003_20251026.csv
 │   │   ├── RT_P003_20251026.csv
 │   │   └── SD_P003_20251026.csv
 │   └── summary/
 │       └── CeMoQu_aggregate_20251026.csv     # Optional combined summary
-├── common/                           # Shared utils (unit conversion, scoring, logging)
-├── draft/                            # Experimental / WIP code
+├── common/                                   # Shared utils (unit conversion, scoring, logging)
+├── draft/                                    # Experimental / WIP code
 ├── LICENSE
 └── README.md
 
