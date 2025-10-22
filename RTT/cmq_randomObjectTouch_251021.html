@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Random Object Touch Test (Browser)</title>
+<style>
+  :root{--bg:#0f1724;--panel:#0b1220;--accent:#10b981;--muted:#94a3b8;color-scheme:dark}
+  html,body{height:100%;margin:0;font-family:Inter,Inter var,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:#e6eef6}
+  .app {display:flex;height:100vh;gap:12px;padding:12px;box-sizing:border-box}
+  .left {flex:1;display:flex;flex-direction:column;gap:12px}
+  .canvas-wrap {position:relative;border-radius:8px;overflow:hidden;background:#111;}
+  canvas{width:100%;height:calc(100vh - 210px);display:block;background:#000}
+  .controls {display:flex;gap:8px;align-items:center}
+  .controls > *{padding:8px 12px;border-radius:8px;border:0;background:var(--panel);color:#e6eef6}
+  button.primary{background:linear-gradient(90deg,#0ea5a4,#10b981);color:#02111a;font-weight:600}
+  .right {width:360px;display:flex;flex-direction:column;gap:12px}
+  .panel {background:var(--panel);padding:12px;border-radius:8px;min-height:60px;overflow:auto}
+  .terminal {font-family:monospace;background:#030611;padding:12px;border-radius:6px;height:60vh;overflow:auto;color:#bcd}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+  input[type=number], input[type=text] {background:#061018;border-radius:6px;padding:8px;border:1px solid #122235;color:#e6eef6;width:100%;}
+  .stat {font-size:13px;margin:6px 0;color:#cfe}
+  footer {font-size:12px;color:var(--muted);text-align:center;margin-top:6px}
+  a.disabled {opacity:0.5;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="left">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <h2 style="margin:0">Random Object Touch Test — Browser</h2>
+        <div style="color:var(--muted);font-size:13px">MediaPipe Hands + Canvas (mirrored)</div>
+      </div>
+      <div class="controls">
+        <button id="startBtn" class="primary">Start Test</button>
+        <button id="stopBtn">Stop</button>
+        <button id="downloadCsvBtn">Download CSV</button>
+      </div>
+    </div>
+
+    <div class="canvas-wrap panel" id="viewer">
+      <!-- hidden video used as source -->
+      <video id="video" autoplay playsinline style="display:none"></video>
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="panel" style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <label>NUM_TARGETS</label>
+        <input id="numTargets" type="number" value="5" min="1" />
+      </div>
+      <div style="min-width:160px">
+        <label>TARGET_HOLD_TIME (s)</label>
+        <input id="holdTime" type="number" value="2.0" step="0.1" min="0.1" />
+      </div>
+      <div style="min-width:160px">
+        <label>TARGET_RADIUS_CM</label>
+        <input id="targetRadiusCm" type="number" value="5.0" step="0.1" />
+      </div>
+      <div style="min-width:160px">
+        <label>FPS (assumed)</label>
+        <input id="fps" type="number" value="30" step="1" />
+      </div>
+    </div>
+
+    <div class="panel" id="statsPanel">
+      <div class="stat" id="statusLine">Status: Idle</div>
+      <div class="stat" id="trialLine">Trial: -</div>
+      <div class="stat" id="liveMetrics">Mean error: -- | Reaction time: -- | % time inside: --</div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="panel">
+      <label>Calibration (pixels per cm)</label>
+      <div style="display:flex;gap:8px">
+        <input id="knownLengthCm" type="number" value="60.0" step="0.1" />
+        <input id="measuredPx" type="number" value="1200.0" step="1" />
+        <button id="recalcBtn">Recalc</button>
+      </div>
+      <div style="margin-top:8px;color:var(--muted)">Pixels/cm: <span id="ppc">30.00</span></div>
+    </div>
+
+    <div class="panel">
+      <label>Terminal / Log</label>
+      <div id="terminal" class="terminal"></div>
+    </div>
+
+    <div class="panel">
+      <label>CSV Preview (last rows):</label>
+      <pre id="csvPreview" style="height:120px;overflow:auto;font-size:12px;background:#071016;padding:8px;border-radius:6px"></pre>
+    </div>
+
+    <footer>Built from your Python script — MediaPipe Hands (JS). No data leaves your browser.</footer>
+  </div>
+</div>
+
+<!-- MediaPipe Hands + Utilities (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+<script>
+/*
+  Port of the Python logic into browser JS.
+  Important: keep calculations close to original semantics.
+*/
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const terminalEl = document.getElementById('terminal');
+const statusLine = document.getElementById('statusLine');
+const trialLine = document.getElementById('trialLine');
+const liveMetrics = document.getElementById('liveMetrics');
+const csvPreview = document.getElementById('csvPreview');
+const ppcSpan = document.getElementById('ppc');
+
+let WINDOW_W = 1200;
+let WINDOW_H = 800;
+
+// config UI elements
+const numTargetsInput = document.getElementById('numTargets');
+const holdTimeInput = document.getElementById('holdTime');
+const targetRadiusCmInput = document.getElementById('targetRadiusCm');
+const fpsInput = document.getElementById('fps');
+const knownLengthCmInput = document.getElementById('knownLengthCm');
+const measuredPxInput = document.getElementById('measuredPx');
+
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+const recalcBtn = document.getElementById('recalcBtn');
+
+let pixels_per_cm = parseFloat(measuredPxInput.value) / parseFloat(knownLengthCmInput.value);
+ppcSpan.textContent = pixels_per_cm.toFixed(2);
+
+// CSV data container (array of rows)
+let csvRows = [];
+const CSV_FILENAME = "random_object_touch_results.csv";
+const CSV_HEADERS = [
+  "trial_index",
+  "target_x_px", "target_y_px",
+  "target_radius_cm", "target_radius_px",
+  "final_error_cm", "final_error_px",
+  "final_distance_cm", "final_distance_px",
+  "tremor_cm", "smoothness_cm_per_s",
+  "time_inside_s", "percent_time_inside",
+  "reaction_time_s",
+  "frames_recorded",
+  "missed",
+  "trial_sara_score"
+];
+
+// internal state
+let camera = null;
+let hands = null;
+let running = false;
+let trialIndex = 0;
+let targets = [];
+let trialSummaries = [];
+let trialScores = [];
+
+function log(msg){
+  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  const el = document.createElement('div');
+  el.textContent = line;
+  terminalEl.appendChild(el);
+  terminalEl.scrollTop = terminalEl.scrollHeight;
+  console.log(line);
+}
+function updateStatus(s){ statusLine.textContent = "Status: " + s; }
+function px_to_cm(px){ return px / pixels_per_cm; }
+function cm_to_px(cm){ return Math.round(cm * pixels_per_cm); }
+
+function random_target_position(w,h,margin=80){
+  const x = Math.floor(Math.random() * Math.max(1, w - 2*margin)) + margin;
+  const y = Math.floor(Math.random() * Math.max(1, h - 2*margin)) + margin;
+  return [x,y];
+}
+
+function trial_sara_score(final_dist_cm, reaction_time_s, missed){
+  if(missed) return 4;
+  if(final_dist_cm !== null && final_dist_cm < 2.0 && reaction_time_s !== null && reaction_time_s < 1.5) return 0;
+  if(final_dist_cm !== null && final_dist_cm >= 2.0 && final_dist_cm < 5.0) return 1;
+  if(final_dist_cm !== null && final_dist_cm >= 5.0 && final_dist_cm < 15.0) return 2;
+  if(final_dist_cm !== null && (final_dist_cm >= 15.0 || (reaction_time_s !== null && reaction_time_s > 3.0))) return 3;
+  return 1;
+}
+
+function compute_tremor_cm(positions){
+  if(positions.length < 2) return 0.0;
+  // positions: [{x,y},...]
+  const n = positions.length;
+  let meanX = 0, meanY = 0;
+  for(const p of positions){ meanX += p.x; meanY += p.y; }
+  meanX /= n; meanY /= n;
+  const radial = positions.map(p => Math.hypot(p.x - meanX, p.y - meanY));
+  // std dev
+  const meanRad = radial.reduce((a,b)=>a+b,0)/radial.length;
+  const variance = radial.reduce((s, r)=> s + (r-meanRad)*(r-meanRad), 0) / radial.length;
+  const sd_px = Math.sqrt(variance);
+  return sd_px / pixels_per_cm;
+}
+
+function compute_smoothness(positions, fps){
+  if(positions.length < 3) return 0.0;
+  // velocities between frames in px/frame -> convert to cm/s: (px/frame)*fps/pixels_per_cm
+  const vel = [];
+  for(let i=1;i<positions.length;i++){
+    const dx = positions[i].x - positions[i-1].x;
+    const dy = positions[i].y - positions[i-1].y;
+    const dist_px = Math.hypot(dx,dy);
+    const v_cm_s = (dist_px * fps) / pixels_per_cm;
+    vel.push(v_cm_s);
+  }
+  if(vel.length < 2) return 0.0;
+  const velChanges = [];
+  for(let i=1;i<vel.length;i++) velChanges.push(Math.abs(vel[i] - vel[i-1]));
+  const meanChange = velChanges.reduce((a,b)=>a+b,0)/velChanges.length;
+  return meanChange;
+}
+
+function csvEscape(val){
+  if(val === null || val === undefined) return "-";
+  if(typeof val === 'string') {
+    if(val.includes(',') || val.includes('\n')) return `"${val.replace(/"/g,'""')}"`;
+    return val;
+  }
+  return String(val);
+}
+
+function updateCsvPreview(){
+  const last = csvRows.slice(-10).map(r => r.join(',')).join('\n');
+  csvPreview.textContent = CSV_HEADERS.join(',') + '\n' + last;
+}
+
+// Setup MediaPipe Hands
+async function initHands(){
+  hands = new Hands({
+    locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    }
+  });
+  hands.setOptions({
+    modelComplexity: 0,
+    maxNumHands: 1,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+
+  hands.onResults(onHandsResults);
+}
+
+// camera utils with video element
+async function startCamera(){
+  video.width = WINDOW_W;
+  video.height = WINDOW_H;
+  const stream = await navigator.mediaDevices.getUserMedia({video:{width:WINDOW_W,height:WINDOW_H}, audio:false});
+  video.srcObject = stream;
+  video.play();
+  // Create camera helper
+  camera = new Camera(video, {
+    onFrame: async () => {
+      await hands.send({image: video});
+    },
+    width: WINDOW_W,
+    height: WINDOW_H
+  });
+  camera.start();
+}
+
+// Drawing & main loop state
+let lastResults = null;
+let drawRequest = null;
+
+// Per-trial runtime variables
+let trialRunning = false;
+let trialState = null; // object with positions, inside_flags, reaction_time, etc.
+let frameCounterForTrial = 0;
+let perFrameIntervalMs = 1000/30;
+let fpsUsed = 30;
+
+function onHandsResults(results){
+  // hands library callback; store latest results and trigger a draw
+  lastResults = results;
+  if(!drawRequest){
+    drawRequest = requestAnimationFrame(drawFrame);
+  }
+}
+
+function drawFrame(){
+  drawRequest = null;
+  // draw mirrored camera frame on canvas
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  const scaleX = canvas.width / WINDOW_W;
+  const scaleY = canvas.height / WINDOW_H;
+  ctx.save();
+  // mirror: scale(-1,1) and translate
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1,1);
+  // draw video frame if available
+  if(video.readyState >= 2){
+    // draw the video into a hidden offscreen size to match WINDOW_W,H then scale to canvas
+    ctx.drawImage(video, 0, 0, WINDOW_W, WINDOW_H, 0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  // draw landmarks if any (scale to canvas)
+  if(lastResults && lastResults.multiHandLandmarks && lastResults.multiHandLandmarks.length > 0){
+    const lm = lastResults.multiHandLandmarks[0]; // array of {x,y,z} normalized (0..1)
+    // draw small circle for index fingertip (landmark 8)
+    const tip = lm[8];
+    const cx_px = Math.round(tip.x * WINDOW_W);
+    const cy_px = Math.round(tip.y * WINDOW_H);
+    // scale to canvas coordinates
+    const cx = Math.round(cx_px * scaleX);
+    const cy = Math.round(cy_px * scaleY);
+    ctx.fillStyle = "rgba(255,0,0,0.9)";
+    ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI*2); ctx.fill();
+    // optional skeleton drawing via drawing_utils:
+    if (window.drawConnectors && window.drawLandmarks) {
+      // these functions render directly to ctx if passed a canvas; MediaPipe drawing utils expect a canvas context object
+      drawConnectors(ctx, lm, HAND_CONNECTIONS, {color:'#00FF00', lineWidth:2, radius:2});
+      drawLandmarks(ctx, lm, {color:'#FF0000', lineWidth:1, radius:2});
+    }
+  }
+
+  // draw target (if running)
+  if(trialRunning && trialState){
+    // target coordinates are in px relative to WINDOW_W/H (not scaled)
+    const tx = trialState.target.x;
+    const ty = trialState.target.y;
+    const r_px = trialState.target.radius_px;
+    // convert target center to mirrored canvas coords:
+    const txCanvas = Math.round((WINDOW_W - tx) * scaleX); // mirrored
+    const tyCanvas = Math.round(ty * scaleY);
+    ctx.strokeStyle = 'rgba(0,255,0,0.9)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.round(r_px * scaleX), 0, Math.PI*2); ctx.stroke();
+    // text overlay (drawn in mirrored coordinate system so left is right; to simplify keep mirrored)
+    ctx.fillStyle = "#fff";
+    ctx.font = "18px Arial";
+    ctx.fillText(`Trial ${trialIndex+1}/${parseInt(numTargetsInput.value)}`, 20*scaleX, 30*scaleY);
+    // small legend
+    ctx.fillText(`Pixels/cm: ${pixels_per_cm.toFixed(2)}`, canvas.width - 320*scaleX, 30*scaleY);
+  }
+
+  ctx.restore();
+
+  // if a trial is running, we should process current frame for fingertip position/time
+  if(trialRunning && trialState){
+    handleFrameForTrial(lastResults);
+  }
+}
+
+function handleFrameForTrial(results){
+  // Called once per frame (approx at camera frame rate)
+  frameCounterForTrial++;
+  const fps = fpsUsed;
+  // get fingertip coords in px if present
+  let fingertip_present = false;
+  let cx = null, cy = null;
+  if(results && results.multiHandLandmarks && results.multiHandLandmarks.length > 0){
+    const tip = results.multiHandLandmarks[0][8];
+    cx = Math.round((1 - tip.x) * WINDOW_W);
+    cy = Math.round(tip.y * WINDOW_H);
+    fingertip_present = true;
+  }
+  if(fingertip_present){
+    const dist_px = Math.hypot(cx - trialState.target.x, cy - trialState.target.y);
+    const inside = dist_px <= trialState.target.radius_px;
+    trialState.inside_flags.push(inside);
+    trialState.positions.push({x:cx,y:cy});
+    if(inside && trialState.reaction_time === null){
+      trialState.reaction_time = (performance.now() - trialState.start_time_ms) / 1000.0;
+    }
+  } else {
+    trialState.inside_flags.push(false);
+  }
+
+  // update live metrics display (every frame)
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length - 1];
+    const final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    const final_dist_cm = px_to_cm(final_dist_px);
+    const timeInsideS = trialState.inside_flags.filter(Boolean).length / fps;
+    const percentTimeInside = 100.0 * trialState.inside_flags.filter(Boolean).length / Math.max(1, trialState.inside_flags.length);
+    liveMetrics.textContent = `Final error: ${final_dist_cm.toFixed(2)} cm | Reaction: ${trialState.reaction_time !== null ? trialState.reaction_time.toFixed(2) : '--'} s | % inside: ${percentTimeInside.toFixed(1)}%`;
+  } else {
+    liveMetrics.textContent = `Mean error: -- | Reaction: -- | % inside: 0.0%`;
+  }
+
+  // check elapsed
+  const elapsed = (performance.now() - trialState.start_time_ms)/1000.0;
+  statusLine.textContent = `Status: Running (elapsed ${elapsed.toFixed(2)}s)`;
+  trialLine.textContent = `Trial: ${trialIndex+1}/${parseInt(numTargetsInput.value)}`;
+
+  // end-of-hold-time condition
+  if(elapsed >= parseFloat(holdTimeInput.value)){
+    // finalize trial
+    const frames_recorded = trialState.inside_flags.length;
+    const time_inside_s = trialState.inside_flags.filter(Boolean).length / fps;
+    const percent_time_inside = 100.0 * trialState.inside_flags.filter(Boolean).length / Math.max(1, frames_recorded);
+
+    let mean_error_px=null, mean_error_cm=null, final_dist_px=null, final_dist_cm=null, tremor_cm=0.0, smoothness_val=0.0;
+    if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    final_dist_cm = px_to_cm(final_dist_px);
+    mean_error_px = final_dist_px;
+    mean_error_cm = final_dist_cm;
+    tremor_cm = compute_tremor_cm(trialState.positions);
+    smoothness_val = compute_smoothness(trialState.positions, fps);
+    }
+
+
+    const missed = (trialState.inside_flags.filter(Boolean).length === 0);
+    const trial_score = trial_sara_score(final_dist_cm !== null ? final_dist_cm : 9999.0, trialState.reaction_time, missed);
+
+    // append to CSV rows
+    const row = [
+      trialIndex + 1,
+      trialState.target.x, trialState.target.y,
+      parseFloat(targetRadiusCmInput.value), trialState.target.radius_px,
+      mean_error_cm !== null ? mean_error_cm.toFixed(3) : "-",
+      mean_error_px !== null ? mean_error_px.toFixed(2) : "-",
+      final_dist_cm !== null ? final_dist_cm.toFixed(3) : "-",
+      final_dist_px !== null ? final_dist_px.toFixed(2) : "-",
+      tremor_cm.toFixed(4),
+      smoothness_val.toFixed(4),
+      time_inside_s.toFixed(3),
+      percent_time_inside.toFixed(2),
+      trialState.reaction_time !== null ? trialState.reaction_time.toFixed(3) : "-",
+      frames_recorded,
+      missed ? 1 : 0,
+      trial_score
+    ];
+    csvRows.push(row);
+    updateCsvPreview();
+    log(`Trial ${trialIndex+1} done. Score: ${trial_score}. Mean err: ${mean_error_cm !== null ? mean_error_cm.toFixed(2) : '--'} cm`);
+
+    // keep summary
+    trialSummaries.push({
+      trial: trialIndex+1,
+      mean_error_cm, mean_error_px,
+      final_dist_cm, final_dist_px,
+      tremor_cm, smoothness: smoothness_val,
+      time_inside_s, percent_time_inside,
+      reaction_time: trialState.reaction_time,
+      missed,
+      trial_score
+    });
+    trialScores.push(trial_score);
+
+    // small "done" pause (show message) - we just set a brief timeout then start next trial
+    trialRunning = false;
+    trialState = null;
+    trialIndex++;
+    // small delay before next trial
+    setTimeout(() => {
+      if(trialIndex < parseInt(numTargetsInput.value) && running){
+        startTrialInternal();
+      } else {
+        finishAllTrials();
+      }
+    }, 600);
+  }
+}
+
+function startTrialInternal(){
+  // prepare trial state
+  const w = WINDOW_W;
+  const h = WINDOW_H;
+  const [tx,ty] = targets[trialIndex];
+  const target_radius_px = cm_to_px(parseFloat(targetRadiusCmInput.value));
+  trialState = {
+    target: {x: tx, y: ty, radius_px: target_radius_px},
+    positions: [],
+    inside_flags: [],
+    reaction_time: null,
+    start_time_ms: performance.now()
+  };
+  frameCounterForTrial = 0;
+  trialRunning = true;
+  log(`Starting trial ${trialIndex+1} at (${tx},${ty}), radius_px=${target_radius_px}`);
+}
+
+// compute final score and add final summary rows
+function finishAllTrials(){
+  updateStatus('Finalizing');
+  log('All trials finished — computing final score');
+  const NUM_TARGETS = parseInt(numTargetsInput.value);
+  const misses = trialSummaries.filter(s => s.missed).length;
+  let final_score = null;
+  if(misses > NUM_TARGETS/2){
+    final_score = 4;
+  } else {
+    const sorted = trialScores.slice().sort((a,b)=>a-b);
+    let middle_three;
+    if(sorted.length >= 5) middle_three = sorted.slice(1,-1);
+    else middle_three = sorted;
+    const avg_middle = middle_three.reduce((a,b)=>a+b,0)/Math.max(1,middle_three.length);
+    final_score = Math.round(avg_middle);
+  }
+  csvRows.push([]); // blank row
+  csvRows.push(["FINAL SUMMARY"]);
+  csvRows.push(["num_trials", NUM_TARGETS]);
+  csvRows.push(["misses", misses]);
+  csvRows.push(["final_sara_score", final_score]);
+  updateCsvPreview();
+  log(`✅ Test Complete. Results ready. Final SARA score: ${final_score}`);
+  updateStatus('Complete');
+  running = false;
+}
+
+// build CSV string from csvRows with headers
+function buildCsvString(){
+  const lines = [];
+  lines.push(CSV_HEADERS.join(','));
+  for(const r of csvRows){
+    if(r.length === 0){ lines.push(''); continue; }
+    // if it's a single string like ["FINAL SUMMARY"], join as a single column
+    if(r.length === 1) { lines.push(csvEscape(r[0])); continue; }
+    lines.push(r.map(csvEscape).join(','));
+  }
+  return lines.join('\n');
+}
+
+// Download CSV
+downloadCsvBtn.addEventListener('click', ()=>{
+  const csv = buildCsvString();
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = CSV_FILENAME;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+// Recalc ppc
+recalcBtn.addEventListener('click', ()=>{
+  const known = parseFloat(knownLengthCmInput.value) || 1;
+  const measured = parseFloat(measuredPxInput.value) || 1;
+  pixels_per_cm = measured / known;
+  ppcSpan.textContent = pixels_per_cm.toFixed(2);
+  log(`Recalculated pixels_per_cm = ${pixels_per_cm.toFixed(2)}`);
+});
+
+// Start / Stop handlers
+startBtn.addEventListener('click', async ()=>{
+  if(running) { log('Already running'); return; }
+  running = true;
+  // reset CSV + state
+  csvRows = [];
+  csvRows.push(CSV_HEADERS.slice());
+  updateCsvPreview();
+  trialIndex = 0;
+  trialSummaries = [];
+  trialScores = [];
+
+  // read UI config
+  pixels_per_cm = parseFloat(measuredPxInput.value) / parseFloat(knownLengthCmInput.value);
+  ppcSpan.textContent = pixels_per_cm.toFixed(2);
+  fpsUsed = parseInt(fpsInput.value) || 30;
+  updateStatus('Initializing camera & hands');
+  log('Initializing camera & MediaPipe Hands...');
+  // create random targets
+  const NUM_TARGETS = parseInt(numTargetsInput.value);
+  targets = [];
+  for(let i=0;i<NUM_TARGETS;i++) targets.push(random_target_position(WINDOW_W, WINDOW_H, 80));
+  // start the first trial once camera is streaming
+  if(!hands) await initHands();
+  if(!camera) await startCamera();
+  // small delay to ensure video frames arrive
+  setTimeout(()=> {
+    trialIndex = 0;
+    startTrialInternal();
+  }, 300);
+});
+
+stopBtn.addEventListener('click', ()=>{
+  if(!running) { log('Not running'); return; }
+  running = false;
+  trialRunning = false;
+  trialState = null;
+  updateStatus('Stopped');
+  log('User stopped the test.');
+});
+
+// Initialize canvas size & default ppc
+function init(){
+  // fit canvas to available container
+  const container = document.querySelector('.canvas-wrap');
+  function resize() {
+    canvas.style.height = (window.innerHeight - 220) + 'px';
+    // keep aspect ratio relative to WINDOW_W/H via CSS; actual drawing uses WINDOW_W/H coordinates scaled to canvas
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  ppcSpan.textContent = pixels_per_cm.toFixed(2);
+  updateCsvPreview();
+  updateStatus('Idle');
+  log('App loaded. Press Start Test to begin.');
+}
+
+init();
+</script>
+</body>
+</html>
