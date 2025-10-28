@@ -1,8 +1,3 @@
-Got it ✅ — here’s a complete **`README.md` file**, ready for you to **copy-paste directly into your GitHub repository** or save as `README.md` in VS Code.
-
----
-
-```markdown
 # 🖐️ RT Finger Chase — Clinic Dashboard  
 ### Random Target Touch Test (CeMoQu Module)
 
