@@ -1,7 +1,3 @@
-Here’s a professional **README** draft for your team’s repository:
-
----
-
 # 🧠 Speech Disturbance Test (SARA-4 Compatible) — Browser MVP
 
 A browser-based prototype that implements and extends **SARA Test 4 (Speech Disturbance)** using microphone input and real-time signal analysis.
@@ -130,5 +126,6 @@ MIT License — open for non-commercial research and educational use.
 ---
 
 Would you like me to make it more **research-paper style** (with background + methods + discussion sections) or **developer-friendly** (setup + API details + code structure)?
+
 
 
