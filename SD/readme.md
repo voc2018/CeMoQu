@@ -119,16 +119,6 @@ P001,S1,Test1,7.98,0.019,1.567,387.1,0.295,5,48000,12,2025-10-24T19:00:00Z,
 
 ---
 
-## 👥 Team
-
-**Project:** CeMoQu · Speech Disturbance Module
-**Organization:** Voice of Calling / Voice of Piece R&D
-**Contributors:**
-
-* Lead Developer: [Your Name]
-* Audio-Signal Engineer: [Team Member Name]
-* Clinical Research Advisor: [Advisor Name]
-* UI/UX Designer: [Designer Name]
 
 ---
 
@@ -139,3 +129,4 @@ MIT License — open for non-commercial research and educational use.
 ---
 
 Would you like me to make it more **research-paper style** (with background + methods + discussion sections) or **developer-friendly** (setup + API details + code structure)?
+
