@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Speech Disturbance Test (SARA-4 compatible) — Browser MVP</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Speech Disturbance Test · Reading (5 Sentences)</h1>
+      <div class="row">
+        <span class="pill" id="status">Idle</span>
+        <button id="btn-permission" class="secondary">🎙️ Mic Permission</button>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <div class="row">
+            <label>Participant ID</label>
+            <input id="pid" type="text" placeholder="e.g., P001" style="width:120px" />
+            <label>Session</label>
+            <input id="sid" type="text" placeholder="S1" style="width:80px" />
+            <label>Mic distance (cm)</label>
+            <input id="micdist" type="number" value="12" style="width:80px"/>
+          </div>
+          <div class="small" style="margin-top:6px">Environment: quiet room (≤45 dB) recommended · noiseSuppression/echoCancellation ON</div>
+        </div>
+        <div class="controls">
+          <button id="btn-start">▶ Start Test</button>
+          <button id="btn-stop" class="danger" disabled>■ Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3 style="margin-top:0">Instructions</h3>
+        <div id="task-instructions" class="mono small"></div>
+        <div class="controls" style="margin-top:10px">
+          <button id="btn-record" disabled>● Start Recording</button>
+          <button id="btn-done" class="secondary" disabled>Next →</button>
+        </div>
+        <div style="margin-top:10px">
+          <audio id="playback" controls></audio>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Live Monitor</h3>
+        <div class="small">Input: <span id="caps">—</span> | SR: <span id="sr">—</span></div>
+        <div class="small">Level (RMS): <span id="rms">0.000</span></div>
+        <div class="small">Estimated F0 (Hz): <span id="f0">—</span></div>
+        <canvas id="meter" width="320" height="40" style="background:#0e1627;border:1px solid #1f2a44;border-radius:8px;margin-top:6px"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Results</h3>
+      <div class="controls">
+        <button id="btn-export-csv" class="secondary" disabled>Export CSV</button>
+        <button id="btn-export-json" class="secondary" disabled>Export JSON</button>
+        <button id="btn-clear" class="secondary" disabled>Clear</button>
+      </div>
+      <div class="small" style="margin-top:8px">Each segment is saved with its features. Audio is captured by the browser's MediaRecorder (webm/opus or similar).</div>
+      <table style="margin-top:10px">
+        <thead>
+          <tr>
+            <th>#</th><th>Test</th><th>Duration(s)</th>
+            <th>Mean RMS</th><th>RMS CV</th>
+            <th>Mean F0(Hz)</th><th>F0 CV</th>
+            <th>Score (0–6)</th><th>DL</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <footer class="small">Protocol: Read the 5 sentences below, one per test. Speak clearly and at a natural pace.</footer>
+  </div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
