@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ataxia Diagnostic Suite</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div><strong>Ataxia Diagnostic Suite</strong></div>
+    <div>
+      <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    </div>
+  </header>
+
+  <div id="main">
+    <div id="canvas-container">
+      <canvas id="testCanvas"></canvas>
+    </div>
+
+    <div id="stats-panel">
+      <div class="patient-info" id="patientInfo">No patient selected</div>
+      <div id="timer-label">Time: <span id="timer">0.00</span> s</div>
+
+      <!-- Collapsible Clinical Score -->
+      <details id="clinical-score-box">
+        <summary>Clinical Score Mapping</summary>
+        <div id="clinical-score-content">
+          <p><em>No data yet. Run a test to compute scores.</em></p>
+        </div>
+      </details>
+
+      <!-- Stats Table -->
+      <table id="statsTable">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+            <th>Mode</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Discontinuities</td><td id="discontValue">0</td><td>—</td></tr>
+          <tr><td>Turns (Vertical)</td><td id="verticalTurnValue">0</td><td>—</td></tr>
+          <tr><td>Reverses (Horizontal)</td><td id="horizontalTurnValue">0</td><td>—</td></tr>
+          <tr>
+            <td>Off-by</td>
+            <td id="offByValue">0</td>
+            <td><input type="number" id="offByThreshold" value="10" style="width:60px" /></td>
+          </tr>
+          <tr>
+            <td>Deviation Area</td>
+            <td id="deviationValue">0</td>
+            <td><button id="deviationModeBtn" onclick="toggleDeviationMode()">Total</button></td>
+          </tr>
+          <tr>
+            <td>Turn Avg</td>
+            <td id="turnValue">0</td>
+            <td><button id="turnModeBtn" onclick="toggleTurnMode()">Avg Vertical</button></td>
+          </tr>
+          <tr><td>Out-of-Bounds</td><td id="outOfBoundsValue">0</td><td>—</td></tr>
+          <tr><td>Start Fails</td><td id="startFailsValue">0</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="sidebar">
+      <button onclick="openPatientDialog()">New Patient</button>
+      <select id="previousPatients" onchange="loadPreviousPatient(this.value)">
+        <option value="">Select Previous Patient</option>
+      </select>
+      <button onclick="clearAllPatients()">Clear All Patients</button>
+
+      <hr>
+
+      <select id="testSelector" onchange="changeTest()">
+        <option value="vertical">Vertical Test</option>
+        <option value="horizontal">Horizontal Test</option>
+        <option value="diagonal1">Diagonal Test 1</option>
+        <option value="diagonal2">Diagonal Test 2</option>
+      </select>
+
+      <button onclick="stopTest()">Stop Test</button>
+      <button onclick="resetTest()">Reset Test</button>
+      <button onclick="exportData()">Export Data</button>
+    </div>
+  </div>
+
+  <!-- Modal for Patient Info -->
+  <dialog id="patientDialog">
+    <form method="dialog">
+      <label>Name: <input type="text" id="patientName" required /></label>
+      <label>ID: <input type="text" id="patientID" required /></label>
+      <menu>
+        <button type="submit" onclick="setPatientInfo()">Confirm</button>
+        <button onclick="patientDialog.close()">Cancel</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

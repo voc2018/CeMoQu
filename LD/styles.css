@@ -1,0 +1,131 @@
+:root {
+  --bg: #f4f4f4;
+  --text: #222;
+  --accent: #1976d2;
+}
+
+body {
+  margin: 0;
+  font-family: 'Roboto', sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  padding: 10px 20px;
+  background-color: var(--accent);
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+}
+
+#main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+#canvas-container {
+  flex: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: white;
+  border-right: 1px solid #ccc;
+  position: relative;
+}
+
+canvas {
+  border: 1px solid #ccc;
+  background: #fff;
+  touch-action: none;
+}
+
+#stats-panel {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+#sidebar {
+  width: 250px;
+  background-color: #eee;
+  border-left: 1px solid #ccc;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+label,
+select,
+button,
+input {
+  display: block;
+  width: 100%;
+  margin: 10px 0;
+  font-family: 'Roboto', sans-serif;
+}
+
+.patient-info {
+  font-weight: 700;
+  margin-bottom: 5px;
+  font-size: 1.2em;
+}
+
+#timer-label {
+  font-weight: 400;
+  margin-bottom: 15px;
+  font-size: 1em;
+}
+
+/* Collapsible clinical score box */
+details {
+  margin-top: 15px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: white;
+  padding: 8px;
+}
+
+details summary {
+  font-weight: bold;
+  cursor: pointer;
+  color: var(--accent);
+  outline: none;
+}
+
+details[open] summary {
+  border-bottom: 1px solid #ccc;
+  margin-bottom: 6px;
+}
+
+.chart-container {
+  width: 100%;
+  height: 200px;
+  margin-top: 20px;
+}
+
+.invert-colors {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 10px;
+}
+
+th, td {
+  border: 1px solid #999;
+  padding: 5px;
+  text-align: center;
+}
+
+th {
+  background: #ddd;
+}
