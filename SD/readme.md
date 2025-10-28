@@ -115,7 +115,8 @@ P001,S1,Test1,7.98,0.019,1.567,387.1,0.295,5,48000,12,2025-10-24T19:00:00Z,
 
 ## 🧪 Example Run (Screenshot)
 
-![Speech Disturbance Test Screenshot](./857125bf-32af-425b-a2a7-9c94a2b5e019.png)
+<img width="2268" height="1298" alt="image" src="https://github.com/user-attachments/assets/84f220ad-d5e9-4feb-ad1d-6ccd2421fb57" />
+
 
 ---
 
@@ -129,4 +130,5 @@ MIT License — open for non-commercial research and educational use.
 ---
 
 Would you like me to make it more **research-paper style** (with background + methods + discussion sections) or **developer-friendly** (setup + API details + code structure)?
+
 
