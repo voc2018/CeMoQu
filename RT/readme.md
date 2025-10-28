@@ -197,9 +197,4 @@ a browser-based digital biomarker suite designed to objectively measure motor an
 
 MIT License — free to use, modify, and distribute with attribution.
 
-```
-
 ---
-
-Would you like me to include a small section at the top (like a GitHub banner with logo + shields.io badges for “Made with JavaScript”, “CeMoQu”, “MIT License”, etc.)? It’ll make the repository look professional.
-```
