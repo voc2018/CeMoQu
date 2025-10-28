@@ -1,10 +1,14 @@
-# 🖐️ RT Finger Chase — Clinic Dashboard  
+# 🖐️ Random Target Touch Test
 ### Random Target Touch Test (CeMoQu Module)
 
 A **browser-based motor coordination test** that quantifies finger or cursor movement.  
 It allows patients and researchers to evaluate coordination, smoothness, and reaction speed **without any specialized hardware**, using only a **mouse or webcam**.
 
 This test is based on the **SARA (Scale for the Assessment and Rating of Ataxia)** and automatically analyzes performance metrics to produce objective numerical results and estimated SARA scores.
+
+---
+## 🌐 Live Demo
+<img width="1896" height="886" alt="RT1" src="https://github.com/user-attachments/assets/51c965b1-dd98-477e-aabc-55041fc454a4" />
 
 ---
 
