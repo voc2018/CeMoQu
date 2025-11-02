@@ -9,7 +9,7 @@
 </head>
 <body>
   <header>
-    <div><strong>Ataxia Diagnostic Suite</strong></div>
+    <div><strong>Line Drawing Test - CeMoQu</strong></div>
     <div>
       <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
     </div>
@@ -24,7 +24,6 @@
       <div class="patient-info" id="patientInfo">No patient selected</div>
       <div id="timer-label">Time: <span id="timer">0.00</span> s</div>
 
-      <!-- Collapsible Clinical Score -->
       <details id="clinical-score-box">
         <summary>Clinical Score Mapping</summary>
         <div id="clinical-score-content">
@@ -32,7 +31,6 @@
         </div>
       </details>
 
-      <!-- Stats Table -->
       <table id="statsTable">
         <thead>
           <tr>
@@ -88,7 +86,6 @@
     </div>
   </div>
 
-  <!-- Modal for Patient Info -->
   <dialog id="patientDialog">
     <form method="dialog">
       <label>Name: <input type="text" id="patientName" required /></label>
@@ -100,6 +97,7 @@
     </form>
   </dialog>
 
+  <!-- 외부 스크립트는 반드시 defer -->
   <script src="app.js" defer></script>
 </body>
 </html>

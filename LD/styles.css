@@ -4,6 +4,8 @@
   --accent: #1976d2;
 }
 
+* { box-sizing: border-box; }
+
 body {
   margin: 0;
   font-family: 'Roboto', sans-serif;
@@ -61,10 +63,7 @@ canvas {
   box-sizing: border-box;
 }
 
-label,
-select,
-button,
-input {
+label, select, button, input {
   display: block;
   width: 100%;
   margin: 10px 0;
@@ -83,7 +82,6 @@ input {
   font-size: 1em;
 }
 
-/* Collapsible clinical score box */
 details {
   margin-top: 15px;
   border: 1px solid #ccc;
@@ -104,28 +102,12 @@ details[open] summary {
   margin-bottom: 6px;
 }
 
-.chart-container {
-  width: 100%;
-  height: 200px;
-  margin-top: 20px;
-}
+.chart-container { width: 100%; height: 200px; margin-top: 20px; }
 
-.invert-colors {
-  filter: invert(1) hue-rotate(180deg);
-}
+.invert-colors { filter: invert(1) hue-rotate(180deg); }
 
-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin-top: 10px;
-}
+table { border-collapse: collapse; width: 100%; margin-top: 10px; }
 
-th, td {
-  border: 1px solid #999;
-  padding: 5px;
-  text-align: center;
-}
+th, td { border: 1px solid #999; padding: 5px; text-align: center; }
 
-th {
-  background: #ddd;
-}
+th { background: #ddd; }
