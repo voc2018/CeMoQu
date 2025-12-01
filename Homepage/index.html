@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CeMoQu – Ataxia Diagnostic Suite</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#020617;
+      --panel:#02091b;
+      --panel-soft:#020b21;
+      --accent:#203fdb;
+      --accent-soft:rgba(16,185,129,0.16);
+      --muted:#94a3b8;
+      --muted-soft:#1f2937;
+      --text:#e5e7eb;
+      --danger:#ef4444;
+    }
+    *{box-sizing:border-box;}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);color:var(--text);}
+    body{display:flex;align-items:center;justify-content:center;padding:16px;}
+    .shell{width:100%;max-width:1024px;border-radius:24px;background:linear-gradient(145deg,rgba(15,23,42,0.96),rgba(15,23,42,0.92));border:1px solid #111827;padding:20px 20px 22px;box-shadow:0 24px 80px rgba(0,0,0,0.7);}
+    header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
+    .title-block h1{margin:0;font-size:24px;letter-spacing:0.02em;}
+    .title-block p{margin:6px 0 0;font-size:14px;color:var(--muted);}
+    .tag-pill{border-radius:999px;padding:6px 10px;font-size:11px;border:1px solid rgba(148,163,184,0.4);color:var(--muted);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+    .tag-pill span.led{width:8px;height:8px;border-radius:999px;background:var(--accent);box-shadow:0 0 10px rgba(16, 185, 174, 0.7);}
+    main{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+    @media(max-width:900px){main{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    @media(max-width:640px){main{grid-template-columns:minmax(0,1fr);}}
+    .card{
+      position:relative;
+      border-radius:18px;
+      padding:16px 14px 14px;
+      background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
+      border:1px solid rgba(30,64,175,0.35);
+      box-shadow:0 18px 45px rgba(15,23,42,0.9);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      min-height:160px;
+      overflow:hidden;
+    }
+    .card::before{
+      content:"";
+      position:absolute;
+      inset:-80%;
+      background:radial-gradient(circle at 0 0,rgba(56,189,248,0.08),transparent 55%);
+      opacity:0.9;
+      pointer-events:none;
+    }
+    .card h2{margin:0;font-size:16px;}
+    .badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.9);border:1px solid rgba(148,163,184,0.35);color:var(--muted);}
+    .badge-dot{width:7px;height:7px;border-radius:999px;background:var(--accent);}
+    .card p{margin:0;font-size:13px;color:var(--muted);line-height:1.4;}
+    .meta-row{display:flex;justify-content:space-between;align-items:center;margin-top:auto;margin-bottom:6px;font-size:11px;color:var(--muted);}
+    .chip{padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.9);border:1px solid rgba(31,41,55,0.9);}
+    a.test-link{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      padding:8px 10px;
+      border-radius:999px;
+      border:0;
+      outline:none;
+      cursor:pointer;
+      font-size:13px;
+      font-weight:600;
+      text-decoration:none;
+      background:linear-gradient(135deg,var(--accent),#21c1fb);
+      color:#052012;
+      /* box-shadow:0 12px 30px rgba(80, 255, 232, 0.5); */
+      transition:transform 0.08s ease,box-shadow 0.08s ease,filter 0.08s ease;
+      white-space:nowrap;
+    }
+    a.test-link:hover{transform:translateY(-1px);/*box-shadow:0 16px 34px rgba(51, 214, 255, 0.55);*/filter:brightness(1.03);}
+    a.test-link span.icon{font-size:14px;}
+    footer{margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:11px;color:var(--muted);}
+    footer .left{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    footer .dot{width:4px;height:4px;border-radius:999px;background:rgba(148,163,184,0.7);}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="title-block">
+        <h1>CeMoQu · Cerebral Motion Quantitative </h1>
+        <p>Select a test to launch. </p>
+      </div>
+      <div class="tag-pill">
+        <span class="led"></span>
+        Browser-based Homepage
+      </div>
+    </header>
+
+    <main>
+      <!-- Card 1: Speech Disturbance / Reading -->
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <h2>Speech Disturbance Test</h2>
+            <div class="badge"><span class="badge-dot"></span> SARA-4 compatible</div>
+          </div>
+        </div>
+        <p>
+          Guided 5-sentence reading task that records audio, tracks loudness and pitch stability,
+          and maps variability to a 0–6 stability score.
+        </p>
+        <div class="meta-row">
+          <div class="chip">Input: Microphone</div>
+          <a class="test-link" href="../SD/index.html">
+            Open Speech Test
+          </a>
+        </div>
+      </section>
+
+      <!-- Card 2: Random Target Touch -->
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <h2>Random Target Touch Test</h2>
+            <div class="badge"><span class="badge-dot"></span> Cursor &amp; Camera modes</div>
+          </div>
+        </div>
+        <p>
+          Point-to-target task for upper-limb control. Measures error distance, tremor, smoothness,
+          and time-in-target; exports trial-by-trial metrics to CSV.
+        </p>
+        <div class="meta-row">
+          <div class="chip">Input: Mouse / Finger Tracking</div>
+          <a class="test-link" href="../RT/index.html">
+            Open Target Test
+          </a>
+        </div>
+      </section>
+
+      <!-- Card 3: Line Drawing Test -->
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <h2>Line Drawing Test</h2>
+            <div class="badge"><span class="badge-dot"></span> CeMoQu Line Task</div>
+          </div>
+        </div>
+        <p>
+          Start–finish line tracing (horizontal, vertical, diagonal). Tracks deviation, turns,
+          off-line segments, and maps them to a SARA-style subscore.
+        </p>
+        <div class="meta-row">
+          <div class="chip">Input: Mouse / Touch</div>
+          <a class="test-link" href="../LD/index.html">
+            Open Line Test
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="left">
+        <span>Local only, no data upload.</span>
+        <span class="dot"></span>
+        <span>Use headphones &amp; quiet room for speech tasks.</span>
+      </div>
+      <div>CeMoQu · v0.1</div>
+    </footer>
+  </div>
+</body>
+</html>
