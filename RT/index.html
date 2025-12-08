@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CeMoQu – Random Target Touch Test</title>
+  <title>Random Target Touch Test — CeMoQu</title>
 
   <!-- Inter font (homepage convention) -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -24,32 +24,75 @@
 
     /* ---------- Global resets & base typography ---------- */
     *{box-sizing:border-box}
-    html,body{min-height:100vh;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
-    body{
+    html,body{
+      min-height:100vh;
+      margin:0;
+      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
       background: radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);
-      display:flex;align-items:flex-start;justify-content:flex-start;padding:16px;
+    }
+    body{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
     }
     a{color:inherit;text-decoration:none}
 
     /* ---------- Shell (homepage primary container) ---------- */
     .shell{
-      width:100%;max-width:none;border-radius:24px;
+      width:100%;
+      max-width:1120px;
+      border-radius:24px;
       background: linear-gradient(145deg, rgba(15,23,42,0.96), rgba(15,23,42,0.92));
-      border:1px solid #111827;padding:20px 20px 22px;box-shadow:0 24px 80px rgba(0,0,0,0.7);
-      display:flex;flex-direction:column;gap:16px;
+      border:1px solid #111827;
+      padding:20px 20px 22px;
+      box-shadow:0 24px 80px rgba(0,0,0,0.7);
+      display:flex;
+      flex-direction:column;
+      gap:16px;
     }
 
     /* ---------- Header ---------- */
     .topbar{
-      display:flex;justify-content:flex-start;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-bottom:4px;
     }
-    .title-block h1{font-size:24px;margin:0;letter-spacing:0.02em}
-    .title-block .small-muted{font-size:14px;color:var(--muted);margin-top:6px}
+    .title-block h1{
+      font-size:22px;
+      margin:0;
+      letter-spacing:0.02em;
+    }
+    .title-block .small-muted{
+      font-size:13px;
+      color:var(--muted);
+      margin-top:4px;
+    }
 
     .tag-pill{
-      display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid rgba(148,163,184,0.4);font-size:11px;color:var(--muted);
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,0.4);
+      font-size:11px;
+      color:var(--muted);
     }
-    .led{width:8px;height:8px;border-radius:999px;background:var(--accent);box-shadow:0 0 10px rgba(32,63,219,0.45);display:inline-block}
+    .led{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:var(--accent);
+      box-shadow:0 0 10px rgba(32,63,219,0.45);
+      display:inline-block;
+    }
 
     /* ---------- Grid & layout ---------- */
     .content-grid{
@@ -65,41 +108,103 @@
 
     /* ---------- Card component (homepage canonical) ---------- */
     .card{
-      border-radius:18px;padding:16px 14px 14px;min-height:100px;position:relative;overflow:hidden;
+      border-radius:18px;
+      padding:16px 14px 14px;
+      min-height:100px;
+      position:relative;
+      overflow:hidden;
       background: radial-gradient(circle at top left, rgba(15,23,42,0.95), var(--panel-soft));
       border:1px solid rgba(30,64,175,0.12);
       box-shadow:0 18px 45px rgba(15,23,42,0.8);
-      display:flex;flex-direction:column;gap:10px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
     }
     .card::before{
-      content:"";position:absolute;inset:-80% -10% auto -10%;height:280px;background:radial-gradient(circle at 20% 20%, rgba(32,63,219,0.06), transparent 20%);pointer-events:none;
+      content:"";
+      position:absolute;
+      inset:-80% -10% auto -10%;
+      height:280px;
+      background:radial-gradient(circle at 20% 20%, rgba(32,63,219,0.06), transparent 20%);
+      pointer-events:none;
     }
     .card h2{font-size:16px;margin:0}
     .card p{font-size:13px;color:var(--muted);line-height:1.4;margin:0}
 
-    /* Keep older .panel selectors for compatibility but style them as cards */
-    .panel{ /* used by original markup */ }
-    .card.panel{ /* when both classes exist, apply card styles above */ }
+    .panel{} /* legacy hook */
 
     /* ---------- Small UI primitives ---------- */
     .small-muted{font-size:13px;color:var(--muted)}
-    .badge{display:inline-flex;align-items:center;gap:8px;padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.9);border:1px solid rgba(148,163,184,0.12);font-size:11px;color:var(--muted)}
-    .badge-dot{width:7px;height:7px;border-radius:999px;background:var(--accent);box-shadow:0 0 8px rgba(32,63,219,0.25)}
-
-    .chip{padding:3px 8px;border-radius:999px;background:rgba(15,23,42,0.9);border:1px solid rgba(31,41,55,0.9);font-size:12px;color:var(--muted)}
-
-    .meta-row{margin-top:auto;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);gap:8px}
-
-    /* ---------- CTA / button pills ---------- */
-    .test-link, .btn-pill, button.primary{
-      display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;border:0;cursor:pointer;
-      background:linear-gradient(135deg,var(--accent),#21c1fb);color:#052012;transition:transform .08s ease,box-shadow .08s ease,filter .08s ease;
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:3px 8px;
+      border-radius:999px;
+      background:rgba(15,23,42,0.9);
+      border:1px solid rgba(148,163,184,0.12);
+      font-size:11px;
+      color:var(--muted);
     }
-    .test-link:active,.btn-pill:active{transform:translateY(0)}
-    .test-link:hover,.btn-pill:hover,button.primary:hover{transform:translateY(-1px);filter:brightness(1.03)}
-    /* accessible focus */
-    .test-link:focus-visible, .btn-pill:focus-visible, button:focus-visible{
-      outline:none;box-shadow:0 0 0 4px var(--accent-soft);
+    .badge-dot{
+      width:7px;
+      height:7px;
+      border-radius:999px;
+      background:var(--accent);
+      box-shadow:0 0 8px rgba(32,63,219,0.25);
+    }
+
+    .chip{
+      padding:3px 8px;
+      border-radius:999px;
+      background:rgba(15,23,42,0.9);
+      border:1px solid rgba(31,41,55,0.9);
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .meta-row{
+      margin-top:auto;
+      margin-bottom:6px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:11px;
+      color:var(--muted);
+      gap:8px;
+    }
+
+    /* ---------- Button / pill styles ---------- */
+    .btn-pill,
+    .test-link,
+    button.primary{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      padding:8px 12px;
+      border-radius:999px;
+      font-size:13px;
+      font-weight:600;
+      text-decoration:none;
+      border:0;
+      cursor:pointer;
+      background:linear-gradient(135deg,var(--accent),#21c1fb);
+      color:#052012;
+      transition:transform .08s ease,box-shadow .08s ease,filter .08s ease;
+      white-space:nowrap;
+    }
+    .btn-pill:hover,
+    .test-link:hover,
+    button.primary:hover{
+      transform:translateY(-1px);
+      filter:brightness(1.03);
+    }
+    .btn-pill:focus-visible,
+    .test-link:focus-visible,
+    button:focus-visible{
+      outline:none;
+      box-shadow:0 0 0 4px var(--accent-soft);
     }
 
     /* Mode toggle active/inactive styles */
@@ -108,134 +213,258 @@
       color:#052012 !important;
       border:0 !important;
     }
-
     .inactive-mode{
       background:transparent !important;
       color:var(--text) !important;
-      border:1px solid rgba(148,163,184,0.12) !important;
+      border:1px solid rgba(148,163,184,0.3) !important;
     }
 
-    /* Secondary/plain buttons */
-    button{padding:8px 10px;border-radius:8px;background:transparent;border:1px solid rgba(148,163,184,0.12);color:var(--text);cursor:pointer;font-weight:600}
+    /* Default button base */
+    button{
+      padding:8px 10px;
+      border-radius:8px;
+      background:transparent;
+      border:1px solid rgba(148,163,184,0.18);
+      color:var(--text);
+      cursor:pointer;
+      font-weight:600;
+      font-size:13px;
+    }
     button:hover{filter:brightness(1.06)}
     button[disabled]{opacity:0.6;cursor:not-allowed}
 
-    /* Toolbar (viewer controls) */
-    .viewer-toolbar{display:flex;gap:8px;flex-wrap:wrap}
-    .viewer-toolbar .primary{ /* keep .primary for backward compatibility */ background:linear-gradient(135deg,var(--accent),#21c1fb);color:#052012;border:0;padding:8px 12px;border-radius:999px;font-weight:700 }
+    .viewer-toolbar{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .viewer-toolbar .primary{
+      background:linear-gradient(135deg,var(--accent),#21c1fb);
+      color:#052012;
+      border:0;
+    }
 
     /* ---------- Viewer / canvas styling ---------- */
-    .viewer-area{display:flex;flex-direction:column;gap:8px}
+    .viewer-area{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
     .canvas-wrap {
-        position: relative;
-        border-radius: 12px;
-        padding: 8px;
-        /* constrain height so it doesn't push layout infinitely */
-        max-height: 520px;
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: linear-gradient(180deg, rgba(0,0,0,0.15), transparent);
-        overflow: hidden;
+      position: relative;
+      border-radius: 12px;
+      padding: 8px;
+      max-height: 520px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, rgba(0,0,0,0.15), transparent);
+      overflow: hidden;
     }
     #canvas {
-        width: 100%;
-        height: auto;
-        max-height: 100%;
-        display: block;
-        background: transparent;
-        border-radius: 8px;
+      width: 100%;
+      height: auto;
+      max-height: 100%;
+      display: block;
+      background: transparent;
+      border-radius: 8px;
     }
-    video{max-width:100%;border-radius:8px}
+    video{
+      max-width:100%;
+      border-radius:8px;
+    }
 
-    .top-right-info{position:absolute;right:12px;top:12px;font-size:12px;color:var(--muted);background:rgba(15,23,42,0.6);padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,0.06)}
+    .top-right-info{
+      position:absolute;
+      right:12px;
+      top:12px;
+      font-size:12px;
+      color:var(--muted);
+      background:rgba(15,23,42,0.6);
+      padding:6px 8px;
+      border-radius:8px;
+      border:1px solid rgba(148,163,184,0.1);
+    }
 
-    .overlay-countdown,.overlay-success{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:700}
+    .overlay-countdown,
+    .overlay-success{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:48px;
+      font-weight:700;
+      text-shadow:0 6px 20px rgba(0,0,0,0.7);
+    }
 
     /* Calibration UI */
-    .calib-ui{position:absolute;left:12px;bottom:12px;background:rgba(2,6,23,0.6);padding:10px;border-radius:12px;border:1px solid rgba(148,163,184,0.06)}
-    .calib-bar{height:12px;background:linear-gradient(90deg, rgba(16,185,174,0.9), rgba(32,63,219,0.9));border-radius:6px}
+    .calib-ui{
+      position:absolute;
+      left:12px;
+      bottom:12px;
+      background:rgba(2,6,23,0.75);
+      padding:10px;
+      border-radius:12px;
+      border:1px solid rgba(148,163,184,0.26);
+    }
+    .calib-bar{
+      height:12px;
+      background:linear-gradient(90deg, rgba(16,185,174,0.9), rgba(32,63,219,0.9));
+      border-radius:6px;
+    }
 
-    /* ---------- Bottom panels grid (homepage-like) ---------- */
+    /* ---------- Bottom panels grid ---------- */
     .bottom-grid{
-      display:grid;grid-template-columns:1fr;gap:16px;
+      display:grid;
+      grid-template-columns:1fr;
+      gap:16px;
     }
     @media (min-width:900px){
-      .bottom-grid{grid-template-columns: 1fr 1fr 320px}
+      .bottom-grid{
+        grid-template-columns: 1fr 1fr 320px;
+      }
     }
 
-    /* Panel header layout */
-    .panel-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px}
-    .panel-header h2{font-size:14px;margin:0}
-    .header-actions button{padding:6px 10px;border-radius:8px;border:1px solid rgba(148,163,184,0.06);background:transparent;color:var(--text);cursor:pointer}
+    .panel-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      margin-bottom:6px;
+      position:relative;
+      z-index:1;
+    }
+    .panel-header h2{
+      font-size:14px;
+      margin:0;
+    }
+    .header-actions button{
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,0.22);
+      background:transparent;
+      color:var(--text);
+      cursor:pointer;
+      font-size:12px;
+    }
 
-    /* Metadata form layout */
-    .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .meta-grid label{display:block;font-size:13px;margin-bottom:6px;color:var(--muted)}
-    input[type="text"], input[type="number"], input[type="date"], select, textarea{
-      width:100%;padding:8px;border-radius:8px;background:rgba(0,0,0,0.25);border:1px solid rgba(148,163,184,0.06);color:var(--text)
+    .panel-body{
+      position:relative;
+      z-index:1;
+    }
+
+    .meta-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+    .meta-grid label{
+      display:block;
+      font-size:12px;
+      margin-bottom:4px;
+      color:var(--muted);
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    select,
+    textarea{
+      width:100%;
+      padding:8px;
+      border-radius:8px;
+      background:rgba(0,0,0,0.25);
+      border:1px solid rgba(148,163,184,0.26);
+      color:var(--text);
+      font-size:13px;
     }
     textarea{resize:vertical}
 
-    /* Rows & columns used in settings */
     .col{display:flex;flex-direction:column;gap:8px}
     .row{display:flex;gap:8px;align-items:center}
 
-    .monitor-row{display:flex;gap:8px;align-items:center}
-    #monitorCustom{padding:8px;border-radius:8px;border:1px solid rgba(148,163,184,0.06);background:transparent;color:var(--text)}
+    .monitor-row{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    #monitorCustom{
+      padding:8px;
+      border-radius:8px;
+      border:1px solid rgba(148,163,184,0.26);
+      background:transparent;
+      color:var(--text);
+    }
 
-    /* Log area */
-    .log{padding:10px;max-height:260px;overflow:auto;font-size:13px;color:var(--muted);background:transparent}
+    /* Log */
+    .log{
+      padding:10px;
+      max-height:260px;
+      overflow:auto;
+      font-size:13px;
+      color:var(--muted);
+      background:transparent;
+    }
 
-    /* Footer (kept minimal) */
-    .footer{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:6px;font-size:11px;color:var(--muted)}
-    .dot{width:4px;height:4px;border-radius:999px;background:rgba(148,163,184,0.7)}
+    /* Footer */
+    .footer{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-top:6px;
+      font-size:11px;
+      color:var(--muted);
+      flex-wrap:wrap;
+    }
+    .dot{
+      width:4px;
+      height:4px;
+      border-radius:999px;
+      background:rgba(148,163,184,0.7);
+    }
   </style>
 </head>
 <body>
-  <div class="shell" role="application" aria-label="RT Finger Chase Clinic Dashboard - CeMoQu">
-
+  <div class="shell" role="application" aria-label="Random Target Touch Test — CeMoQu">
     <!-- Header -->
     <div class="topbar">
-      <!-- Step 3: Back to homepage button -->
-      <a href="../Homepage/index.html" class="btn-pill" style="font-size:12px;padding:6px 12px;margin-right:8px;align-self:center;">← Back</a>
-
-      <div class="title-block">
-        <h1>Random Target Touch Test</h1>
-        <div class="small-muted">For patients and clinicians</div>
-      </div>
-
-      <div style="display:flex;align-items:center;gap:12px;margin-left:auto;">
-        <div class="tag-pill" aria-hidden="true"><span class="led" aria-hidden="true"></span> Clinic</div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <div class="small-muted" style="font-size:12px">CeMoQu · v0.1</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <a href="../Homepage/index.html" class="btn-pill" style="font-size:12px;padding:6px 12px;">← Back</a>
+        <div class="title-block">
+          <h1>Random Target Touch Test</h1>
+          <div class="small-muted">Point-to-target cursor/camera task with time-in-target and error metrics.</div>
         </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="tag-pill"><span class="led"></span> CeMoQu · v0.1</div>
       </div>
     </div>
 
-    <!-- Top content: viewer (spans full width) + right-side compact status (right column) -->
+    <!-- Top content -->
     <div class="content-grid">
-      <!-- Viewer card (spans both columns on wide screens) -->
-      <section class="card panel viewer-area" aria-label="Viewer area" style="grid-column: 1 / -1;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <!-- Viewer card (full-width row) -->
+      <section class="card panel viewer-area" aria-label="Viewer area" style="grid-column:1 / -1;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
           <div>
-            <div style="display:flex;flex-direction:column;gap:6px">
-              <div style="display:flex;gap:8px;align-items:center">
-                <div class="badge"><span class="badge-dot"></span> Mode <strong id="modeBadgeText" style="margin-left:8px;color:var(--text)">Cursor</strong></div>
-                <div class="small-muted" style="font-size:12px">Toggle to Camera Test for hand tracking</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;gap:8px;align-items:center;">
+                <div class="badge">
+                  <span class="badge-dot"></span>
+                  Mode
+                  <strong id="modeBadgeText" style="margin-left:6px;color:var(--text)">Cursor</strong>
+                </div>
+                <div class="small-muted" style="font-size:12px;">Switch to Camera mode for hand tracking.</div>
               </div>
-
-              <div class="mode-toggle" role="tablist" aria-label="Choose test mode" style="display:flex;gap:8px;margin-top:6px">
-                <!-- Step 2: Cursor starts active -->
-                <button id="modeCursor" class="btn-pill active-mode test-link" role="tab" aria-selected="true">Cursor Test</button>
+              <div class="mode-toggle" role="tablist" aria-label="Choose test mode" style="display:flex;gap:8px;margin-top:6px;">
+                <button id="modeCursor" class="btn-pill active-mode" role="tab" aria-selected="true">Cursor Test</button>
                 <button id="modeCamera" class="btn-pill inactive-mode" role="tab" aria-selected="false">Camera Test (Beta)</button>
               </div>
             </div>
           </div>
 
-          <div class="viewer-toolbar" aria-hidden="false">
-            <!-- preserve IDs for JS; visually styled to match homepage CTA -->
+          <div class="viewer-toolbar">
             <button id="startBtn" class="primary">Start Test</button>
             <button id="stopBtn">Stop</button>
             <button id="runAgainBtn">Run Again</button>
@@ -244,67 +473,74 @@
           </div>
         </div>
 
-        <!-- Canvas / video area -->
+        <!-- Canvas / video -->
         <div class="canvas-wrap" id="viewer" aria-live="polite">
           <div class="top-right-info" id="ppcLabel">Pixels/cm: --</div>
           <video id="video" autoplay playsinline style="display:none"></video>
-          <canvas id="canvas" role="img" aria-label="Camera feed or Cursor canvas"></canvas>
-          <div id="countdownOverlay" class="overlay-countdown" style="display:none"></div>
+          <canvas id="canvas" role="img" aria-label="Camera feed or cursor canvas"></canvas>
+
+          <div id="countdownOverlay" class="overlay-countdown" style="display:none;"></div>
           <div id="calibSuccessOverlay" class="overlay-success" style="display:none;"></div>
 
-          <!-- Calibration UI (visible in Cursor mode) -->
+          <!-- Calibration UI (Cursor mode) -->
           <div id="calibUI" class="calib-ui" style="display:none;">
-            <div>
-              <div class="calib-instr" id="calibInstr">Place a ruler or card (8.5 cm) against the bar to verify length.</div>
+            <div id="calibInstr" class="small-muted" style="font-size:12px;">
+              Place a ruler or a known 8.5&nbsp;cm object along the green bar to verify length.
             </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-start;margin-top:8px">
-              <div id="calibBar" class="calib-bar" style="width:120px"></div>
-              <div style="margin-top:6px;font-size:12px;color:var(--muted)">Green bar = 8.5 cm when measured on your screen.</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;margin-top:8px;">
+              <div id="calibBar" class="calib-bar" style="width:120px;"></div>
+              <div style="margin-top:6px;font-size:11px;color:var(--muted);">
+                Adjust pixels/cm until the bar measures ~8.5&nbsp;cm on your screen.
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- viewer meta row -->
-        <div class="meta-row" style="margin-top:12px">
-          <div class="small-muted">Input: <span class="chip" id="inputTypeChip">Mouse</span></div>
-          <div style="display:flex;gap:8px;align-items:center">
+        <div class="meta-row" style="margin-top:12px;">
+          <div class="small-muted">
+            Input: <span class="chip" id="inputTypeChip">Mouse</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
             <div class="small-muted" id="statusLine">Idle</div>
-            <a id="quickRunLink" href="#" class="test-link" style="font-size:13px">Quick Run</a>
+            <a id="quickRunLink" href="#" class="test-link" style="font-size:12px;">Quick Run</a>
           </div>
         </div>
       </section>
 
-      <!-- Right top: Info & status stacked on the right column -->
+      <!-- Right side: info + status -->
       <aside style="display:flex;flex-direction:column;gap:12px;">
-        <section class="card panel" style="width:320px;min-height:120px">
+        <section class="card panel" style="width:100%;min-height:120px;">
           <div class="panel-header">
-            <h2 style="margin:0;font-size:14px">Info</h2>
+            <h2>Info</h2>
           </div>
           <div class="panel-body">
-            <div class="small-muted">Use the mode toggle to choose Cursor (mouse) or Camera test. Cursor Test runs on a blank canvas — calibrate with ruler for accurate pixels/cm.</div>
+            <div class="small-muted">
+              Random target touch test for ataxia and upper-limb control. Targets appear at random positions;
+              the system logs time-to-target, time in target, and movement distance.
+            </div>
           </div>
         </section>
 
-        <section class="card panel" style="width:320px;min-height:80px">
+        <section class="card panel" style="width:100%;min-height:80px;">
           <div class="panel-header">
-            <h2 style="margin:0;font-size:14px">Status</h2>
+            <h2>Status</h2>
           </div>
           <div class="panel-body">
             <div id="statusLineTop">Idle</div>
-            <div id="trialLine" class="small-muted" style="margin-top:6px">Trial: -</div>
+            <div id="trialLine" class="small-muted" style="margin-top:6px;">Trial: —</div>
           </div>
         </section>
       </aside>
     </div>
 
-    <!-- Bottom panels: metadata | settings | log using homepage-like cards -->
-    <div class="bottom-grid" style="width:100%;display:grid;gap:16px;margin-top:6px">
-      <!-- Metadata panel -->
+    <!-- Bottom: metadata | settings | log -->
+    <div class="bottom-grid" style="margin-top:6px;">
+      <!-- Metadata -->
       <section class="card panel" id="metaPanel" aria-labelledby="metaTitle">
         <div class="panel-header">
           <div>
-            <h2 id="metaTitle" class="meta-title">Participant Metadata</h2>
-            <div class="small-muted" style="margin-top:4px">Large label for clarity</div>
+            <h2 id="metaTitle">Participant Metadata</h2>
+            <div class="small-muted" style="margin-top:4px;">Patient/session info stored locally on this device.</div>
           </div>
           <div class="header-actions">
             <button id="saveMetaBtn">Save Metadata</button>
@@ -333,24 +569,20 @@
                 <option value="L">Left</option>
               </select>
             </div>
-            <div style="grid-column:1/3">
+            <div style="grid-column:1/3;">
               <label>Notes</label>
               <textarea id="meta_notes" rows="3" placeholder="Optional notes..."></textarea>
             </div>
           </div>
-
-          <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-            <div class="small-muted">Saved to device</div>
-          </div>
         </div>
       </section>
 
-      <!-- Settings panel -->
+      <!-- Settings -->
       <section class="card panel" id="settingsPanel" style="min-height:260px;">
         <div class="panel-header">
           <div>
-            <h2 class="settings-title">Settings</h2>
-            <div class="small-muted" style="margin-top:4px">Core test parameters</div>
+            <h2>Settings</h2>
+            <div class="small-muted" style="margin-top:4px;">Core test parameters (targets, timing, calibration).</div>
           </div>
           <div class="header-actions">
             <button id="saveSettingsBtn">Save Settings</button>
@@ -360,70 +592,83 @@
         <div class="panel-body">
           <div class="col">
             <div class="row">
-              <div style="flex:1">
+              <div style="flex:1;">
                 <label>Targets</label>
                 <input id="cfg_targets" type="number" value="5" min="1" />
               </div>
-              <div style="width:120px">
+              <div style="width:120px;">
                 <label>Target interval (s)</label>
                 <input id="cfg_interval" type="number" value="2.0" step="0.1" min="0.1" />
               </div>
             </div>
 
             <div class="row">
-              <div style="flex:1">
+              <div style="flex:1;">
                 <label>Target radius (cm)</label>
                 <input id="cfg_radius_cm" type="number" value="5.0" step="0.1" />
               </div>
-              <div style="width:120px">
+              <div style="width:120px;">
                 <label>Edge width (px)</label>
                 <input id="cfg_edge_px" type="number" value="5" />
               </div>
             </div>
 
             <div class="row">
-              <div style="flex:1">
-                <label>Minimum distance between targets (cm)</label>
+              <div style="flex:1;">
+                <label>Min distance between targets (cm)</label>
                 <input id="cfg_min_distance_cm" type="number" value="10" step="0.1" />
               </div>
-              <div style="width:120px">
+              <div style="width:120px;">
                 <label>Center dot (1 cm)</label>
-                <select id="cfg_center_dot"><option value="1">Yes</option><option value="0">No</option></select>
+                <select id="cfg_center_dot">
+                  <option value="1">Yes</option>
+                  <option value="0">No</option>
+                </select>
               </div>
             </div>
 
-            <div class="row" style="margin-top:6px">
-              <div style="flex:1">
+            <div class="row" style="margin-top:6px;">
+              <div style="flex:1;">
                 <label>Trail animation between targets</label>
-                <select id="cfg_trail"><option value="1">Yes</option><option value="0">No</option></select>
+                <select id="cfg_trail">
+                  <option value="1">Yes</option>
+                  <option value="0">No</option>
+                </select>
               </div>
-              <div style="width:140px">
-                <label>Countdown / Sound cue</label>
-                <select id="cfg_countdown"><option value="0">Off</option><option value="1">On</option></select>
+              <div style="width:140px;">
+                <label>Countdown / sound cue</label>
+                <select id="cfg_countdown">
+                  <option value="0">Off</option>
+                  <option value="1">On</option>
+                </select>
               </div>
             </div>
 
-            <div class="row" style="margin-top:10px;align-items:center">
-              <div style="flex:1">
+            <div class="row" style="margin-top:10px;align-items:center;">
+              <div style="flex:1;">
                 <label>Pixels / cm (default)</label>
                 <input id="cfg_ppc" type="number" step="0.1" value="30.0" />
-                <div class="small-muted" style="margin-top:6px">Set a default pixels-per-cm or press Calibrate to automatically measure index-finger length (camera) or estimate from monitor.</div>
+                <div class="small-muted" style="margin-top:6px;">
+                  Set a default pixels-per-cm or use calibration to estimate from camera/monitor.
+                </div>
               </div>
-              <div style="width:140px">
+              <div style="width:140px;">
                 <label>&nbsp;</label>
-                <button id="calibrateBtn" style="width:100%">Calibrate</button>
+                <button id="calibrateBtn" style="width:100%;">Calibrate</button>
               </div>
             </div>
 
-            <div class="row" style="margin-top:8px">
-              <div style="flex:1">
+            <div class="row" style="margin-top:8px;">
+              <div style="flex:1;">
                 <label>Finger length for calibration (cm)</label>
                 <input id="cfg_finger_cm" type="number" step="0.1" value="7.5" />
-                <div class="small-muted" style="margin-top:6px">Used to compute pixels/cm during automatic calibration.</div>
+                <div class="small-muted" style="margin-top:6px;">
+                  Used to compute pixels/cm during camera-based calibration.
+                </div>
               </div>
             </div>
 
-            <div style="margin-top:10px">
+            <div style="margin-top:10px;">
               <label>Monitor size (diagonal)</label>
               <div class="monitor-row">
                 <select id="monitorSize">
@@ -432,27 +677,31 @@
                   <option value="27">27"</option>
                   <option value="custom">Custom</option>
                 </select>
-                <input id="monitorCustom" type="number" step="0.1" placeholder="Inches (if custom)" style="display:none" />
+                <input id="monitorCustom" type="number" step="0.1" placeholder="Inches (custom)" style="display:none;" />
                 <button id="estimatePpcBtn">Estimate ppc</button>
               </div>
-              <div class="small-muted" style="margin-top:8px">Estimating pixels/cm from monitor diagonal and screen CSS width. Verify with the green bar in Cursor Test.</div>
+              <div class="small-muted" style="margin-top:8px;">
+                Estimates pixels/cm from monitor diagonal and CSS width. Verify with the green bar in Cursor mode.
+              </div>
             </div>
 
             <div style="margin-top:12px;display:flex;gap:8px;">
               <button id="applySettingsBtnLite" class="btn-pill">Apply (temporary)</button>
               <button id="resetSettingsBtnLocal">Reset</button>
             </div>
-            <div class="small-muted" style="margin-top:8px">Settings are saved to this device and restored next time.</div>
+            <div class="small-muted" style="margin-top:8px;">
+              Settings are stored in local storage and restored next time.
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- Log panel -->
+      <!-- Log -->
       <section class="card panel" id="logPanel" style="min-height:160px;">
         <div class="panel-header log-header">
           <div>
-            <h2 style="margin:0;font-size:15px">Log</h2>
-            <div class="small-muted" style="margin-top:4px">Activity & result summary</div>
+            <h2>Log</h2>
+            <div class="small-muted" style="margin-top:4px;">Run history and summary messages.</div>
           </div>
           <div class="header-actions">
             <button id="clearLogBtn">Clear Log</button>
@@ -460,17 +709,17 @@
         </div>
 
         <div class="panel-body" style="display:flex;flex-direction:column;padding:0;">
-          <div id="logArea" class="log" role="log" aria-live="polite" style="border-radius:0;"></div>
+          <div id="logArea" class="log" role="log" aria-live="polite"></div>
         </div>
       </section>
     </div>
 
     <!-- Footer -->
     <div class="footer">
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <div class="small-muted">Local only, no data upload.</div>
         <div class="dot"></div>
-        <div class="small-muted">Designed for clinical use</div>
+        <div class="small-muted">Use full-screen mode where possible for consistent calibration.</div>
       </div>
       <div class="small-muted">CeMoQu · v0.1</div>
     </div>
@@ -482,28 +731,36 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
-  <!-- App script (keeps original behavior) -->
+  <!-- App script (original behavior) -->
   <script src="app.js"></script>
 
-  <!-- Mode toggle small script (Step 2) -->
+  <!-- Mode toggle script -->
   <script>
     (function(){
       const cursorBtn = document.getElementById("modeCursor");
       const cameraBtn = document.getElementById("modeCamera");
       if(cursorBtn && cameraBtn){
-        cursorBtn.addEventListener("click", () => {
-          cursorBtn.classList.add("active-mode"); cursorBtn.classList.remove("inactive-mode");
-          cameraBtn.classList.add("inactive-mode"); cameraBtn.classList.remove("active-mode");
-          cursorBtn.setAttribute('aria-selected','true');
-          cameraBtn.setAttribute('aria-selected','false');
-          const badge = document.getElementById('modeBadgeText'); if(badge) badge.textContent = 'Cursor';
+        cursorBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          cursorBtn.classList.add("active-mode");
+          cursorBtn.classList.remove("inactive-mode");
+          cameraBtn.classList.add("inactive-mode");
+          cameraBtn.classList.remove("active-mode");
+          cursorBtn.setAttribute("aria-selected","true");
+          cameraBtn.setAttribute("aria-selected","false");
+          const badge = document.getElementById("modeBadgeText");
+          if(badge) badge.textContent = "Cursor";
         });
-        cameraBtn.addEventListener("click", () => {
-          cameraBtn.classList.add("active-mode"); cameraBtn.classList.remove("inactive-mode");
-          cursorBtn.classList.add("inactive-mode"); cursorBtn.classList.remove("active-mode");
-          cameraBtn.setAttribute('aria-selected','true');
-          cursorBtn.setAttribute('aria-selected','false');
-          const badge = document.getElementById('modeBadgeText'); if(badge) badge.textContent = 'Camera';
+        cameraBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          cameraBtn.classList.add("active-mode");
+          cameraBtn.classList.remove("inactive-mode");
+          cursorBtn.classList.add("inactive-mode");
+          cursorBtn.classList.remove("active-mode");
+          cameraBtn.setAttribute("aria-selected","true");
+          cursorBtn.setAttribute("aria-selected","false");
+          const badge = document.getElementById("modeBadgeText");
+          if(badge) badge.textContent = "Camera";
         });
       }
     })();

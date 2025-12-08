@@ -1,95 +1,464 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Line Drawing Test - CeMoQu</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <title>Line Drawing Test – CeMoQu</title>
+
+  <!-- Match CeMoQu font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#020617;
+      --panel:#02091b;
+      --panel-soft:#020b21;
+      --accent:#203fdb;
+      --accent-soft:rgba(16,185,129,0.16);
+      --muted:#94a3b8;
+      --muted-soft:#1f2937;
+      --text:#e5e7eb;
+      --danger:#ef4444;
+    }
+
+    *{box-sizing:border-box;margin:0;padding:0;}
+
+    html,body{
+      height:100%;
+      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background:radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);
+      color:var(--text);
+    }
+
+    body{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+    }
+
+    /* Shell like homepage / RT / SD */
+    .shell{
+      width:100%;
+      max-width:1024px;
+      border-radius:24px;
+      background:linear-gradient(145deg,rgba(15,23,42,0.96),rgba(15,23,42,0.92));
+      border:1px solid #111827;
+      padding:20px 20px 22px;
+      box-shadow:0 24px 80px rgba(0,0,0,0.7);
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+
+    /* Header / topbar */
+    .topbar{
+      display:flex;
+      justify-content:flex-start;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-bottom:4px;
+    }
+
+    .title-block h1{
+      margin:0;
+      font-size:22px;
+      letter-spacing:0.02em;
+    }
+
+    .small-muted{
+      font-size:13px;
+      color:var(--muted);
+      margin-top:4px;
+    }
+
+    /* Back button – same as RT / SD style */
+    .btn-pill{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:999px;
+      font-size:13px;
+      font-weight:600;
+      background:linear-gradient(135deg,var(--accent),#21c1fb);
+      color:#052012;
+      text-decoration:none;
+      border:none;
+      cursor:pointer;
+      transition:transform 0.08s ease,filter 0.08s ease;
+      white-space:nowrap;
+    }
+    .btn-pill:hover{
+      transform:translateY(-1px);
+      filter:brightness(1.03);
+    }
+    .btn-pill:focus-visible{
+      outline:none;
+      box-shadow:0 0 0 4px var(--accent-soft);
+    }
+    .back-btn{
+      margin-right:8px;
+    }
+
+    /* Small ghost button (for Toggle Dark Mode) */
+    .ghost-btn{
+      margin-left:auto;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,0.35);
+      background:rgba(15,23,42,0.9);
+      color:var(--text);
+      font-size:12px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .ghost-btn:hover{filter:brightness(1.06);}
+
+    /* Main layout */
+    #main{
+      display:grid;
+      grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 260px;
+      gap:16px;
+      align-items:stretch;
+    }
+    @media(max-width:1024px){
+      #main{
+        grid-template-columns: minmax(0,2fr) minmax(0,1.4fr);
+        grid-template-rows:auto auto;
+      }
+      #sidebar{
+        grid-column:1 / -1;
+        order:3;
+      }
+    }
+    @media(max-width:780px){
+      #main{
+        grid-template-columns:1fr;
+      }
+      #stats-panel{
+        order:2;
+      }
+      #sidebar{
+        order:3;
+      }
+    }
+
+    /* Card component (same vibe as homepage) */
+    .card{
+      position:relative;
+      border-radius:18px;
+      padding:14px 14px 12px;
+      background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
+      border:1px solid rgba(30,64,175,0.35);
+      box-shadow:0 18px 45px rgba(15,23,42,0.9);
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .card::before{
+      content:"";
+      position:absolute;
+      inset:-80%;
+      background:radial-gradient(circle at 0 0,rgba(56,189,248,0.08),transparent 55%);
+      opacity:0.7;
+      pointer-events:none;
+    }
+    .card h2{
+      margin:0;
+      font-size:15px;
+      position:relative;
+      z-index:1;
+    }
+
+    /* Canvas container */
+    #canvas-container{
+      position:relative;
+      border-radius:14px;
+      background:rgba(15,23,42,0.7);
+      padding:8px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:260px;
+      z-index:1;
+    }
+    #testCanvas{
+      border-radius:10px;
+      background:#020617;
+      border:1px solid #1f2937;
+      touch-action:none;
+      max-width:100%;
+      height:auto;
+    }
+
+    /* Stats panel */
+    #stats-panel .patient-info{
+      font-weight:600;
+      font-size:14px;
+      margin-bottom:4px;
+    }
+    #timer-label{
+      font-size:13px;
+      margin-bottom:10px;
+      color:var(--muted);
+    }
+
+    details{
+      margin-top:6px;
+      border-radius:10px;
+      background:rgba(15,23,42,0.9);
+      border:1px solid #1f2937;
+      padding:8px 10px;
+      position:relative;
+      z-index:1;
+    }
+    details summary{
+      font-weight:600;
+      cursor:pointer;
+      outline:none;
+      font-size:13px;
+      color:var(--text);
+    }
+    details[open] summary{
+      border-bottom:1px solid #1f2937;
+      margin-bottom:6px;
+      padding-bottom:4px;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+      margin-top:10px;
+      position:relative;
+      z-index:1;
+    }
+    th,td{
+      border-bottom:1px solid #1f2937;
+      padding:6px 8px;
+      text-align:center;
+    }
+    th{
+      background:rgba(15,23,42,0.8);
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:0.03em;
+    }
+
+    /* Sidebar controls */
+    #sidebar{
+      border-radius:18px;
+      background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
+      border:1px solid rgba(30,64,175,0.35);
+      box-shadow:0 18px 45px rgba(15,23,42,0.9);
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      position:relative;
+      z-index:1;
+    }
+
+    #sidebar button,
+    #sidebar select{
+      width:100%;
+      margin:4px 0;
+    }
+
+    button,
+    select,
+    input{
+      font-family:inherit;
+      font-size:13px;
+    }
+
+    button{
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid rgba(148,163,184,0.35);
+      background:rgba(15,23,42,0.9);
+      color:var(--text);
+      font-weight:600;
+      cursor:pointer;
+      transition:filter 0.08s ease,transform 0.08s ease;
+    }
+    button:hover{filter:brightness(1.06);}
+    button:disabled{opacity:0.5;cursor:not-allowed;}
+
+    select,
+    input[type="text"],
+    input[type="number"]{
+      padding:7px 9px;
+      border-radius:999px;
+      border:1px solid #1f2937;
+      background:#02091b;
+      color:var(--text);
+    }
+
+    hr{
+      border:0;
+      border-top:1px solid #1f2937;
+      margin:8px 0;
+    }
+
+    /* Dialog */
+    dialog{
+      border-radius:16px;
+      border:1px solid #1f2937;
+      background:#02091b;
+      color:var(--text);
+      padding:16px 18px;
+    }
+    dialog label{
+      display:block;
+      font-size:13px;
+      margin-bottom:8px;
+    }
+    dialog input{
+      width:100%;
+      margin-top:3px;
+    }
+    dialog menu{
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      padding:0;
+      margin-top:12px;
+    }
+
+    /* Dark mode toggle from old app (kept for compatibility) */
+    .invert-colors{
+      filter:invert(1) hue-rotate(180deg);
+    }
+
+    /* Footer */
+    footer{
+      margin-top:4px;
+      font-size:11px;
+      color:var(--muted);
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+  </style>
 </head>
 <body>
-  <header>
-    <div><strong>Line Drawing Test - CeMoQu</strong></div>
-    <div>
-      <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
-    </div>
-  </header>
+  <div class="shell">
+    <header class="topbar">
+      <!-- Back button: same color & position as RT -->
+      <a href="../Homepage/index.html" class="btn-pill back-btn">Back</a>
 
-  <div id="main">
-    <div id="canvas-container">
-      <canvas id="testCanvas"></canvas>
-    </div>
+      <div class="title-block">
+        <h1>Line Drawing Test</h1>
+        <div class="small-muted">Start–finish tracing with deviation, turns, and SARA-style subscores.</div>
+      </div>
 
-    <div id="stats-panel">
-      <div class="patient-info" id="patientInfo">No patient selected</div>
-      <div id="timer-label">Time: <span id="timer">0.00</span> s</div>
+      <!-- Optional: keep dark mode toggle hooked to existing JS function -->
+      <button class="ghost-btn" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    </header>
 
-      <details id="clinical-score-box">
-        <summary>Clinical Score Mapping</summary>
-        <div id="clinical-score-content">
-          <p><em>No data yet. Run a test to compute scores.</em></p>
+    <div id="main">
+      <!-- Canvas area -->
+      <section class="card">
+        <h2>Drawing Area</h2>
+        <div id="canvas-container">
+          <canvas id="testCanvas"></canvas>
         </div>
-      </details>
+      </section>
 
-      <table id="statsTable">
-        <thead>
-          <tr>
-            <th>Metric</th>
-            <th>Value</th>
-            <th>Mode</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>Discontinuities</td><td id="discontValue">0</td><td>—</td></tr>
-          <tr><td>Turns (Vertical)</td><td id="verticalTurnValue">0</td><td>—</td></tr>
-          <tr><td>Reverses (Horizontal)</td><td id="horizontalTurnValue">0</td><td>—</td></tr>
-          <tr>
-            <td>Off-by</td>
-            <td id="offByValue">0</td>
-            <td><input type="number" id="offByThreshold" value="10" style="width:60px" /></td>
-          </tr>
-          <tr>
-            <td>Deviation Area</td>
-            <td id="deviationValue">0</td>
-            <td><button id="deviationModeBtn" onclick="toggleDeviationMode()">Total</button></td>
-          </tr>
-          <tr>
-            <td>Turn Avg</td>
-            <td id="turnValue">0</td>
-            <td><button id="turnModeBtn" onclick="toggleTurnMode()">Avg Vertical</button></td>
-          </tr>
-          <tr><td>Out-of-Bounds</td><td id="outOfBoundsValue">0</td><td>—</td></tr>
-          <tr><td>Start Fails</td><td id="startFailsValue">0</td><td>—</td></tr>
-        </tbody>
-      </table>
+      <!-- Stats / scores -->
+      <section class="card" id="stats-panel">
+        <h2>Metrics & Score</h2>
+
+        <div class="patient-info" id="patientInfo">No patient selected</div>
+        <div id="timer-label">Time: <span id="timer">0.00</span> s</div>
+
+        <details id="clinical-score-box">
+          <summary>Clinical Score Mapping</summary>
+          <div id="clinical-score-content">
+            <p><em>No data yet. Run a test to compute scores.</em></p>
+          </div>
+        </details>
+
+        <table id="statsTable">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Value</th>
+              <th>Mode</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Discontinuities</td><td id="discontValue">0</td><td>—</td></tr>
+            <tr><td>Turns (Vertical)</td><td id="verticalTurnValue">0</td><td>—</td></tr>
+            <tr><td>Reverses (Horizontal)</td><td id="horizontalTurnValue">0</td><td>—</td></tr>
+            <tr>
+              <td>Off-by</td>
+              <td id="offByValue">0</td>
+              <td><input type="number" id="offByThreshold" value="10" style="width:60px" /></td>
+            </tr>
+            <tr>
+              <td>Deviation Area</td>
+              <td id="deviationValue">0</td>
+              <td><button id="deviationModeBtn" onclick="toggleDeviationMode()">Total</button></td>
+            </tr>
+            <tr>
+              <td>Turn Avg</td>
+              <td id="turnValue">0</td>
+              <td><button id="turnModeBtn" onclick="toggleTurnMode()">Avg Vertical</button></td>
+            </tr>
+            <tr><td>Out-of-Bounds</td><td id="outOfBoundsValue">0</td><td>—</td></tr>
+            <tr><td>Start Fails</td><td id="startFailsValue">0</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Sidebar controls -->
+      <aside id="sidebar">
+        <button onclick="openPatientDialog()">New Patient</button>
+
+        <select id="previousPatients" onchange="loadPreviousPatient(this.value)">
+          <option value="">Select Previous Patient</option>
+        </select>
+
+        <button onclick="clearAllPatients()">Clear All Patients</button>
+
+        <hr>
+
+        <select id="testSelector" onchange="changeTest()">
+          <option value="vertical">Vertical Test</option>
+          <option value="horizontal">Horizontal Test</option>
+          <option value="diagonal1">Diagonal Test 1</option>
+          <option value="diagonal2">Diagonal Test 2</option>
+        </select>
+
+        <button onclick="stopTest()">Stop Test</button>
+        <button onclick="resetTest()">Reset Test</button>
+        <button onclick="exportData()">Export Data</button>
+      </aside>
     </div>
 
-    <div id="sidebar">
-      <button onclick="openPatientDialog()">New Patient</button>
-      <select id="previousPatients" onchange="loadPreviousPatient(this.value)">
-        <option value="">Select Previous Patient</option>
-      </select>
-      <button onclick="clearAllPatients()">Clear All Patients</button>
-
-      <hr>
-
-      <select id="testSelector" onchange="changeTest()">
-        <option value="vertical">Vertical Test</option>
-        <option value="horizontal">Horizontal Test</option>
-        <option value="diagonal1">Diagonal Test 1</option>
-        <option value="diagonal2">Diagonal Test 2</option>
-      </select>
-
-      <button onclick="stopTest()">Stop Test</button>
-      <button onclick="resetTest()">Reset Test</button>
-      <button onclick="exportData()">Export Data</button>
-    </div>
+    <footer>
+      <span>Local only, no data upload. Traces are analyzed in-browser.</span>
+      <span>CeMoQu · v0.1</span>
+    </footer>
   </div>
 
+  <!-- Patient dialog (keeps same IDs for app.js) -->
   <dialog id="patientDialog">
     <form method="dialog">
-      <label>Name: <input type="text" id="patientName" required /></label>
-      <label>ID: <input type="text" id="patientID" required /></label>
+      <label>Name:
+        <input type="text" id="patientName" required />
+      </label>
+      <label>ID:
+        <input type="text" id="patientID" required />
+      </label>
       <menu>
         <button type="submit" onclick="setPatientInfo()">Confirm</button>
         <button onclick="patientDialog.close()">Cancel</button>
@@ -97,7 +466,7 @@
     </form>
   </dialog>
 
-  <!-- 외부 스크립트는 반드시 defer -->
+  <!-- Your original JS logic -->
   <script src="app.js" defer></script>
 </body>
 </html>
