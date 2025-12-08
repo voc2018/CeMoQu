@@ -19,7 +19,7 @@
     }
     *{box-sizing:border-box;}
     html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);color:var(--text);}
-    body{display:flex;align-items:center;justify-content:center;padding:16px;}
+    body{display:flex;justify-content:center;padding:16px;align-items:flex-start;min-height:100vh;overflow-y:auto;}
     .shell{width:100%;max-width:1024px;border-radius:24px;background:linear-gradient(145deg,rgba(15,23,42,0.96),rgba(15,23,42,0.92));border:1px solid #111827;padding:20px 20px 22px;box-shadow:0 24px 80px rgba(0,0,0,0.7);}
     header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
     .title-block h1{margin:0;font-size:24px;letter-spacing:0.02em;}
@@ -29,6 +29,16 @@
     main{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
     @media(max-width:900px){main{grid-template-columns:repeat(2,minmax(0,1fr));}}
     @media(max-width:640px){main{grid-template-columns:minmax(0,1fr);}}
+    /* ---------------- GLOBAL HEADER ---------------- */
+    .global-header {position: fixed;top: 0;left: 0;width: 100%;height: 54px;padding: 0 24px;display: flex;justify-content: space-between;align-items: center;background: rgba(3, 7, 20, 0.72);backdrop-filter: blur(12px);border-bottom: 1px solid rgba(148, 163, 184, 0.18);z-index: 2000;}
+    .gh-left {display: flex;align-items: center;gap: 12px;}
+    .gh-logo {font-size: 20px; font-weight: 700;color: var(--text);}
+    .gh-version {font-size: 12px;padding: 2px 6px;border-radius: 6px;background: rgba(148,163,184,0.10);color: var(--muted);}
+    .gh-nav {display: flex;gap: 24px;}
+    .gh-nav a {color: var(--muted);text-decoration: none;font-size: 14px;transition: color .15s ease;}
+    .gh-nav a:hover {color: var(--text);}
+    body {padding-top: 70px;}
+    
     .card{
       position:relative;
       border-radius:18px;
@@ -71,18 +81,68 @@
       text-decoration:none;
       background:linear-gradient(135deg,var(--accent),#21c1fb);
       color:#052012;
-      /* box-shadow:0 12px 30px rgba(80, 255, 232, 0.5); */
       transition:transform 0.08s ease,box-shadow 0.08s ease,filter 0.08s ease;
       white-space:nowrap;
     }
-    a.test-link:hover{transform:translateY(-1px);/*box-shadow:0 16px 34px rgba(51, 214, 255, 0.55);*/filter:brightness(1.03);}
-    a.test-link span.icon{font-size:14px;}
+    a.test-link:hover{transform:translateY(-1px);filter:brightness(1.03);}
     footer{margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:11px;color:var(--muted);}
     footer .left{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
     footer .dot{width:4px;height:4px;border-radius:999px;background:rgba(148,163,184,0.7);}
+
+    /* --- Participant Metadata styles (match card) --- */
+    .metadata-card { padding: 14px; border-radius: 14px; }
+    .metadata-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 12px;
+      align-items: start;
+    }
+    @media(max-width:640px){
+      .metadata-form { grid-template-columns: 1fr; }
+    }
+    .form-row { display:flex; flex-direction:column; gap:6px; }
+    label { font-size:13px; color:var(--muted); }
+    input[type="text"], input[type="number"], select, textarea {
+      background: rgba(10,12,20,0.6);
+      border:1px solid rgba(148,163,184,0.08);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:10px;
+      outline: none;
+      font-size:14px;
+      min-height:36px;
+    }
+    input[readonly] { opacity:0.85; background:rgba(10,12,20,0.35); }
+    textarea { min-height:84px; resize:vertical; padding-top:10px; }
+    .muted-hint { font-size:12px; color:var(--muted); }
+    .form-actions { display:flex; gap:10px; align-items:center; margin-top:6px; }
+    .btn {
+      padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer;
+      background: linear-gradient(135deg,var(--accent),#21c1fb); color:#052012; border:none;
+      box-shadow:none; outline:none;
+    }
+    .btn.ghost {
+      background:transparent; border:1px solid rgba(148,163,184,0.12); color:var(--muted); font-weight:600;
+    }
+    .small-note { font-size:12px; color:var(--muted); margin-left:auto; }
+    /* keep form visually light */
+    .field-grid { display:flex; gap:8px; }
+    .field-grid > * { flex:1; }
   </style>
 </head>
 <body>
+    <nav class="global-header">
+        <div class="gh-left">
+            <span class="gh-logo">CeMoQu</span>
+            <span class="gh-version">v0.1</span>
+        </div>
+
+        <div class="gh-nav">
+            <a href="index2.html">Home</a>
+            <a href="past_results/index.html">Past Results</a>
+            <a href="help/index.html">Help</a>
+        </div>
+    </nav>
   <div class="shell">
     <header>
       <div class="title-block">
@@ -91,7 +151,7 @@
       </div>
       <div class="tag-pill">
         <span class="led"></span>
-        Browser-based Homepage
+        Homepage
       </div>
     </header>
 
@@ -157,14 +217,147 @@
       </section>
     </main>
 
-    <footer>
-      <div class="left">
-        <span>Local only, no data upload.</span>
-        <span class="dot"></span>
-        <span>Use headphones &amp; quiet room for speech tasks.</span>
+    <!-- Participant Metadata Input Panel (new) -->
+    <section class="card metadata-card" aria-labelledby="metadata-title" style="margin-top:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div>
+          <h2 id="metadata-title">Participant Metadata Input Panel</h2>
+          <div class="badge"><span class="badge-dot"></span> Local Metadata</div>
+        </div>
       </div>
-      <div>CeMoQu · v0.1</div>
+
+      <form id="metadata-form" class="metadata-form" onsubmit="return false;" aria-describedby="metadata-note">
+        <div class="form-row">
+          <label for="participant-id">Participant ID / Name</label>
+          <input id="participant-id" name="participantId" type="text" placeholder="e.g., P-001 or Jane Doe" />
+        </div>
+
+        <div class="form-row">
+          <label for="session-id">Session ID <span class="muted-hint">(auto-generated)</span></label>
+          <input id="session-id" name="sessionId" type="text" readonly />
+        </div>
+
+        <div class="form-row">
+          <label for="age">Age</label>
+          <input id="age" name="age" type="number" min="0" max="120" placeholder="years" />
+        </div>
+
+        <div class="form-row">
+          <label for="gender">Gender</label>
+          <select id="gender" name="gender">
+            <option value="" selected>Prefer not to answer</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="nonbinary">Non-binary</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label for="dominant-hand">Dominant Hand <span class="muted-hint">(optional — used by Random Target Touch Test)</span></label>
+          <div id="dominant-hand" class="field-grid" aria-describedby="dominant-hand-hint">
+            <select name="dominantHand">
+              <option value="">(not specified)</option>
+              <option value="right">Right</option>
+              <option value="left">Left</option>
+              <option value="ambidextrous">Ambidextrous</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row" style="grid-column: 1 / -1;">
+          <label for="notes">Notes (clinician)</label>
+          <textarea id="notes" name="notes" placeholder="Clinician notes, conditions, reminders..."></textarea>
+        </div>
+
+        <div class="form-row" style="grid-column: 1 / -1;">
+          <div class="form-actions">
+            <button id="save-btn" class="btn" type="button">Save Locally (Download JSON)</button>
+            <button id="clear-btn" class="btn ghost" type="button">Clear</button>
+            <div class="small-note" id="metadata-note">This information is stored locally and is included in exported CSVs.</div>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <footer>
+        <div class="left">
+            <span>Local processing only. No data is uploaded.</span>
+            <span class="dot"></span>
+            <a href="https://github.com/voc2018/CeMoQu" target="_blank" rel="noopener" style="color: var(--muted); text-decoration: none;">
+            Documentation link
+            </a>
+            <span class="dot"></span>
+            <a href="https://github.com/voc2018/CeMoQu" target="_blank" rel="noopener" style="color: var(--muted); text-decoration: none;">
+            Contact link
+            </a>
+        </div>
+
+        <div>CeMoQu · v0.1</div>
     </footer>
-  </div>
+
+  <script>
+    (function(){
+      // Simple session id generator: ISO timestamp + random 4-char hex
+      function generateSessionId(){
+        const ts = new Date().toISOString().replace(/[:.]/g,'-');
+        const rand = Math.floor(Math.random()*0xFFFF).toString(16).padStart(4,'0');
+        return 'S-'+ts+'-'+rand;
+      }
+
+      const sessionField = document.getElementById('session-id');
+      if(sessionField){
+        sessionField.value = generateSessionId();
+      }
+
+      // Save locally button -> creates a JSON file and triggers download
+      const saveBtn = document.getElementById('save-btn');
+      const clearBtn = document.getElementById('clear-btn');
+
+      function collectFormData(){
+        const fm = document.getElementById('metadata-form');
+        const data = {
+          participantId: fm.participantId.value || '',
+          sessionId: fm.sessionId.value || '',
+          age: fm.age.value || '',
+          gender: fm.gender.value || '',
+          dominantHand: fm.dominantHand ? fm.dominantHand.value : '',
+          notes: fm.notes.value || '',
+          savedAt: new Date().toISOString()
+        };
+        return data;
+      }
+
+      function downloadObjectAsJson(obj, filename){
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(obj, null, 2));
+        const dlAnchor = document.createElement('a');
+        dlAnchor.setAttribute("href", dataStr);
+        dlAnchor.setAttribute("download", filename);
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        dlAnchor.remove();
+      }
+
+      if(saveBtn){
+        saveBtn.addEventListener('click', function(){
+          const data = collectFormData();
+          const filename = (data.participantId ? data.participantId : 'participant') + '_' + (data.sessionId ? data.sessionId : 'session') + '.json';
+          downloadObjectAsJson(data, filename);
+        });
+      }
+
+      if(clearBtn){
+        clearBtn.addEventListener('click', function(){
+          const fm = document.getElementById('metadata-form');
+          fm.reset();
+          // regenerate session id after clearing
+          if(sessionField) sessionField.value = generateSessionId();
+        });
+      }
+
+      // Optional: If you later want to hide dominant-hand unless RT test selected,
+      // you can add event listeners to test links and set a flag. For now leave visible but optional.
+    })();
+  </script>
 </body>
 </html>
