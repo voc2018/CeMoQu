@@ -750,6 +750,7 @@ function finalizeRunAndLog(){
     targets: summaries,
     finalScore
   };
+  window.lastRunSummary = runSummary;
   allFinalSummaries.push(runSummary);
   running = false;
   firstTrialCountdownDone = false;

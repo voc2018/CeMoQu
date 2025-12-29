@@ -469,6 +469,7 @@
             <button id="stopBtn">Stop</button>
             <button id="runAgainBtn">Run Again</button>
             <button id="exportBtn">Export CSV</button>
+            <button id="uploadBtn">Upload De-identified Data</button>
             <button id="resetSettingsBtn">Reset Settings</button>
           </div>
         </div>
@@ -733,6 +734,87 @@
 
   <!-- App script (original behavior) -->
   <script src="app.js"></script>
+
+  <script>
+    /************************************************************
+     *  Google Apps Script upload (OPTIONAL, de-identified)
+     ************************************************************/
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwT14fhKk9o3xM5_ySq_C2FzWCChZWmX2ZDMZbTTwdLVqlB4BXc90Eu4VUBrnjn1M65ZA/exec";
+
+    async function uploadDeidentifiedResults() {
+      if (!GOOGLE_SCRIPT_URL) {
+        alert("Upload endpoint not configured.");
+        return;
+      }
+      if (!window.lastRunSummary) {
+        alert("Please complete a test before uploading.");
+        return;
+      }
+
+      // ---- Minimal payload (example / placeholder) ----
+      // Replace metrics object with real summary values from app.js
+      const payload = {
+        session_id: document.getElementById("meta_session")?.value || "unknown",
+        test_type: "RT",
+        timestamp: new Date().toISOString(),
+        metrics: (() => {
+          const run = window.lastRunSummary;
+          if (!run) return null;
+
+          const summaries = run.targets || [];
+          const valid = summaries.filter(s => !s.missed);
+
+          const mean = (arr) =>
+            arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : null;
+
+          return {
+            final_score: run.finalScore ?? null,
+
+            mean_final_error_cm: mean(valid.map(s => s.final_dist_cm)),
+            mean_reaction_time_s: mean(valid.map(s => s.reaction_time)),
+            mean_tremor_cm: mean(valid.map(s => s.tremor_cm)),
+            mean_smoothness: mean(valid.map(s => s.smoothness)),
+            mean_percent_time_inside: mean(valid.map(s => s.percent_time_inside)),
+
+            missed_rate: summaries.length
+              ? summaries.filter(s => s.missed).length / summaries.length
+              : null,
+
+            num_targets: summaries.length,
+            mode: run.mode,
+
+            target_radius_cm: run.cfg?.radius_cm ?? null,
+            interval_s: run.cfg?.interval_s ?? null,
+            pixels_per_cm: run.cfg?.ppc ?? null
+          };
+        })()
+      };
+
+      try {
+        const res = await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error("Upload failed");
+
+        alert("De-identified results uploaded successfully.");
+      } catch (err) {
+        console.error(err);
+        alert("Upload failed. Data remains local.");
+      }
+    }
+
+    // Button hook
+    document.getElementById("uploadBtn")?.addEventListener("click", () => {
+      const ok = confirm(
+        "Upload de-identified summary metrics only?\n\n" +
+        "No names, no audio, no raw trajectories."
+      );
+      if (ok) uploadDeidentifiedResults();
+    });
+  </script>
 
   <!-- Mode toggle script -->
   <script>
