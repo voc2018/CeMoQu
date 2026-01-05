@@ -1,7 +1,7 @@
 ### CeMoQu – Homepage
 This file defines the homepage for CeMoQu (Cerebral Motion Quantitative), a browser-based suite for quantitative assessment of motor and speech disturbances. The page serves as a local launch hub for individual diagnostic tests and a metadata entry point for each session.
 
-##What This Page Does
+## What This Page Does
 The homepage provides three main functions:
 1. Navigation
    A fixed header displays the application name, version, and links to Home, Past Results, and Help.
