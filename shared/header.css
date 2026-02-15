@@ -27,7 +27,7 @@
 .gh-subtitle { font-size: 13px; color: var(--header-accent); font-family: 'JetBrains Mono', monospace; font-weight: 600; }
 
 /* Data Bars */
-.gh-data-panel { display: flex; flex-direction: column; gap: 6px; flex-grow: 1; max-width: 600px; }
+.gh-data-panel { display: flex; flex-direction: column; gap: 6px; flex-grow: 1; /*max-width: 600px;*/ }
 .data-bar {
     display: flex;
     align-items: center;
