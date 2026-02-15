@@ -1,8 +1,58 @@
-# Ignore all raw data from each module
-LD/raw/**
-RT/raw/**
-SD/raw/**
+####################################
+# ===== Research Data =====
+####################################
 
-# Optional: ignore any temporary or local outputs
-**/tmp/**
-**/cache/**
+# Raw motion/audio data
+LD/raw/
+RT/raw/
+SD/raw/
+
+# Exported results
+data/csv/
+data/json/
+
+# Any local data snapshots
+data/tmp/
+data/cache/
+
+####################################
+# ===== Temporary / Cache =====
+####################################
+
+**/tmp/
+**/cache/
+*.log
+
+####################################
+# ===== OS Files =====
+####################################
+
+# Windows
+*.lnk
+Thumbs.db
+desktop.ini
+
+# macOS
+.DS_Store
+
+####################################
+# ===== IDE / Editor =====
+####################################
+
+.vscode/
+.idea/
+
+####################################
+# ===== Python (if draft scripts used) =====
+####################################
+
+__pycache__/
+*.pyc
+
+####################################
+# ===== Node (future expansion) =====
+####################################
+
+node_modules/
+dist/
+.env
