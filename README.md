@@ -1,6 +1,10 @@
 # CeMoQu (Cerebellum Motion Quantitative)
 Digital biomarkers for ataxia. CeMoQu extends selected SARA subtests and lets patients perform objective self-assessments of motor and speech functions through a web-based system.
 
+## Live System
+Access the live system here:  https://cemoqu.com
+No installation is required, all tests run directly in the browser.
+
 ## Features
 - Self-assessment tasks for ataxia and cerebellar disorders
 - Quantitative metrics (reaction time, accuracy, smoothness, tremor, intelligibility)
@@ -48,6 +52,14 @@ CeMoQu/
 - **draft/** — Experimental or early-stage code
 
 ## Quick Start
+### For Users (Live System)
+CeMoQu is fully developed and accessible online.
+1. Visit  https://cemoqu.com
+2. Select the desired assessment module
+3. Follow the on-screen instructions
+No installations required.
+
+### For Developers (Local Setup)
 ### A) Browser-Based Tests
 1. Open the corresponding `.html` file (e.g., `SD/cmq_SpeechDisturbance.html`)
 2. Follow on-screen instructions  
