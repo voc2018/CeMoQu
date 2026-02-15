@@ -61,6 +61,7 @@
     color: #fff;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
+    height: 34px;
     outline: none;
     padding: 0;
     width: auto;
@@ -69,12 +70,12 @@
 .gh-input:focus { color: var(--header-accent); }
 
 /* Specific widths for inputs to match image layout */
-.inp-id { width: 50px; }
+.inp-id { width: 100px; }
 .inp-name { width: 120px; flex-grow: 1; }
-.inp-age { width: 40px; text-align: center; }
-.inp-sex { width: 30px; text-align: center; }
-.inp-sess { width: 40px; }
-.inp-date { width: 100px; }
+.inp-age { width: 100px; text-align: center; }
+.inp-sex { width: 100px; text-align: center; }
+.inp-sess { width: 100px; }
+.inp-date { width: 120px; }
 .inp-op { width: 120px; flex-grow: 1; }
 
 .divider { color: #334155; margin: 0 10px; font-weight: 300; }
