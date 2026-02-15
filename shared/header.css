@@ -44,7 +44,7 @@
     border-radius: 4px;
     padding: 0 12px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: 11px;
 }
 .data-bar label {
     color: #4b5563; /* Faint label */
@@ -60,7 +60,7 @@
     border: none;
     color: #fff;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
+    font-size: 11px;
     outline: none;
     padding: 0;
     width: auto;
