@@ -739,7 +739,7 @@
     /************************************************************
      *  Google Apps Script upload (OPTIONAL, de-identified)
      ************************************************************/
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwT14fhKk9o3xM5_ySq_C2FzWCChZWmX2ZDMZbTTwdLVqlB4BXc90Eu4VUBrnjn1M65ZA/exec";
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzC8TVgW7KQGKXgIK6bRz-FIzN_im-oFcSD4UsWEHGwOAGr1vJUhBcCClIFMYpmCfXFPw/exec";
 
     async function uploadDeidentifiedResults() {
       if (!GOOGLE_SCRIPT_URL) {
@@ -791,17 +791,23 @@
       };
 
       try {
+        // CHANGE 1: Use text/plain to avoid CORS Preflight
         const res = await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "text/plain;charset=utf-8" }, 
           body: JSON.stringify(payload)
         });
 
         if (!res.ok) throw new Error("Upload failed");
+        
+        // Google Apps Script responses are often text, so use .json() carefully
+        // or just rely on .ok status. 
+        // If your script returns JSON text, this works:
+        const result = await res.json(); 
 
         alert("De-identified results uploaded successfully.");
       } catch (err) {
-        console.error(err);
+        console.error("Upload Error Details:", err); // Look at Console for specific error
         alert("Upload failed. Data remains local.");
       }
     }
