@@ -2,7 +2,7 @@
 Digital biomarkers for ataxia. CeMoQu extends selected SARA subtests and lets patients perform objective self-assessments of motor and speech functions through a web-based system.
 
 ## Live System
-Access the live system here:  https://cemoqu.com
+Access the live system here:  https://cemoqu.com.
 No installation is required, all tests run directly in the browser.
 
 ## Features
