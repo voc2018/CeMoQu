@@ -53,11 +53,11 @@ CeMoQu/
 
 ## Quick Start
 ### For Users (Live System)
-CeMoQu is fully developed and accessible online.
+CeMoQu is fully developed and accessible online (No installations required).
 1. Visit  https://cemoqu.com
 2. Select the desired assessment module
 3. Follow the on-screen instructions
-No installations required.
+
 
 ### For Developers (Local Setup)
 ### A) Browser-Based Tests
