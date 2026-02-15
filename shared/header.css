@@ -27,25 +27,64 @@
 .gh-subtitle { font-size: 13px; color: var(--header-accent); font-family: 'JetBrains Mono', monospace; font-weight: 600; }
 
 /* Data Bars */
-.gh-data-panel { display: flex; flex-direction: column; gap: 6px; flex-grow: 1; /*max-width: 600px;*/ }
+.gh-data-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-grow: 1; /* Takes up available space */
+    max-width: 650px;
+    margin-right: 24px;
+}
 .data-bar {
     display: flex;
     align-items: center;
-    height: 32px;
+    height: 34px;
     background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(88, 86, 214, 0.25);
+    border: 1px solid rgba(88, 86, 214, 0.3); /* Low opacity purple border */
     border-radius: 4px;
-    padding: 0 10px;
+    padding: 0 12px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
 }
-.data-bar label { color: var(--header-muted); font-weight: 700; margin-right: 10px; font-size: 10px; text-transform: uppercase; }
-.operator-label { margin-left: 10px; }
+.data-bar label {
+    color: #4b5563; /* Faint label */
+    font-weight: 700;
+    margin-right: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 11px;
+}
+
+.gh-input {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    padding: 0;
+    width: auto;
+}
+.gh-input::placeholder { color: #334155; }
+.gh-input:focus { color: var(--header-accent); }
+
+/* Specific widths for inputs to match image layout */
+.inp-id { width: 50px; }
+.inp-name { width: 120px; flex-grow: 1; }
+.inp-age { width: 40px; text-align: center; }
+.inp-sex { width: 30px; text-align: center; }
+.inp-sess { width: 40px; }
+.inp-date { width: 100px; }
+.inp-op { width: 120px; flex-grow: 1; }
+
+.divider { color: #334155; margin: 0 10px; font-weight: 300; }
+
+/* .operator-label { margin-left: 10px; } */
 
 /* Inputs */
-.gh-input { background: transparent; border: none; color: #fff; font-size: 12px; outline: none; width: auto; }
-.gh-input::placeholder { color: #2d3748; } /* Faint tags when empty */
-.divider { color: #1e293b; margin: 0 8px; }
+/* .gh-input { background: transparent; border: none; color: #fff; font-size: 12px; outline: none; width: auto; } */
+/* .gh-input::placeholder { color: #2d3748; } /* Faint tags when empty */
+/* .divider { color: #1e293b; margin: 0 8px; } */
 
 /* Navigation */
 .gh-nav { display: flex; align-items: center; gap: 15px; margin: 0 24px; }
