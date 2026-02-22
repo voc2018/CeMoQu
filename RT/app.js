@@ -11,20 +11,13 @@ const ctx = canvas.getContext('2d');
 
 const modeCursor = document.getElementById('modeCursor');
 const modeCamera = document.getElementById('modeCamera');
-const modeBadge = document.getElementById('modeBadge');
+const modeBadge = document.getElementById('modeBadgeText');
 
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const runAgainBtn = document.getElementById('runAgainBtn');
 const exportBtn = document.getElementById('exportBtn');
 const resetSettingsBtn = document.getElementById('resetSettingsBtn');
-
-const meta_participant = document.getElementById('meta_participant');
-const meta_session = document.getElementById('meta_session');
-const meta_date = document.getElementById('meta_date');
-const meta_hand = document.getElementById('meta_hand');
-const meta_notes = document.getElementById('meta_notes');
-const saveMetaBtn = document.getElementById('saveMetaBtn');
 
 const cfg_targets = document.getElementById('cfg_targets');
 const cfg_interval = document.getElementById('cfg_interval');
@@ -86,7 +79,6 @@ window.addEventListener('resize', resizeCanvasBacking);
 /* localStorage keys */
 const LS_PREFIX = 'rt_fingerchase_v1_';
 const LS_SETTINGS = LS_PREFIX + 'settings';
-const LS_META = LS_PREFIX + 'meta';
 
 /* default settings */
 const DEFAULTS = {
@@ -105,9 +97,6 @@ const DEFAULTS = {
 
 /* runtime config */
 let cfg = {...DEFAULTS};
-
-/* persistent metadata */
-let meta = { participant:'', session:'', date:'', hand:'', notes:'' };
 
 /* pixels per cm (set from settings / calibration) */
 let pixels_per_cm = DEFAULTS.ppc;
@@ -152,7 +141,7 @@ function clearLog(){
   logArea.textContent = '';
 }
 
-/* save/load settings & meta */
+/* save/load settings */
 function saveSettingsToLocal(){
   const s = {
     targets: parseInt(cfg_targets.value)||DEFAULTS.targets,
@@ -214,32 +203,6 @@ function loadSettingsIntoRuntime(){
   ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
   appendLog(`<div class="small-muted">Settings applied: ${cfg.targets} targets • ${cfg.radius_cm} cm • ${cfg.interval_s}s</div>`);
   updateCalibBar();
-}
-
-function saveMetaToLocal(){
-  meta.participant = meta_participant.value.trim();
-  meta.session = meta_session.value.trim();
-  meta.date = meta_date.value;
-  meta.hand = meta_hand.value;
-  meta.notes = meta_notes.value.trim();
-  localStorage.setItem(LS_META, JSON.stringify(meta));
-  appendLog(`<div class="small-muted">Metadata saved for participant ${meta.participant || '(unset)'} </div>`);
-}
-function loadMetaFromLocal(){
-  try{
-    const raw = localStorage.getItem(LS_META);
-    if(raw){
-      const m = JSON.parse(raw);
-      meta_participant.value = m.participant || '';
-      meta_session.value = m.session || '';
-      meta_date.value = m.date || new Date().toISOString().slice(0,10);
-      meta_hand.value = m.hand || '';
-      meta_notes.value = m.notes || '';
-      meta = {...m};
-    } else {
-      meta_date.value = new Date().toISOString().slice(0,10);
-    }
-  }catch(e){ meta_date.value = new Date().toISOString().slice(0,10); }
 }
 
 /* reset settings */
@@ -740,11 +703,6 @@ function finalizeRunAndLog(){
   appendLog(`<div style="margin-top:6px"><strong>${totalScoreText}</strong></div>`);
   const runSummary = {
     ts: new Date().toISOString(),
-    participant: meta_participant.value.trim(),
-    session: meta_session.value.trim(),
-    date: meta_date.value,
-    hand: meta_hand.value,
-    notes: meta_notes.value.trim(),
     cfg: {...cfg},
     mode,
     targets: summaries,
@@ -793,13 +751,6 @@ async function runCountdownAndCue(){
 let firstTrialCountdownDone = false;
 
 startBtn.addEventListener('click', async ()=>{
-  const pid = meta_participant.value.trim();
-  const hand = meta_hand.value;
-  if(!pid || !hand){
-    appendLog('<div style="color:#f88">Please fill Participant ID and Hand before starting.</div>');
-    return;
-  }
-
   saveSettingsToLocal();
 
   // camera init only if in camera mode
@@ -888,7 +839,7 @@ calibrateBtn.addEventListener('click', async ()=>{
 
 /* export CSV (3 files) - include mode in final summary export */
 exportBtn.addEventListener('click', ()=>{
-  const pid = (meta_participant.value || 'UNKNOWN').replace(/\s+/g,'');
+  const exportTag = 'RT';
   const ts = new Date();
   const YYYY = String(ts.getFullYear());
   const MM = String(ts.getMonth()+1).padStart(2,'0');
@@ -904,7 +855,7 @@ exportBtn.addEventListener('click', ()=>{
   for(const t of allTouches){
     touchesLines.push([t.trialIdx, t.frameIdx, t.ts, t.x_px===undefined?'':t.x_px, t.y_px===undefined?'':t.y_px, t.inside?1:0].join(','));
   }
-  downloadBlob(touchesLines.join('\n'), `RT_touches_${pid}_${stamp}.csv`);
+  downloadBlob(touchesLines.join('\n'), `RT_touches_${exportTag}_${stamp}.csv`);
 
   // targets summary csv
   const targHeader = ['trial_global_index','target_x_px','target_y_px','radius_cm','radius_px','final_error_cm','final_error_px','tremor_cm','smoothness','time_inside_s','percent_time_inside','reaction_time_s','frames_recorded','missed','sara_score'];
@@ -926,18 +877,18 @@ exportBtn.addEventListener('click', ()=>{
       s.trial_score!==null? s.trial_score : ''
     ].join(','));
   }
-  downloadBlob(targLines.join('\n'), `RT_targets_summary_${pid}_${stamp}.csv`);
+  downloadBlob(targLines.join('\n'), `RT_targets_summary_${exportTag}_${stamp}.csv`);
 
   // final summary
-  const finalHeader = ['run_ts','participant','session','date','hand','notes','mode','num_targets','final_score'];
+  const finalHeader = ['run_ts','mode','num_targets','final_score'];
   const finalLines = [finalHeader.join(',')];
   for(const f of allFinalSummaries){
     finalLines.push([
-      f.ts, f.participant, f.session, f.date, f.hand, `"${(f.notes||'').replace(/"/g,'""')}"`, f.mode || 'cursor', (f.cfg.targets||''), f.finalScore!==null? f.finalScore.toFixed(3):''
+      f.ts, f.mode || 'cursor', (f.cfg.targets||''), f.finalScore!==null? f.finalScore.toFixed(3):''
     ].join(','));
   }
-  downloadBlob(finalLines.join('\n'), `RT_final_summary_${pid}_${stamp}.csv`);
-  appendLog(`<div class="small-muted">Exported CSVs for participant ${pid}</div>`);
+  downloadBlob(finalLines.join('\n'), `RT_final_summary_${exportTag}_${stamp}.csv`);
+  appendLog(`<div class="small-muted">Exported CSVs</div>`);
 });
 
 /* helper download */
@@ -957,8 +908,6 @@ saveSettingsBtn.addEventListener('click', ()=>{ saveSettingsToLocal(); });
 applySettingsBtnLite.addEventListener('click', ()=>{ loadSettingsIntoRuntime(); appendLog('<div class="small-muted">Settings applied (temporary)</div>'); });
 resetSettingsBtnLocal.addEventListener('click', ()=>{ resetSettings(); });
 
-/* save metadata */
-saveMetaBtn.addEventListener('click', ()=>{ saveMetaToLocal(); });
 
 /* attach/detach cursor listeners */
 function attachCursorListeners(){
@@ -1067,9 +1016,8 @@ function setMode(m){
 /* Run initialization */
 function init(){
   loadSettingsFromLocal();
-  loadMetaFromLocal();
   resizeCanvasBacking();
-  appendLog('<div class="small-muted">App ready. Verify metadata and settings. Use Cursor Test for mouse-based runs; Camera Test is beta.</div>');
+  appendLog('<div class="small-muted">App ready. Verify settings. Use Cursor Test for mouse-based runs; Camera Test is beta.</div>');
 }
 init();
 
@@ -1081,3 +1029,4 @@ new ResizeObserver(()=>{ resizeCanvasBacking(); }).observe(document.getElementBy
   if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
   requestAnimationFrame(tick);
 })();
+
