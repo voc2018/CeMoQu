@@ -1,473 +1,300 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Line Drawing Test – CeMoQu</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Line Drawing Test – CeMoQu</title>
 
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="../shared/header.css">
-  <script src="../shared/header.js" defer></script>
+<style>
+:root{
+  --bg:#020617;
+  --panel:#02091b;
+  --panel-soft:#020b21;
+  --accent:#2563eb;
+  --muted:#94a3b8;
+  --text:#e5e7eb;
+}
 
-  <style>
-    :root{
-      --bg:#020617;
-      --panel:#02091b;
-      --panel-soft:#020b21;
-      --accent:#203fdb;
-      --accent-soft:rgba(16,185,129,0.16);
-      --muted:#94a3b8;
-      --muted-soft:#1f2937;
-      --text:#e5e7eb;
-      --danger:#ef4444;
-    }
+*{box-sizing:border-box;margin:0;padding:0;}
 
-    *{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  height:100%;
+  font-family:Inter,system-ui;
+  background:radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);
+  color:var(--text);
+}
 
-    html,body{
-      height:100%;
-      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      background:radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);
-      color:var(--text);
-    }
+body{
+  display:flex;
+  justify-content:center;
+  padding:18px;
+}
 
-    /* Adjusted padding for new modular header */
-    body{
-      display:flex;
-      justify-content:center;
-      padding:16px;
-      align-items:flex-start;
-      min-height:100vh;
-      overflow-y:auto;
-      padding-top:130px; 
-    }
+.shell{
+  width:100%;
+  max-width:1150px;
+  border-radius:24px;
+  background:linear-gradient(145deg,rgba(15,23,42,0.96),rgba(15,23,42,0.92));
+  border:1px solid #111827;
+  padding:18px 20px 16px 20px;
+  box-shadow:0 24px 80px rgba(0,0,0,0.7);
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
 
-    /* Shell like homepage / RT / SD */
-    .shell{
-      width:100%;
-      max-width:1024px;
-      border-radius:24px;
-      background:linear-gradient(145deg,rgba(15,23,42,0.96),rgba(15,23,42,0.92));
-      border:1px solid #111827;
-      padding:20px 20px 22px;
-      box-shadow:0 24px 80px rgba(0,0,0,0.7);
-      display:flex;
-      flex-direction:column;
-      gap:16px;
-    }
+/* Header */
+.topbar{
+  display:flex;
+  align-items:flex-start;
+  gap:14px;
+  padding-left:2px;
+}
 
-    /* Header / topbar */
-    .topbar{
-      display:flex;
-      justify-content:flex-start;
-      align-items:center;
-      gap:12px;
-      flex-wrap:wrap;
-      margin-bottom:4px;
-    }
+.topbar h1{
+  font-size:28px;
+  font-weight:700;
+  letter-spacing:-0.5px;
+  line-height:1.1;
+}
 
-    .title-block h1{
-      margin:0;
-      font-size:22px;
-      letter-spacing:0.02em;
-    }
+.small-muted{
+  font-size:14px;
+  margin-top:4px;
+  color:var(--muted);
+}
 
-    .small-muted{
-      font-size:13px;
-      color:var(--muted);
-      margin-top:4px;
-    }
+.btn-pill{
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:13px;
+  font-weight:600;
+  background:linear-gradient(135deg,#2563eb,#38bdf8);
+  color:#fff;
+  text-decoration:none;
+}
 
-    /* Back button – same as RT / SD style */
-    .btn-pill{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      gap:6px;
-      padding:6px 12px;
-      border-radius:999px;
-      font-size:13px;
-      font-weight:600;
-      background:linear-gradient(135deg,var(--accent),#21c1fb);
-      color:#052012;
-      text-decoration:none;
-      border:none;
-      cursor:pointer;
-      transition:transform 0.08s ease,filter 0.08s ease;
-      white-space:nowrap;
-    }
-    .btn-pill:hover{
-      transform:translateY(-1px);
-      filter:brightness(1.03);
-    }
-    .btn-pill:focus-visible{
-      outline:none;
-      box-shadow:0 0 0 4px var(--accent-soft);
-    }
-    .back-btn{
-      margin-right:8px;
-    }
+/* Main Layout */
+#main{
+  display:grid;
+  grid-template-columns: 2.5fr 1fr;
+  gap:20px;
+}
 
-    /* Small ghost button (for Toggle Dark Mode) */
-    .ghost-btn{
-      margin-left:auto;
-      padding:6px 10px;
-      border-radius:999px;
-      border:1px solid rgba(148,163,184,0.35);
-      background:rgba(15,23,42,0.9);
-      color:var(--text);
-      font-size:12px;
-      font-weight:600;
-      cursor:pointer;
-    }
-    .ghost-btn:hover{filter:brightness(1.06);}
+/* Card */
+.card{
+  border-radius:18px;
+  padding:14px 16px 16px 16px;
+  background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
+  border:1px solid rgba(30,64,175,0.35);
+  box-shadow:0 18px 45px rgba(15,23,42,0.9);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
 
-    /* Main layout */
-    #main{
-      display:grid;
-      grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 260px;
-      gap:16px;
-      align-items:stretch;
-    }
-    @media(max-width:1024px){
-      #main{
-        grid-template-columns: minmax(0,2fr) minmax(0,1.4fr);
-        grid-template-rows:auto auto;
-      }
-      #sidebar{
-        grid-column:1 / -1;
-        order:3;
-      }
-    }
-    @media(max-width:780px){
-      #main{
-        grid-template-columns:1fr;
-      }
-      #stats-panel{
-        order:2;
-      }
-      #sidebar{
-        order:3;
-      }
-    }
+/* Canvas Area */
+#canvas-container{
+  width:100%;
+  height:460px;
+  background:linear-gradient(180deg, rgba(2,9,27,0.9), rgba(2,6,23,0.95));
+  border-radius:14px;
+  padding:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:
+    inset 0 0 30px rgba(30,64,175,0.25),
+    inset 0 0 6px rgba(59,130,246,0.25);
+}
 
-    /* Card component (same vibe as homepage) */
-    .card{
-      position:relative;
-      border-radius:18px;
-      padding:14px 14px 12px;
-      background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
-      border:1px solid rgba(30,64,175,0.35);
-      box-shadow:0 18px 45px rgba(15,23,42,0.9);
-      overflow:hidden;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-    .card::before{
-      content:"";
-      position:absolute;
-      inset:-80%;
-      background:radial-gradient(circle at 0 0,rgba(56,189,248,0.08),transparent 55%);
-      opacity:0.7;
-      pointer-events:none;
-    }
-    .card h2{
-      margin:0;
-      font-size:15px;
-      position:relative;
-      z-index:1;
-    }
+#testCanvas{
+  display:block;
+  width:100%;
+  max-width:960px;
+  height:auto;
+  max-height:440px;
+  background:#000814;
+  border:1px solid #1e293b;
+  border-radius:10px;
+  box-shadow:
+    0 0 0 1px rgba(59,130,246,0.15),
+    0 10px 25px rgba(0,0,0,0.7);
+  touch-action:none;
+}
 
-    /* Canvas container */
-    #canvas-container{
-      position:relative;
-      border-radius:14px;
-      background:rgba(15,23,42,0.7);
-      padding:8px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      min-height:260px;
-      z-index:1;
-    }
-    #testCanvas{
-      border-radius:10px;
-      background:#020617;
-      border:1px solid #1f2937;
-      touch-action:none;
-      max-width:100%;
-      height:auto;
-    }
+/* Sidebar */
+#sidebar{
+  border-radius:18px;
+  padding:14px 16px;
+  background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
+  border:1px solid rgba(30,64,175,0.35);
+  box-shadow:0 18px 45px rgba(15,23,42,0.9);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
 
-    /* Stats panel */
-    #stats-panel .patient-info{
-      font-weight:600;
-      font-size:14px;
-      margin-bottom:4px;
-    }
-    #timer-label{
-      font-size:13px;
-      margin-bottom:10px;
-      color:var(--muted);
-    }
+#sidebar h2{
+  font-size:20px;
+  font-weight:600;
+}
 
-    details{
-      margin-top:6px;
-      border-radius:10px;
-      background:rgba(15,23,42,0.9);
-      border:1px solid #1f2937;
-      padding:8px 10px;
-      position:relative;
-      z-index:1;
-    }
-    details summary{
-      font-weight:600;
-      cursor:pointer;
-      outline:none;
-      font-size:13px;
-      color:var(--text);
-    }
-    details[open] summary{
-      border-bottom:1px solid #1f2937;
-      margin-bottom:6px;
-      padding-bottom:4px;
-    }
+#timer{
+  font-weight:600;
+  color:#60a5fa;
+  letter-spacing:0.5px;
+}
 
-    table{
-      width:100%;
-      border-collapse:collapse;
-      font-size:12px;
-      margin-top:10px;
-      position:relative;
-      z-index:1;
-    }
-    th,td{
-      border-bottom:1px solid #1f2937;
-      padding:6px 8px;
-      text-align:center;
-    }
-    th{
-      background:rgba(15,23,42,0.8);
-      font-size:11px;
-      color:var(--muted);
-      text-transform:uppercase;
-      letter-spacing:0.03em;
-    }
+/* Table */
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
 
-    /* Sidebar controls */
-    #sidebar{
-      border-radius:18px;
-      background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
-      border:1px solid rgba(30,64,175,0.35);
-      box-shadow:0 18px 45px rgba(15,23,42,0.9);
-      padding:12px;
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-      position:relative;
-      z-index:1;
-    }
+thead th{
+  font-size:10px;
+  color:#64748b;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  padding-bottom:6px;
+}
 
-    #sidebar button,
-    #sidebar select{
-      width:100%;
-      margin:4px 0;
-    }
+th,td{
+  border-bottom:1px solid #1f2937;
+  padding:5px 4px;
+  text-align:center;
+}
 
-    button,
-    select,
-    input{
-      font-family:inherit;
-      font-size:13px;
-    }
+tbody tr:hover{
+  background:rgba(59,130,246,0.06);
+}
 
-    button{
-      padding:8px 10px;
-      border-radius:10px;
-      border:1px solid rgba(148,163,184,0.35);
-      background:rgba(15,23,42,0.9);
-      color:var(--text);
-      font-weight:600;
-      cursor:pointer;
-      transition:filter 0.08s ease,transform 0.08s ease;
-    }
-    button:hover{filter:brightness(1.06);}
-    button:disabled{opacity:0.5;cursor:not-allowed;}
+#offByThreshold{
+  background:#0f172a;
+  border:1px solid #1e293b;
+  border-radius:6px;
+  color:#e5e7eb;
+  padding:3px 6px;
+  width:60px;
+}
 
-    select,
-    input[type="text"],
-    input[type="number"]{
-      padding:7px 9px;
-      border-radius:999px;
-      border:1px solid #1f2937;
-      background:#02091b;
-      color:var(--text);
-    }
+/* Bottom Controls */
+.bottom-controls{
+  border-top:1px solid #1f2937;
+  padding-top:14px;
+  margin-top:4px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  justify-content:flex-end;
+}
 
-    hr{
-      border:0;
-      border-top:1px solid #1f2937;
-      margin:8px 0;
-    }
+button{
+  padding:8px 14px;
+  border-radius:8px;
+  border:1px solid #1e293b;
+  background:linear-gradient(180deg,#0f172a,#0b1220);
+  color:#e5e7eb;
+  font-weight:600;
+  cursor:pointer;
+  transition:all 0.15s ease;
+}
 
-    /* Dialog */
-    dialog{
-      border-radius:16px;
-      border:1px solid #1f2937;
-      background:#02091b;
-      color:var(--text);
-      padding:16px 18px;
-    }
-    dialog label{
-      display:block;
-      font-size:13px;
-      margin-bottom:8px;
-    }
-    dialog input{
-      width:100%;
-      margin-top:3px;
-    }
-    dialog menu{
-      display:flex;
-      justify-content:flex-end;
-      gap:8px;
-      padding:0;
-      margin-top:12px;
-    }
+button:hover{
+  border-color:#2563eb;
+  box-shadow:0 0 10px rgba(37,99,235,0.4);
+  transform:translateY(-1px);
+}
 
-    /* Dark mode toggle from old app (kept for compatibility) */
-    .invert-colors{
-      filter:invert(1) hue-rotate(180deg);
-    }
+select{
+  padding:8px 10px;
+  border-radius:8px;
+  border:1px solid #1e293b;
+  background:#0f172a;
+  color:#e5e7eb;
+}
 
-    /* Footer */
-    footer{
-      margin-top:4px;
-      font-size:11px;
-      color:var(--muted);
-      display:flex;
-      justify-content:space-between;
-      gap:8px;
-      flex-wrap:wrap;
-    }
-  </style>
+footer{
+  font-size:11px;
+  color:var(--muted);
+  display:flex;
+  justify-content:space-between;
+}
+</style>
 </head>
+
 <body>
-  <div id="header-container"></div>
 
-  <div class="shell">
-    <header class="topbar">
-      <a href="../Homepage/index.html" class="btn-pill back-btn">Back</a>
+<div class="shell">
 
-      <div class="title-block">
-        <h1>Line Drawing Test</h1>
-        <div class="small-muted">Start–finish tracing with deviation, turns, and SARA-style subscores.</div>
-      </div>
-
-      <button class="ghost-btn" onclick="toggleDarkMode()">Toggle Dark Mode</button>
-    </header>
-
-    <div id="main">
-      <section class="card">
-        <h2>Drawing Area</h2>
-        <div id="canvas-container">
-          <canvas id="testCanvas"></canvas>
-        </div>
-      </section>
-
-      <section class="card" id="stats-panel">
-        <h2>Metrics & Score</h2>
-
-        <div class="patient-info" id="patientInfo">No patient selected</div>
-        <div id="timer-label">Time: <span id="timer">0.00</span> s</div>
-
-        <details id="clinical-score-box">
-          <summary>Clinical Score Mapping</summary>
-          <div id="clinical-score-content">
-            <p><em>No data yet. Run a test to compute scores.</em></p>
-          </div>
-        </details>
-
-        <table id="statsTable">
-          <thead>
-            <tr>
-              <th>Metric</th>
-              <th>Value</th>
-              <th>Mode</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>Discontinuities</td><td id="discontValue">0</td><td>—</td></tr>
-            <tr><td>Turns (Vertical)</td><td id="verticalTurnValue">0</td><td>—</td></tr>
-            <tr><td>Reverses (Horizontal)</td><td id="horizontalTurnValue">0</td><td>—</td></tr>
-            <tr>
-              <td>Off-by</td>
-              <td id="offByValue">0</td>
-              <td><input type="number" id="offByThreshold" value="10" style="width:60px" /></td>
-            </tr>
-            <tr>
-              <td>Deviation Area</td>
-              <td id="deviationValue">0</td>
-              <td><button id="deviationModeBtn" onclick="toggleDeviationMode()">Total</button></td>
-            </tr>
-            <tr>
-              <td>Turn Avg</td>
-              <td id="turnValue">0</td>
-              <td><button id="turnModeBtn" onclick="toggleTurnMode()">Avg Vertical</button></td>
-            </tr>
-            <tr><td>Out-of-Bounds</td><td id="outOfBoundsValue">0</td><td>—</td></tr>
-            <tr><td>Start Fails</td><td id="startFailsValue">0</td><td>—</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <aside id="sidebar">
-        <button onclick="openPatientDialog()">New Patient</button>
-
-        <select id="previousPatients" onchange="loadPreviousPatient(this.value)">
-          <option value="">Select Previous Patient</option>
-        </select>
-
-        <button onclick="clearAllPatients()">Clear All Patients</button>
-
-        <hr>
-
-        <select id="testSelector" onchange="changeTest()">
-          <option value="vertical">Vertical Test</option>
-          <option value="horizontal">Horizontal Test</option>
-          <option value="diagonal1">Diagonal Test 1</option>
-          <option value="diagonal2">Diagonal Test 2</option>
-        </select>
-
-        <button onclick="stopTest()">Stop Test</button>
-        <button onclick="resetTest()">Reset Test</button>
-        <button onclick="exportData()">Export Data</button>
-      </aside>
+<header class="topbar">
+  <a href="#" class="btn-pill">Back</a>
+  <div>
+    <h1>Line Drawing Test</h1>
+    <div class="small-muted">
+      Start–finish tracing with deviation, turns, and SARA-style subscores.
     </div>
-
-    <footer>
-      <span>Local only, no data upload. Traces are analyzed in-browser.</span>
-      <span>CeMoQu · v0.1</span>
-    </footer>
   </div>
+</header>
 
-  <dialog id="patientDialog">
-    <form method="dialog">
-      <label>Name:
-        <input type="text" id="patientName" required />
-      </label>
-      <label>ID:
-        <input type="text" id="patientID" required />
-      </label>
-      <menu>
-        <button type="submit" onclick="setPatientInfo()">Confirm</button>
-        <button onclick="patientDialog.close()">Cancel</button>
-      </menu>
-    </form>
-  </dialog>
+<div id="main">
 
-  <script src="app.js" defer></script>
+<section class="card">
+  <h2>Drawing Area</h2>
+  <div id="canvas-container">
+    <canvas id="testCanvas" width="1000" height="500"></canvas>
+  </div>
+</section>
+
+<aside id="sidebar">
+  <h2>Metrics & Score</h2>
+  <div>Time: <span id="timer">0.00</span> s</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Value</th>
+        <th>Mode</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Discontinuities</td><td>0</td><td>—</td></tr>
+      <tr><td>Turns (Vertical)</td><td>0</td><td>—</td></tr>
+      <tr><td>Reverses (Horizontal)</td><td>0</td><td>—</td></tr>
+      <tr><td>Off-by</td><td>0</td><td><input type="number" id="offByThreshold" value="10"></td></tr>
+      <tr><td>Deviation Area</td><td>0</td><td>—</td></tr>
+      <tr><td>Turn Avg</td><td>0</td><td>—</td></tr>
+      <tr><td>Out-of-Bounds</td><td>0</td><td>—</td></tr>
+      <tr><td>Start Fails</td><td>0</td><td>—</td></tr>
+    </tbody>
+  </table>
+</aside>
+
+</div>
+
+<div class="bottom-controls">
+  <select>
+    <option>Vertical Test</option>
+    <option>Horizontal Test</option>
+    <option>Diagonal Test 1</option>
+    <option>Diagonal Test 2</option>
+  </select>
+  <button>Stop Test</button>
+  <button>Reset Test</button>
+  <button>Export Data</button>
+</div>
+
+<footer>
+  <span>Local only · Traces analyzed in-browser</span>
+  <span>CeMoQu v0.1</span>
+</footer>
+
+</div>
+
 </body>
 </html>
