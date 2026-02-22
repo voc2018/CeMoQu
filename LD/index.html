@@ -6,6 +6,8 @@
 <title>Line Drawing Test – CeMoQu</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/header.css">
+<script src="../shared/header.js" defer></script>
 
 <style>
 :root{
@@ -28,8 +30,12 @@ html,body{
 
 body{
   display:flex;
+  align-items:flex-start;
   justify-content:center;
   padding:18px;
+  min-height:100vh;
+  overflow-y:auto;
+  padding-top:130px;
 }
 
 .shell{
@@ -228,6 +234,7 @@ footer{
 </head>
 
 <body>
+<div id="header-container"></div>
 
 <div class="shell">
 
