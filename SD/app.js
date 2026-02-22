@@ -195,6 +195,7 @@
       rmsSeries.push(rms);
       // F0 (skip very quiet frames to reduce pitch errors)
       if(rms > 0.02){   // was 0.005 — too permissive
+        rmsSeries.push(rms);
         const f0 = estimateF0(frame, sr);
         if(f0 && isFinite(f0) && f0 > 60 && f0 < 400) f0Series.push(f0); // also clamp to vocal range
       }
