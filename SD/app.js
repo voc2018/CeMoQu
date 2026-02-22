@@ -156,8 +156,8 @@
     // Heuristic thresholds (adjust as you calibrate):
     //   RMS CV: [<=0.20, <=0.30, <=0.40, <=0.55, <=0.75, <=1.00, >1.00]
     //   F0  CV: [<=0.08, <=0.12, <=0.18, <=0.25, <=0.35, <=0.50, >0.50]
-    const sRMS = cvToScore(rmsCV, [0.20, 0.30, 0.40, 0.55, 0.75, 1.00]);
-    const sF0  = cvToScore(f0CV,  [0.08, 0.12, 0.18, 0.25, 0.35, 0.50]);
+    const sRMS = cvToScore(rmsCV, [0.45, 0.60, 0.75, 0.90, 1.10, 1.35]);
+    const sF0  = cvToScore(f0CV,  [0.20, 0.30, 0.40, 0.55, 0.70, 0.90]);
     const score06 = Math.round((sRMS + sF0) / 2);
 
     const meta = currentMeta();
@@ -194,9 +194,9 @@
       const rms = Math.sqrt(frame.reduce((s,v)=>s+v*v,0)/frame.length);
       rmsSeries.push(rms);
       // F0 (skip very quiet frames to reduce pitch errors)
-      if(rms > 0.005){
+      if(rms > 0.02){   // was 0.005 — too permissive
         const f0 = estimateF0(frame, sr);
-        if(f0 && isFinite(f0)) f0Series.push(f0);
+        if(f0 && isFinite(f0) && f0 > 60 && f0 < 400) f0Series.push(f0); // also clamp to vocal range
       }
     }
     return { rmsSeries, f0Series };
@@ -204,6 +204,7 @@
 
   function coeffVar(arr){
     const a = (arr||[]).filter(v=>isFinite(v) && v>0);
+    if(a.length < 10) return NaN;  // was 0 — too few frames = meaningless CV
     if(a.length===0) return NaN;
     const mean = a.reduce((s,v)=>s+v,0)/a.length;
     if(mean===0) return NaN;
