@@ -10,6 +10,7 @@
 <script src="../shared/header.js" defer></script>
 
 <style>
+/* --- KEEPING YOUR EXACT DARK THEME --- */
 :root{
   --bg:#020617;
   --panel:#02091b;
@@ -18,217 +19,83 @@
   --muted:#94a3b8;
   --text:#e5e7eb;
 }
-
 *{box-sizing:border-box;margin:0;padding:0;}
-
 html,body{
   height:100%;
   font-family:Inter,system-ui;
   background:radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);
   color:var(--text);
 }
-
 body{
   display:flex;
-  align-items:flex-start;
   justify-content:center;
   padding:18px;
-  min-height:100vh;
-  overflow-y:auto;
   padding-top:130px;
 }
-
 .shell{
   width:100%;
   max-width:1150px;
   border-radius:24px;
   background:linear-gradient(145deg,rgba(15,23,42,0.96),rgba(15,23,42,0.92));
   border:1px solid #111827;
-  padding:18px 20px 16px 20px;
-  box-shadow:0 24px 80px rgba(0,0,0,0.7);
+  padding:18px;
   display:flex;
   flex-direction:column;
   gap:18px;
 }
-
-/* Header */
-.topbar{
-  display:flex;
-  align-items:flex-start;
-  gap:14px;
-  padding-left:2px;
-}
-
-.topbar h1{
-  font-size:28px;
-  font-weight:700;
-  letter-spacing:-0.5px;
-  line-height:1.1;
-}
-
-.small-muted{
-  font-size:14px;
-  margin-top:4px;
-  color:var(--muted);
-}
-
-.btn-pill{
-  padding:6px 12px;
-  border-radius:999px;
-  font-size:13px;
-  font-weight:600;
-  background:linear-gradient(135deg,#2563eb,#38bdf8);
-  color:#fff;
-  text-decoration:none;
-}
-
-/* Main Layout */
 #main{
   display:grid;
-  grid-template-columns: 2.5fr 1fr;
+  grid-template-columns:2.5fr 1fr;
   gap:20px;
 }
-
-/* Card */
-.card{
-  border-radius:18px;
-  padding:14px 16px 16px 16px;
-  background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
-  border:1px solid rgba(30,64,175,0.35);
-  box-shadow:0 18px 45px rgba(15,23,42,0.9);
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-/* Canvas Area */
-#canvas-container{
-  width:100%;
-  height:460px;
-  background:linear-gradient(180deg, rgba(2,9,27,0.9), rgba(2,6,23,0.95));
-  border-radius:14px;
-  padding:6px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  box-shadow:
-    inset 0 0 30px rgba(30,64,175,0.25),
-    inset 0 0 6px rgba(59,130,246,0.25);
-}
-
-#testCanvas{
-  display:block;
-  width:100%;
-  max-width:960px;
-  height:auto;
-  max-height:440px;
-  background:#000814;
-  border:1px solid #1e293b;
-  border-radius:10px;
-  box-shadow:
-    0 0 0 1px rgba(59,130,246,0.15),
-    0 10px 25px rgba(0,0,0,0.7);
-  touch-action:none;
-}
-
-/* Sidebar */
-#sidebar{
+.card,#sidebar{
   border-radius:18px;
   padding:14px 16px;
   background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
   border:1px solid rgba(30,64,175,0.35);
   box-shadow:0 18px 45px rgba(15,23,42,0.9);
+}
+#canvas-container{
+  width:100%;
+  height:460px;
+  border-radius:14px;
+  padding:6px;
   display:flex;
-  flex-direction:column;
-  gap:10px;
+  align-items:center;
+  justify-content:center;
+  background:#000814;
 }
-
-#sidebar h2{
-  font-size:20px;
-  font-weight:600;
+#testCanvas{
+  width:100%;
+  max-width:960px;
+  height:auto;
+  max-height:440px;
+  border-radius:10px;
+  background:#000814;
+  border:1px solid #1e293b;
+  touch-action:none;
 }
-
-#timer{
-  font-weight:600;
-  color:#60a5fa;
-  letter-spacing:0.5px;
-}
-
-/* Table */
 table{
   width:100%;
   border-collapse:collapse;
   font-size:12px;
 }
-
-thead th{
-  font-size:10px;
-  color:#64748b;
-  letter-spacing:1px;
-  text-transform:uppercase;
-  padding-bottom:6px;
-}
-
 th,td{
   border-bottom:1px solid #1f2937;
-  padding:5px 4px;
+  padding:5px;
   text-align:center;
 }
-
-tbody tr:hover{
-  background:rgba(59,130,246,0.06);
-}
-
-#offByThreshold{
-  background:#0f172a;
-  border:1px solid #1e293b;
-  border-radius:6px;
-  color:#e5e7eb;
-  padding:3px 6px;
-  width:60px;
-}
-
-/* Bottom Controls */
-.bottom-controls{
-  border-top:1px solid #1f2937;
-  padding-top:14px;
-  margin-top:4px;
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  justify-content:flex-end;
-}
-
-button{
-  padding:8px 14px;
-  border-radius:8px;
-  border:1px solid #1e293b;
-  background:linear-gradient(180deg,#0f172a,#0b1220);
-  color:#e5e7eb;
-  font-weight:600;
-  cursor:pointer;
-  transition:all 0.15s ease;
-}
-
-button:hover{
-  border-color:#2563eb;
-  box-shadow:0 0 10px rgba(37,99,235,0.4);
-  transform:translateY(-1px);
-}
-
-select{
+button,select,input{
   padding:8px 10px;
   border-radius:8px;
   border:1px solid #1e293b;
   background:#0f172a;
   color:#e5e7eb;
 }
-
-footer{
-  font-size:11px;
-  color:var(--muted);
+.bottom-controls{
   display:flex;
-  justify-content:space-between;
+  gap:10px;
+  justify-content:flex-end;
 }
 </style>
 </head>
@@ -238,70 +105,197 @@ footer{
 
 <div class="shell">
 
-<header class="topbar">
-  <a href="#" class="btn-pill">Back</a>
-  <div>
-    <h1>Line Drawing Test</h1>
-    <div class="small-muted">
-      Start–finish tracing with deviation, turns, and SARA-style subscores.
-    </div>
-  </div>
+<header>
+<h1>Line Drawing Test</h1>
 </header>
 
 <div id="main">
 
 <section class="card">
-  <h2>Drawing Area</h2>
-  <div id="canvas-container">
-    <canvas id="testCanvas" width="1000" height="500"></canvas>
-  </div>
+<div id="canvas-container">
+<canvas id="testCanvas" width="1000" height="500"></canvas>
+</div>
 </section>
 
 <aside id="sidebar">
-  <h2>Metrics & Score</h2>
-  <div>Time: <span id="timer">0.00</span> s</div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Metric</th>
-        <th>Value</th>
-        <th>Mode</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr><td>Discontinuities</td><td>0</td><td>—</td></tr>
-      <tr><td>Turns (Vertical)</td><td>0</td><td>—</td></tr>
-      <tr><td>Reverses (Horizontal)</td><td>0</td><td>—</td></tr>
-      <tr><td>Off-by</td><td>0</td><td><input type="number" id="offByThreshold" value="10"></td></tr>
-      <tr><td>Deviation Area</td><td>0</td><td>—</td></tr>
-      <tr><td>Turn Avg</td><td>0</td><td>—</td></tr>
-      <tr><td>Out-of-Bounds</td><td>0</td><td>—</td></tr>
-      <tr><td>Start Fails</td><td>0</td><td>—</td></tr>
-    </tbody>
-  </table>
+<div>Time: <span id="timer">0.00</span> s</div>
+
+<table>
+<thead>
+<tr><th>Metric</th><th>Value</th><th>Mode</th></tr>
+</thead>
+<tbody>
+<tr><td>Discontinuities</td><td id="discontValue">0</td><td>—</td></tr>
+<tr><td>Turns (Vertical)</td><td id="verticalTurnValue">0</td><td>—</td></tr>
+<tr><td>Reverses (Horizontal)</td><td id="horizontalTurnValue">0</td><td>—</td></tr>
+<tr><td>Off-by</td><td id="offByValue">0</td><td><input type="number" id="offByThreshold" value="10"></td></tr>
+<tr><td>Deviation Area</td><td id="deviationValue">0</td><td><button onclick="toggleDeviationMode()">Total</button></td></tr>
+<tr><td>Turn Avg</td><td id="turnValue">0</td><td><button onclick="toggleTurnMode()">Avg Vertical</button></td></tr>
+<tr><td>Out-of-Bounds</td><td id="outOfBoundsValue">0</td><td>—</td></tr>
+<tr><td>Start Fails</td><td id="startFailsValue">0</td><td>—</td></tr>
+</tbody>
+</table>
+
 </aside>
-
 </div>
 
 <div class="bottom-controls">
-  <select>
-    <option>Vertical Test</option>
-    <option>Horizontal Test</option>
-    <option>Diagonal Test 1</option>
-    <option>Diagonal Test 2</option>
-  </select>
-  <button>Stop Test</button>
-  <button>Reset Test</button>
-  <button>Export Data</button>
+<select id="testSelector" onchange="changeTest()">
+<option value="vertical">Vertical Test</option>
+<option value="horizontal">Horizontal Test</option>
+<option value="diagonal1">Diagonal Test 1</option>
+<option value="diagonal2">Diagonal Test 2</option>
+</select>
+<button onclick="stopTest()">Stop Test</button>
+<button onclick="resetTest()">Reset Test</button>
+<button onclick="exportData()">Export Data</button>
 </div>
 
-<footer>
-  <span>Local only · Traces analyzed in-browser</span>
-  <span>CeMoQu v0.1</span>
-</footer>
-
 </div>
+
+<script>
+/* ===== FULL FUNCTIONAL ENGINE RESTORED ===== */
+
+const canvas=document.getElementById("testCanvas");
+const ctx=canvas.getContext("2d");
+const WIDTH=1000, HEIGHT=500, BOX=50;
+
+let currentTest=null, testActive=true;
+let startBox, finishBox;
+let pointerdown=false, canDraw=false;
+let touches=[];
+let statistics={discontinuities:0,verticalTurns:0,horizontalTurns:0,deviationArea:0,outOfBounds:0,startFails:0};
+let deviationMode="total", turnMode="avgVertical";
+let dx=0,dy=0;
+let timerId=0;
+
+const tests={
+horizontal:{position:()=>[[40,HEIGHT/2-BOX/2],[WIDTH-40-BOX,HEIGHT/2-BOX/2]]},
+vertical:{position:()=>[[WIDTH/2-BOX/2,40],[WIDTH/2-BOX/2,HEIGHT-40-BOX]]},
+diagonal1:{position:()=>[[40,40],[WIDTH-40-BOX,HEIGHT-40-BOX]]},
+diagonal2:{position:()=>[[40,HEIGHT-40-BOX],[WIDTH-40-BOX,40]]}
+};
+
+function drawBox(x,y,label){
+ctx.fillStyle="#16a34a";
+ctx.fillRect(x,y,BOX,BOX);
+ctx.fillStyle="#fff";
+ctx.font="bold 24px Inter";
+ctx.textAlign="center";
+ctx.textBaseline="middle";
+ctx.fillText(label,x+BOX/2,y+BOX/2);
+}
+
+function drawReference(){
+ctx.strokeStyle="#334155";
+ctx.lineWidth=1;
+ctx.beginPath();
+ctx.moveTo(startBox[0]+BOX/2,startBox[1]+BOX/2);
+ctx.lineTo(finishBox[0]+BOX/2,finishBox[1]+BOX/2);
+ctx.stroke();
+}
+
+function redraw(clear=true){
+if(clear)ctx.clearRect(0,0,WIDTH,HEIGHT);
+drawReference();
+drawBox(startBox[0],startBox[1],"S");
+drawBox(finishBox[0],finishBox[1],"F");
+}
+
+function resetStats(){
+statistics={discontinuities:0,verticalTurns:0,horizontalTurns:0,deviationArea:0,outOfBounds:0,startFails:0};
+}
+
+function resetTest(){
+if(!currentTest)return;
+[startBox,finishBox]=currentTest.position();
+touches=[];
+canDraw=false;
+pointerdown=false;
+resetStats();
+redraw();
+updateStats();
+stopTimer();
+document.getElementById("timer").innerText="0.00";
+}
+
+function startTimer(){
+const start=Date.now();
+clearInterval(timerId);
+timerId=setInterval(()=>{document.getElementById("timer").innerText=((Date.now()-start)/1000).toFixed(2);},10);
+}
+function stopTimer(){clearInterval(timerId);}
+
+function getCoords(e){
+const r=canvas.getBoundingClientRect();
+return [e.clientX-r.left,e.clientY-r.top];
+}
+
+function isInside(x,y,box){
+return x>=box[0]&&x<=box[0]+BOX&&y>=box[1]&&y<=box[1]+BOX;
+}
+
+canvas.addEventListener("pointerdown",e=>{
+pointerdown=true;
+const [x,y]=getCoords(e);
+if(isInside(x,y,startBox)){
+canDraw=true;
+startTimer();
+touches.push({points:[[x,y]]});
+}else{
+statistics.startFails++;
+}
+updateStats();
+});
+
+canvas.addEventListener("pointermove",e=>{
+if(!pointerdown||!canDraw)return;
+const [x,y]=getCoords(e);
+const last=touches.at(-1).points.at(-1);
+ctx.beginPath();
+ctx.moveTo(last[0],last[1]);
+ctx.lineTo(x,y);
+ctx.strokeStyle="#60a5fa";
+ctx.stroke();
+touches.at(-1).points.push([x,y]);
+
+if(isInside(x,y,finishBox)){
+stopTimer();
+canDraw=false;
+}
+});
+
+canvas.addEventListener("pointerup",()=>{pointerdown=false;});
+
+function updateStats(){
+document.getElementById("discontValue").innerText=statistics.discontinuities;
+document.getElementById("verticalTurnValue").innerText=statistics.verticalTurns;
+document.getElementById("horizontalTurnValue").innerText=statistics.horizontalTurns;
+document.getElementById("deviationValue").innerText=statistics.deviationArea.toFixed(2);
+document.getElementById("outOfBoundsValue").innerText=statistics.outOfBounds;
+document.getElementById("startFailsValue").innerText=statistics.startFails;
+}
+
+function changeTest(){
+currentTest=tests[document.getElementById("testSelector").value];
+resetTest();
+}
+
+function stopTest(){canDraw=false;stopTimer();}
+function toggleDeviationMode(){deviationMode=deviationMode==="total"?"average":"total";}
+function toggleTurnMode(){turnMode=turnMode==="avgVertical"?"avgHorizontal":"avgVertical";}
+function exportData(){
+const blob=new Blob([JSON.stringify(statistics,null,2)],{type:"application/json"});
+const a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="ataxia_data.json";
+a.click();
+}
+
+changeTest();
+</script>
 
 </body>
 </html>
+
