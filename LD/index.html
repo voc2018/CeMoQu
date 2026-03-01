@@ -10,7 +10,6 @@
 <script src="../shared/header.js" defer></script>
 
 <style>
-/* --- KEEPING YOUR EXACT DARK THEME --- */
 :root{
   --bg:#020617;
   --panel:#02091b;
@@ -45,7 +44,7 @@ body{
 }
 #main{
   display:grid;
-  grid-template-columns:2.5fr 1fr;
+  grid-template-columns:minmax(0,1fr) 320px;
   gap:20px;
 }
 .card,#sidebar{
@@ -104,13 +103,9 @@ button,select,input{
 <div id="header-container"></div>
 
 <div class="shell">
-
-<header>
-<h1>Line Drawing Test</h1>
-</header>
+<header><h1>Line Drawing Test</h1></header>
 
 <div id="main">
-
 <section class="card">
 <div id="canvas-container">
 <canvas id="testCanvas" width="1000" height="500"></canvas>
@@ -118,9 +113,7 @@ button,select,input{
 </section>
 
 <aside id="sidebar">
-
 <div>Time: <span id="timer">0.00</span> s</div>
-
 <table>
 <thead>
 <tr><th>Metric</th><th>Value</th><th>Mode</th></tr>
@@ -136,7 +129,6 @@ button,select,input{
 <tr><td>Start Fails</td><td id="startFailsValue">0</td><td>—</td></tr>
 </tbody>
 </table>
-
 </aside>
 </div>
 
@@ -151,24 +143,24 @@ button,select,input{
 <button onclick="resetTest()">Reset Test</button>
 <button onclick="exportData()">Export Data</button>
 </div>
-
 </div>
 
 <script>
-/* ===== FULL FUNCTIONAL ENGINE RESTORED ===== */
-
 const canvas=document.getElementById("testCanvas");
 const ctx=canvas.getContext("2d");
 const WIDTH=1000, HEIGHT=500, BOX=50;
 
-let currentTest=null, testActive=true;
+let currentTest=null;
 let startBox, finishBox;
-let pointerdown=false, canDraw=false;
+
+let active=false, drawing=false, success=false;
+let startHit=false, finishHit=false;
+
 let touches=[];
 let statistics={discontinuities:0,verticalTurns:0,horizontalTurns:0,deviationArea:0,outOfBounds:0,startFails:0};
+
 let deviationMode="total", turnMode="avgVertical";
-let dx=0,dy=0;
-let timerId=0;
+let dx=0,dy=0,timerId=0;
 
 const tests={
 horizontal:{position:()=>[[40,HEIGHT/2-BOX/2],[WIDTH-40-BOX,HEIGHT/2-BOX/2]]},
@@ -177,8 +169,8 @@ diagonal1:{position:()=>[[40,40],[WIDTH-40-BOX,HEIGHT-40-BOX]]},
 diagonal2:{position:()=>[[40,HEIGHT-40-BOX],[WIDTH-40-BOX,40]]}
 };
 
-function drawBox(x,y,label){
-ctx.fillStyle="#16a34a";
+function drawBox(x,y,label,activeColor){
+ctx.fillStyle = activeColor ? "#16a34a" : "#dc2626";
 ctx.fillRect(x,y,BOX,BOX);
 ctx.fillStyle="#fff";
 ctx.font="bold 24px Inter";
@@ -189,7 +181,6 @@ ctx.fillText(label,x+BOX/2,y+BOX/2);
 
 function drawReference(){
 ctx.strokeStyle="#334155";
-ctx.lineWidth=1;
 ctx.beginPath();
 ctx.moveTo(startBox[0]+BOX/2,startBox[1]+BOX/2);
 ctx.lineTo(finishBox[0]+BOX/2,finishBox[1]+BOX/2);
@@ -197,22 +188,47 @@ ctx.stroke();
 }
 
 function redraw(clear=true){
-if(clear)ctx.clearRect(0,0,WIDTH,HEIGHT);
+if(clear) ctx.clearRect(0,0,WIDTH,HEIGHT);
 drawReference();
-drawBox(startBox[0],startBox[1],"S");
-drawBox(finishBox[0],finishBox[1],"F");
+drawBox(startBox[0],startBox[1],"S",startHit);
+drawBox(finishBox[0],finishBox[1],"F",finishHit);
 }
+
+function getCoords(e){
+const r=canvas.getBoundingClientRect();
+const scaleX=canvas.width/r.width;
+const scaleY=canvas.height/r.height;
+return[(e.clientX-r.left)*scaleX,(e.clientY-r.top)*scaleY];
+}
+
+function isInside(x,y,box){
+return x>=box[0]&&x<=box[0]+BOX&&y>=box[1]&&y<=box[1]+BOX;
+}
+
+function calcDeviation([x,y]){
+const sx=startBox[0]+BOX/2, sy=startBox[1]+BOX/2;
+const ex=finishBox[0]+BOX/2, ey=finishBox[1]+BOX/2;
+if(sx!==ex){
+const m=(ey-sy)/(ex-sx);
+const a=-m,b=1,c=-sy+m*sx;
+return Math.abs(a*x+b*y+c)/Math.sqrt(a*a+b*b);
+}
+return Math.abs(x-sx);
+}
+
+function normalize(v){return v>0?1:v<0?-1:0;}
 
 function resetStats(){
 statistics={discontinuities:0,verticalTurns:0,horizontalTurns:0,deviationArea:0,outOfBounds:0,startFails:0};
+dx=0;dy=0;
 }
 
 function resetTest(){
 if(!currentTest)return;
 [startBox,finishBox]=currentTest.position();
+active=drawing=success=false;
+startHit=finishHit=false;
 touches=[];
-canDraw=false;
-pointerdown=false;
 resetStats();
 redraw();
 updateStats();
@@ -225,68 +241,99 @@ const start=Date.now();
 clearInterval(timerId);
 timerId=setInterval(()=>{document.getElementById("timer").innerText=((Date.now()-start)/1000).toFixed(2);},10);
 }
+
 function stopTimer(){clearInterval(timerId);}
 
-function getCoords(e){
-const r=canvas.getBoundingClientRect();
-return [e.clientX-r.left,e.clientY-r.top];
-}
-
-function isInside(x,y,box){
-return x>=box[0]&&x<=box[0]+BOX&&y>=box[1]&&y<=box[1]+BOX;
-}
-
 canvas.addEventListener("pointerdown",e=>{
-pointerdown=true;
-const [x,y]=getCoords(e);
-if(isInside(x,y,startBox)){
-canDraw=true;
-startTimer();
+const[x,y]=getCoords(e);
+drawing=true;
+if(success)return;
+
+if(isInside(x,y,startBox)&&!active){
+active=true;startHit=true;startTimer();redraw();
 touches.push({points:[[x,y]]});
-}else{
-statistics.startFails++;
 }
+else if(!active){
+statistics.startFails++;updateStats();
+}
+else{
+statistics.discontinuities++;
+touches.push({points:[[x,y]]});
 updateStats();
+}
 });
 
 canvas.addEventListener("pointermove",e=>{
-if(!pointerdown||!canDraw)return;
-const [x,y]=getCoords(e);
+if(!drawing||!active||success)return;
+const[x,y]=getCoords(e);
 const last=touches.at(-1).points.at(-1);
+
 ctx.beginPath();
 ctx.moveTo(last[0],last[1]);
 ctx.lineTo(x,y);
 ctx.strokeStyle="#60a5fa";
 ctx.stroke();
+
+const deviation=calcDeviation([x,y]);
+statistics.deviationArea+=deviation;
+
+const dxNow=normalize(x-last[0]);
+const dyNow=normalize(y-last[1]);
+
+if(dx!==dxNow)statistics.horizontalTurns++;
+if(dy!==dyNow)statistics.verticalTurns++;
+
+dx=dxNow;dy=dyNow;
 touches.at(-1).points.push([x,y]);
 
-if(isInside(x,y,finishBox)){
-stopTimer();
-canDraw=false;
+if(isInside(x,y,finishBox)&&!finishHit){
+finishHit=true;success=true;stopTimer();redraw(false);
 }
+updateStats();
 });
 
-canvas.addEventListener("pointerup",()=>{pointerdown=false;});
+canvas.addEventListener("pointerup",()=>drawing=false);
+canvas.addEventListener("pointerleave",()=>{if(active&&!success){statistics.outOfBounds++;updateStats();}});
+
+function totalPoints(){return touches.reduce((a,t)=>a+t.points.length,0);}
+
+function offByCount(th){
+let count=0;
+for(const t of touches){
+let last=0;
+for(const p of t.points){
+const d=calcDeviation(p);
+if(d>th&&last<=th)count++;
+last=d;
+}
+}
+return count;
+}
 
 function updateStats(){
+const th=parseFloat(document.getElementById("offByThreshold").value)||10;
 document.getElementById("discontValue").innerText=statistics.discontinuities;
 document.getElementById("verticalTurnValue").innerText=statistics.verticalTurns;
 document.getElementById("horizontalTurnValue").innerText=statistics.horizontalTurns;
-document.getElementById("deviationValue").innerText=statistics.deviationArea.toFixed(2);
+
+let dev=statistics.deviationArea;
+if(deviationMode==="average"&&totalPoints()>0)dev/=totalPoints();
+
+document.getElementById("deviationValue").innerText=dev.toFixed(2);
+document.getElementById("offByValue").innerText=offByCount(th);
 document.getElementById("outOfBoundsValue").innerText=statistics.outOfBounds;
 document.getElementById("startFailsValue").innerText=statistics.startFails;
+
+document.getElementById("turnValue").innerText=
+(turnMode==="avgVertical")?statistics.verticalTurns:statistics.horizontalTurns;
 }
 
-function changeTest(){
-currentTest=tests[document.getElementById("testSelector").value];
-resetTest();
-}
-
-function stopTest(){canDraw=false;stopTimer();}
-function toggleDeviationMode(){deviationMode=deviationMode==="total"?"average":"total";}
-function toggleTurnMode(){turnMode=turnMode==="avgVertical"?"avgHorizontal":"avgVertical";}
+function changeTest(){currentTest=tests[document.getElementById("testSelector").value];resetTest();}
+function stopTest(){active=false;stopTimer();}
+function toggleDeviationMode(){deviationMode=deviationMode==="total"?"average":"total";updateStats();}
+function toggleTurnMode(){turnMode=turnMode==="avgVertical"?"avgHorizontal":"avgVertical";updateStats();}
 function exportData(){
-const blob=new Blob([JSON.stringify(statistics,null,2)],{type:"application/json"});
+const blob=new Blob([JSON.stringify({statistics,timestamp:new Date().toISOString()},null,2)],{type:"application/json"});
 const a=document.createElement("a");
 a.href=URL.createObjectURL(blob);
 a.download="ataxia_data.json";
@@ -295,7 +342,5 @@ a.click();
 
 changeTest();
 </script>
-
 </body>
 </html>
-
