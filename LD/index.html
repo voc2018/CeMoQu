@@ -1,9 +1,11 @@
+```html
 <!doctype html>
 <html lang="en">
+
 <head>
 
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>Line Drawing Test – CeMoQu</title>
 
@@ -109,6 +111,7 @@ Time: <span id="timer">0.00</span> s
 </tr>
 
 </tbody>
+
 </table>
 
 </aside>
@@ -118,12 +121,10 @@ Time: <span id="timer">0.00</span> s
 <div class="bottom-controls">
 
 <select id="testSelector" onchange="changeTest()">
-
 <option value="vertical">Vertical Test</option>
 <option value="horizontal">Horizontal Test</option>
 <option value="diagonal1">Diagonal Test 1</option>
 <option value="diagonal2">Diagonal Test 2</option>
-
 </select>
 
 <button onclick="stopTest()">Stop Test</button>
@@ -144,7 +145,7 @@ const HEIGHT=500;
 const BOX=50;
 
 let currentTest=null;
-let startBox, finishBox;
+let startBox,finishBox;
 
 let active=false;
 let drawing=false;
@@ -181,7 +182,7 @@ diagonal2:{position:()=>[[40,HEIGHT-40-BOX],[WIDTH-40-BOX,40]]}
 
 function drawBox(x,y,label,activeColor){
 
-ctx.fillStyle = activeColor ? "#16a34a" : "#dc2626";
+ctx.fillStyle=activeColor?"#16a34a":"#dc2626";
 ctx.fillRect(x,y,BOX,BOX);
 
 ctx.fillStyle="#fff";
@@ -198,17 +199,15 @@ function drawReference(){
 ctx.strokeStyle="#334155";
 
 ctx.beginPath();
-
 ctx.moveTo(startBox[0]+BOX/2,startBox[1]+BOX/2);
 ctx.lineTo(finishBox[0]+BOX/2,finishBox[1]+BOX/2);
-
 ctx.stroke();
 
 }
 
 function redraw(clear=true){
 
-if(clear) ctx.clearRect(0,0,WIDTH,HEIGHT);
+if(clear)ctx.clearRect(0,0,WIDTH,HEIGHT);
 
 drawReference();
 
@@ -224,16 +223,19 @@ const r=canvas.getBoundingClientRect();
 const scaleX=canvas.width/r.width;
 const scaleY=canvas.height/r.height;
 
-return[(e.clientX-r.left)*scaleX,(e.clientY-r.top)*scaleY];
+return[
+(e.clientX-r.left)*scaleX,
+(e.clientY-r.top)*scaleY
+];
 
 }
 
 function isInside(x,y,box){
 
-return x>=box[0] &&
-       x<=box[0]+BOX &&
-       y>=box[1] &&
-       y<=box[1]+BOX;
+return x>=box[0]&&
+x<=box[0]+BOX&&
+y>=box[1]&&
+y<=box[1]+BOX;
 
 }
 
@@ -262,9 +264,7 @@ return Math.abs(x-sx);
 }
 
 function normalize(v){
-
 return v>0?1:v<0?-1:0;
-
 }
 
 function resetStats(){
@@ -285,7 +285,7 @@ dy=0;
 
 function resetTest(){
 
-if(!currentTest) return;
+if(!currentTest)return;
 
 [startBox,finishBox]=currentTest.position();
 
@@ -317,23 +317,119 @@ const start=Date.now();
 clearInterval(timerId);
 
 timerId=setInterval(()=>{
-
 document.getElementById("timer").innerText=((Date.now()-start)/1000).toFixed(2);
-
 },10);
 
 }
 
 function stopTimer(){
-
 clearInterval(timerId);
+}
+
+canvas.addEventListener("pointerdown",e=>{
+
+const[x,y]=getCoords(e);
+
+drawing=true;
+
+if(success)return;
+
+if(isInside(x,y,startBox)&&!active){
+
+active=true;
+startHit=true;
+
+startTimer();
+
+redraw();
+
+touches.push({points:[[x,y]]});
 
 }
 
+else if(!active){
+
+statistics.startFails++;
+
+updateStats();
+
+}
+
+else{
+
+statistics.discontinuities++;
+
+touches.push({points:[[x,y]]});
+
+updateStats();
+
+}
+
+});
+
+canvas.addEventListener("pointermove",e=>{
+
+if(!drawing||!active||success)return;
+
+const[x,y]=getCoords(e);
+
+const last=touches.at(-1).points.at(-1);
+
+ctx.beginPath();
+ctx.moveTo(last[0],last[1]);
+ctx.lineTo(x,y);
+
+ctx.strokeStyle="#60a5fa";
+ctx.stroke();
+
+const deviation=calcDeviation([x,y]);
+
+statistics.deviationArea+=deviation;
+
+const dxNow=normalize(x-last[0]);
+const dyNow=normalize(y-last[1]);
+
+if(dx!==dxNow)statistics.horizontalTurns++;
+if(dy!==dyNow)statistics.verticalTurns++;
+
+dx=dxNow;
+dy=dyNow;
+
+touches.at(-1).points.push([x,y]);
+
+if(isInside(x,y,finishBox)&&!finishHit){
+
+finishHit=true;
+success=true;
+
+stopTimer();
+
+redraw(false);
+
+}
+
+updateStats();
+
+});
+
+canvas.addEventListener("pointerup",()=>{
+drawing=false;
+});
+
+canvas.addEventListener("pointerleave",()=>{
+
+if(active&&!success){
+
+statistics.outOfBounds++;
+
+updateStats();
+
+}
+
+});
+
 function totalPoints(){
-
 return touches.reduce((a,t)=>a+t.points.length,0);
-
 }
 
 function offByCount(th){
@@ -348,7 +444,7 @@ for(const p of t.points){
 
 const d=calcDeviation(p);
 
-if(d>th && last<=th) count++;
+if(d>th&&last<=th)count++;
 
 last=d;
 
@@ -370,11 +466,13 @@ document.getElementById("horizontalTurnValue").innerText=statistics.horizontalTu
 
 let dev=statistics.deviationArea;
 
-if(deviationMode==="average" && totalPoints()>0)
+if(deviationMode==="average"&&totalPoints()>0)
 dev/=totalPoints();
 
 document.getElementById("deviationValue").innerText=dev.toFixed(2);
+
 document.getElementById("offByValue").innerText=offByCount(th);
+
 document.getElementById("outOfBoundsValue").innerText=statistics.outOfBounds;
 document.getElementById("startFailsValue").innerText=statistics.startFails;
 
@@ -438,3 +536,4 @@ changeTest();
 
 </body>
 </html>
+```
