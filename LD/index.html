@@ -1,35 +1,111 @@
 <!doctype html>
 <html lang="en">
-
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Line Drawing Test – CeMoQu</title>
 
-<link rel="stylesheet" href="StyleSheetHolder.css">
-<link rel="stylesheet" href="../shared/header.css">
-
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
+<link rel="stylesheet" href="../shared/header.css">
 <script src="../shared/header.js" defer></script>
 
+<style>
+:root{
+  --bg:#020617;
+  --panel:#02091b;
+  --panel-soft:#020b21;
+  --accent:#2563eb;
+  --muted:#94a3b8;
+  --text:#e5e7eb;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  height:100%;
+  font-family:Inter,system-ui;
+  background:radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);
+  color:var(--text);
+}
+body{
+  display:flex;
+  justify-content:center;
+  padding:18px;
+  padding-top:130px;
+}
+.shell{
+  width:100%;
+  max-width:1150px;
+  border-radius:24px;
+  background:linear-gradient(145deg,rgba(15,23,42,0.96),rgba(15,23,42,0.92));
+  border:1px solid #111827;
+  padding:18px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+#main{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 320px;
+  gap:20px;
+}
+.card,#sidebar{
+  border-radius:18px;
+  padding:14px 16px;
+  background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
+  border:1px solid rgba(30,64,175,0.35);
+  box-shadow:0 18px 45px rgba(15,23,42,0.9);
+}
+#canvas-container{
+  width:100%;
+  height:460px;
+  border-radius:14px;
+  padding:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#000814;
+}
+#testCanvas{
+  width:100%;
+  max-width:960px;
+  height:auto;
+  max-height:440px;
+  border-radius:10px;
+  background:#000814;
+  border:1px solid #1e293b;
+  touch-action:none;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+th,td{
+  border-bottom:1px solid #1f2937;
+  padding:5px;
+  text-align:center;
+}
+button,select,input{
+  padding:8px 10px;
+  border-radius:8px;
+  border:1px solid #1e293b;
+  background:#0f172a;
+  color:#e5e7eb;
+}
+.bottom-controls{
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+}
+</style>
 </head>
 
-
 <body>
-
 <div id="header-container"></div>
 
 <div class="shell">
-
-<header>
-<h1>Line Drawing Test</h1>
-</header>
+<header><h1>Line Drawing Test</h1></header>
 
 <div id="main">
-
 <section class="card">
 <div id="canvas-container">
 <canvas id="testCanvas" width="1000" height="500"></canvas>
@@ -37,95 +113,36 @@
 </section>
 
 <aside id="sidebar">
-
 <div>Time: <span id="timer">0.00</span> s</div>
-
 <table>
 <thead>
-<tr>
-<th>Metric</th>
-<th>Value</th>
-<th>Mode</th>
-</tr>
+<tr><th>Metric</th><th>Value</th><th>Mode</th></tr>
 </thead>
-
 <tbody>
-
-<tr>
-<td>Discontinuities</td>
-<td id="discontValue">0</td>
-<td>—</td>
-</tr>
-
-<tr>
-<td>Turns (Vertical)</td>
-<td id="verticalTurnValue">0</td>
-<td>—</td>
-</tr>
-
-<tr>
-<td>Reverses (Horizontal)</td>
-<td id="horizontalTurnValue">0</td>
-<td>—</td>
-</tr>
-
-<tr>
-<td>Off-by</td>
-<td id="offByValue">0</td>
-<td>
-<input type="number" id="offByThreshold" value="10">
-</td>
-</tr>
-
-<tr>
-<td>Deviation Area</td>
-<td id="deviationValue">0</td>
-<td>
-<button onclick="toggleDeviationMode()">Total</button>
-</td>
-</tr>
-
-<tr>
-<td>Turn Avg</td>
-<td id="turnValue">0</td>
-<td>
-<button onclick="toggleTurnMode()">Avg Vertical</button>
-</td>
-</tr>
-
-<tr>
-<td>Out-of-Bounds</td>
-<td id="outOfBoundsValue">0</td>
-<td>—</td>
-</tr>
-
-<tr>
-<td>Start Fails</td>
-<td id="startFailsValue">0</td>
-<td>—</td>
-</tr>
-
+<tr><td>Discontinuities</td><td id="discontValue">0</td><td>—</td></tr>
+<tr><td>Turns (Vertical)</td><td id="verticalTurnValue">0</td><td>—</td></tr>
+<tr><td>Reverses (Horizontal)</td><td id="horizontalTurnValue">0</td><td>—</td></tr>
+<tr><td>Off-by</td><td id="offByValue">0</td><td><input type="number" id="offByThreshold" value="10"></td></tr>
+<tr><td>Deviation Area</td><td id="deviationValue">0</td><td><button onclick="toggleDeviationMode()">Total</button></td></tr>
+<tr><td>Turn Avg</td><td id="turnValue">0</td><td><button onclick="toggleTurnMode()">Avg Vertical</button></td></tr>
+<tr><td>Out-of-Bounds</td><td id="outOfBoundsValue">0</td><td>—</td></tr>
+<tr><td>Start Fails</td><td id="startFailsValue">0</td><td>—</td></tr>
 </tbody>
 </table>
-
 </aside>
 </div>
 
 <div class="bottom-controls">
-
 <select id="testSelector" onchange="changeTest()">
 <option value="vertical">Vertical Test</option>
 <option value="horizontal">Horizontal Test</option>
 <option value="diagonal1">Diagonal Test 1</option>
 <option value="diagonal2">Diagonal Test 2</option>
 </select>
-
 <button onclick="stopTest()">Stop Test</button>
 <button onclick="resetTest()">Reset Test</button>
 <button onclick="exportData()">Export Data</button>
-
 </div>
-
 </div>
 
 <script>
@@ -191,7 +208,6 @@ return x>=box[0]&&x<=box[0]+BOX&&y>=box[1]&&y<=box[1]+BOX;
 function calcDeviation([x,y]){
 const sx=startBox[0]+BOX/2, sy=startBox[1]+BOX/2;
 const ex=finishBox[0]+BOX/2, ey=finishBox[1]+BOX/2;
-
 if(sx!==ex){
 const m=(ey-sy)/(ex-sx);
 const a=-m,b=1,c=-sy+m*sx;
@@ -209,43 +225,122 @@ dx=0;dy=0;
 
 function resetTest(){
 if(!currentTest)return;
-
 [startBox,finishBox]=currentTest.position();
-
 active=drawing=success=false;
 startHit=finishHit=false;
 touches=[];
-
 resetStats();
 redraw();
 updateStats();
-
 stopTimer();
 document.getElementById("timer").innerText="0.00";
 }
 
 function startTimer(){
 const start=Date.now();
-
 clearInterval(timerId);
-
-timerId=setInterval(()=>{
-document.getElementById("timer").innerText=((Date.now()-start)/1000).toFixed(2);
-},10);
+timerId=setInterval(()=>{document.getElementById("timer").innerText=((Date.now()-start)/1000).toFixed(2);},10);
 }
 
-function stopTimer(){
-clearInterval(timerId);
+function stopTimer(){clearInterval(timerId);}
+
+canvas.addEventListener("pointerdown",e=>{
+const[x,y]=getCoords(e);
+drawing=true;
+if(success)return;
+
+if(isInside(x,y,startBox)&&!active){
+active=true;startHit=true;startTimer();redraw();
+touches.push({points:[[x,y]]});
+}
+else if(!active){
+statistics.startFails++;updateStats();
+}
+else{
+statistics.discontinuities++;
+touches.push({points:[[x,y]]});
+updateStats();
+}
+});
+
+canvas.addEventListener("pointermove",e=>{
+if(!drawing||!active||success)return;
+const[x,y]=getCoords(e);
+const last=touches.at(-1).points.at(-1);
+
+ctx.beginPath();
+ctx.moveTo(last[0],last[1]);
+ctx.lineTo(x,y);
+ctx.strokeStyle="#60a5fa";
+ctx.stroke();
+
+const deviation=calcDeviation([x,y]);
+statistics.deviationArea+=deviation;
+
+const dxNow=normalize(x-last[0]);
+const dyNow=normalize(y-last[1]);
+
+if(dx!==dxNow)statistics.horizontalTurns++;
+if(dy!==dyNow)statistics.verticalTurns++;
+
+dx=dxNow;dy=dyNow;
+touches.at(-1).points.push([x,y]);
+
+if(isInside(x,y,finishBox)&&!finishHit){
+finishHit=true;success=true;stopTimer();redraw(false);
+}
+updateStats();
+});
+
+canvas.addEventListener("pointerup",()=>drawing=false);
+canvas.addEventListener("pointerleave",()=>{if(active&&!success){statistics.outOfBounds++;updateStats();}});
+
+function totalPoints(){return touches.reduce((a,t)=>a+t.points.length,0);}
+
+function offByCount(th){
+let count=0;
+for(const t of touches){
+let last=0;
+for(const p of t.points){
+const d=calcDeviation(p);
+if(d>th&&last<=th)count++;
+last=d;
+}
+}
+return count;
 }
 
-function changeTest(){
-currentTest=tests[document.getElementById("testSelector").value];
-resetTest();
+function updateStats(){
+const th=parseFloat(document.getElementById("offByThreshold").value)||10;
+document.getElementById("discontValue").innerText=statistics.discontinuities;
+document.getElementById("verticalTurnValue").innerText=statistics.verticalTurns;
+document.getElementById("horizontalTurnValue").innerText=statistics.horizontalTurns;
+
+let dev=statistics.deviationArea;
+if(deviationMode==="average"&&totalPoints()>0)dev/=totalPoints();
+
+document.getElementById("deviationValue").innerText=dev.toFixed(2);
+document.getElementById("offByValue").innerText=offByCount(th);
+document.getElementById("outOfBoundsValue").innerText=statistics.outOfBounds;
+document.getElementById("startFailsValue").innerText=statistics.startFails;
+
+document.getElementById("turnValue").innerText=
+(turnMode==="avgVertical")?statistics.verticalTurns:statistics.horizontalTurns;
+}
+
+function changeTest(){currentTest=tests[document.getElementById("testSelector").value];resetTest();}
+function stopTest(){active=false;stopTimer();}
+function toggleDeviationMode(){deviationMode=deviationMode==="total"?"average":"total";updateStats();}
+function toggleTurnMode(){turnMode=turnMode==="avgVertical"?"avgHorizontal":"avgVertical";updateStats();}
+function exportData(){
+const blob=new Blob([JSON.stringify({statistics,timestamp:new Date().toISOString()},null,2)],{type:"application/json"});
+const a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="ataxia_data.json";
+a.click();
 }
 
 changeTest();
 </script>
-
 </body>
 </html>
-
