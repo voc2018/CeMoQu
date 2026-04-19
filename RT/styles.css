@@ -1,0 +1,93 @@
+:root{
+  --bg:#071021;
+  --panel:#0c1720;
+  --muted:#90a4b7;
+  --accent:#10b981;
+  --text:#e6eef6;
+  --surface:#071926;
+  --danger:#ff6b6b;
+}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+/* Make the whole app vertically scrollable so viewer is top and bottom panels are last */
+.app {display:flex;flex-direction:column;height:100vh;gap:12px;padding:12px;box-sizing:border-box;overflow:auto}
+/* top viewer area (full width) */
+.viewer-area { display:flex; flex-direction:column; gap:12px; width:100%; }
+.topbar {display:flex;justify-content:space-between;align-items:center;gap:12px; flex-wrap:wrap}
+h1{font-size:20px;margin:0}
+.controls {display:flex;gap:8px;align-items:center}
+.controls > *{padding:10px 12px;border-radius:8px;border:0;background:var(--panel);color:var(--text);font-weight:600}
+button.primary{background:linear-gradient(90deg,#0ea5a4,#10b981);color:#02111a;font-weight:700}
+/* Mode toggle (two-sided big button) */
+.mode-toggle {display:flex;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.04);background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.06));}
+.mode-btn {flex:1;padding:12px 18px;text-align:center;cursor:pointer;font-weight:700;border:0;background:transparent;color:var(--muted);font-size:15px}
+.mode-btn.active{background:linear-gradient(90deg,#08353a,#0ea5a4);color:#02111a}
+/* Canvas area — bigger and responsive */
+.canvas-wrap { width:100%; height:60vh; max-height:80vh; border-radius:10px; overflow:hidden; background:var(--surface); position:relative; box-shadow: 0 6px 20px rgba(0,0,0,0.6); display:block; }
+canvas{display:block;width:100%;height:100%;background:#000;image-rendering:optimizeQuality;border-radius:8px;}
+.panel {background:var(--panel);padding:0;border-radius:10px;min-height:40px; position:relative; display:flex; flex-direction:column; overflow:hidden;}
+.panel-header {display:flex;justify-content:space-between;align-items:center; gap:8px; box-sizing:border-box; padding:12px 12px; background: linear-gradient(0deg, rgba(12,23,32,0.98), rgba(12,23,32,0.98)); border-top-left-radius:10px; border-top-right-radius:10px;}
+.panel-header h2{margin:0;font-size:15px}
+.panel-body { padding:12px; overflow:auto; box-sizing:border-box; }
+label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+input[type=number], input[type=text], select, textarea {background:#071827;border-radius:8px;padding:8px;border:1px solid #0b2330;color:var(--text);width:100%;box-sizing:border-box}
+.row {display:flex;gap:8px}
+.col {display:flex;flex-direction:column;gap:8px}
+.small {font-size:12px;color:var(--muted)}
+.log {font-family:Inter,system-ui,monospace;background:#05121a;padding:10px;border-radius:8px;height:100%;overflow:auto;color:var(--text);font-size:13px}
+.buttons-row {display:flex;gap:8px;flex-wrap:wrap}
+.meta-grid {display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.settings-open {display:block}
+.settings-collapsed {display:none}
+.badge {background:#05232a;padding:6px 8px;border-radius:8px;font-weight:600}
+.small-muted {font-size:12px;color:var(--muted)}
+.overlay-countdown {position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:96px;font-weight:700;color:rgba(255,255,255,0.95);pointer-events:none}
+.overlay-success {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 700;
+  color: #10b981; /* green accent */
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 10px;
+  pointer-events: none;
+  animation: fadeOut 3s forwards;
+  }
+  @keyframes fadeOut {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+  }
+.top-right-info {position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.35);padding:8px;border-radius:8px;font-size:13px}
+/* Accessibility: large touch targets */
+button,input,select,textarea{font-size:15px}
+.header-actions {display:flex;gap:8px;align-items:center}
+/* larger participant header */
+.meta-title {font-size:16px;font-weight:700;color:var(--text)}
+.settings-title {font-size:16px;font-weight:700;color:var(--text)}
+/* log header */
+.log-header {display:flex;justify-content:space-between;align-items:center;gap:8px}
+/* Specific panel sizing so body scroll is independent */
+#metaPanel{ height:380px; min-height:220px; }
+#settingsPanel{ height:420px; min-height:220px; }
+#logPanel { min-height: 220px; height: 420px; }
+/* calibration bar & instructions (over canvas when cursor mode) */
+.calib-ui { position:absolute; left:12px; top:12px; z-index:8; display:flex; align-items:center; gap:12px; }
+.calib-bar { height:12px; background:rgba(10,160,80,0.95); border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
+.calib-instr { font-size:13px; color:var(--muted); max-width:420px; }
+/* monitor controls */
+.monitor-row {display:flex;gap:8px;align-items:center;margin-top:8px}
+.monitor-row select, .monitor-row input {width:auto;}
+/* mode label small */
+.mode-note {font-size:13px;color:var(--muted);margin-top:6px}
+/* indicator bubble for active mode */
+.mode-badge {background:rgba(255,255,255,0.03);padding:6px 10px;border-radius:999px;font-weight:700}
+/* bottom panels row (three equal columns) */
+.bottom-panels { display:flex; gap:12px; width:100%; align-items:flex-start; }
+.bottom-panels > .panel { flex:1; min-width:260px; max-width: 45%; } /* allow wrap on very narrow screens */
+@media (max-width:1000px){
+  .bottom-panels { flex-direction:column; }
+  .bottom-panels > .panel { max-width:100%; }
+}

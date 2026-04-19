@@ -1,0 +1,1430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>RT Finger Chase — Clinic Dashboard</title>
+<style>
+  :root{
+    --bg:#071021;
+    --panel:#0c1720;
+    --muted:#90a4b7;
+    --accent:#10b981;
+    --text:#e6eef6;
+    --surface:#071926;
+    --danger:#ff6b6b;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  /* Make the whole app vertically scrollable so viewer is top and bottom panels are last */
+  .app {display:flex;flex-direction:column;height:100vh;gap:12px;padding:12px;box-sizing:border-box;overflow:auto}
+  /* top viewer area (full width) */
+  .viewer-area { display:flex; flex-direction:column; gap:12px; width:100%; }
+  .topbar {display:flex;justify-content:space-between;align-items:center;gap:12px; flex-wrap:wrap}
+  h1{font-size:20px;margin:0}
+  .controls {display:flex;gap:8px;align-items:center}
+  .controls > *{padding:10px 12px;border-radius:8px;border:0;background:var(--panel);color:var(--text);font-weight:600}
+  button.primary{background:linear-gradient(90deg,#0ea5a4,#10b981);color:#02111a;font-weight:700}
+  /* Mode toggle (two-sided big button) */
+  .mode-toggle {display:flex;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.04);background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.06));}
+  .mode-btn {flex:1;padding:12px 18px;text-align:center;cursor:pointer;font-weight:700;border:0;background:transparent;color:var(--muted);font-size:15px}
+  .mode-btn.active{background:linear-gradient(90deg,#08353a,#0ea5a4);color:#02111a}
+  /* Canvas area — bigger and responsive */
+  .canvas-wrap { width:100%; height:60vh; max-height:80vh; border-radius:10px; overflow:hidden; background:var(--surface); position:relative; box-shadow: 0 6px 20px rgba(0,0,0,0.6); display:block; }
+  canvas{display:block;width:100%;height:100%;background:#000;image-rendering:optimizeQuality;border-radius:8px;}
+  .panel {background:var(--panel);padding:0;border-radius:10px;min-height:40px; position:relative; display:flex; flex-direction:column; overflow:hidden;}
+  .panel-header {display:flex;justify-content:space-between;align-items:center; gap:8px; box-sizing:border-box; padding:12px 12px; background: linear-gradient(0deg, rgba(12,23,32,0.98), rgba(12,23,32,0.98)); border-top-left-radius:10px; border-top-right-radius:10px;}
+  .panel-header h2{margin:0;font-size:15px}
+  .panel-body { padding:12px; overflow:auto; box-sizing:border-box; }
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+  input[type=number], input[type=text], select, textarea {background:#071827;border-radius:8px;padding:8px;border:1px solid #0b2330;color:var(--text);width:100%;box-sizing:border-box}
+  .row {display:flex;gap:8px}
+  .col {display:flex;flex-direction:column;gap:8px}
+  .small {font-size:12px;color:var(--muted)}
+  .log {font-family:Inter,system-ui,monospace;background:#05121a;padding:10px;border-radius:8px;height:100%;overflow:auto;color:var(--text);font-size:13px}
+  .buttons-row {display:flex;gap:8px;flex-wrap:wrap}
+  .meta-grid {display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .settings-open {display:block}
+  .settings-collapsed {display:none}
+  .badge {background:#05232a;padding:6px 8px;border-radius:8px;font-weight:600}
+  .small-muted {font-size:12px;color:var(--muted)}
+  .overlay-countdown {position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:96px;font-weight:700;color:rgba(255,255,255,0.95);pointer-events:none}
+  .overlay-success {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    font-weight: 700;
+    color: #10b981; /* green accent */
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: 10px;
+    pointer-events: none;
+    animation: fadeOut 3s forwards;
+    }
+    @keyframes fadeOut {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+    }
+  .top-right-info {position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.35);padding:8px;border-radius:8px;font-size:13px}
+  /* Accessibility: large touch targets */
+  button,input,select,textarea{font-size:15px}
+  .header-actions {display:flex;gap:8px;align-items:center}
+  /* larger participant header */
+  .meta-title {font-size:16px;font-weight:700;color:var(--text)}
+  .settings-title {font-size:16px;font-weight:700;color:var(--text)}
+  /* log header */
+  .log-header {display:flex;justify-content:space-between;align-items:center;gap:8px}
+  /* Specific panel sizing so body scroll is independent */
+  #metaPanel{ height:380px; min-height:220px; }
+  #settingsPanel{ height:420px; min-height:220px; }
+  #logPanel { min-height: 220px; height: 420px; }
+  /* calibration bar & instructions (over canvas when cursor mode) */
+  .calib-ui { position:absolute; left:12px; top:12px; z-index:8; display:flex; align-items:center; gap:12px; }
+  .calib-bar { height:12px; background:rgba(10,160,80,0.95); border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
+  .calib-instr { font-size:13px; color:var(--muted); max-width:420px; }
+  /* monitor controls */
+  .monitor-row {display:flex;gap:8px;align-items:center;margin-top:8px}
+  .monitor-row select, .monitor-row input {width:auto;}
+  /* mode label small */
+  .mode-note {font-size:13px;color:var(--muted);margin-top:6px}
+  /* indicator bubble for active mode */
+  .mode-badge {background:rgba(255,255,255,0.03);padding:6px 10px;border-radius:999px;font-weight:700}
+  /* bottom panels row (three equal columns) */
+  .bottom-panels { display:flex; gap:12px; width:100%; align-items:flex-start; }
+  .bottom-panels > .panel { flex:1; min-width:260px; max-width: 45%; } /* allow wrap on very narrow screens */
+  @media (max-width:1000px){
+    .bottom-panels { flex-direction:column; }
+    .bottom-panels > .panel { max-width:100%; }
+  }
+</style>
+</head>
+<body>
+<div class="app" role="application" aria-label="RT Finger Chase Clinic Dashboard">
+
+  <!-- Viewer area at top -->
+  <div class="viewer-area">
+    <div class="topbar">
+      <div>
+        <h1> Random Target Touch Test </h1>
+        <div class="small-muted"> For patients and clinicians </div>
+        <div style="height:8px"></div>
+        <!-- Mode toggle -->
+        <div class="mode-toggle" role="tablist" aria-label="Choose test mode">
+          <button id="modeCursor" class="mode-btn active" role="tab" aria-selected="true">Cursor Test</button>
+          <button id="modeCamera" class="mode-btn" role="tab" aria-selected="false">Camera Test (Beta)</button>
+        </div>
+        <div class="mode-note"><span class="mode-badge" id="modeBadge">Cursor</span> • Toggle to run the camera-based test.</div>
+      </div>
+
+      <div class="controls" aria-hidden="false">
+        <button id="startBtn" class="primary">Start Test</button>
+        <button id="stopBtn">Stop</button>
+        <button id="runAgainBtn">Run Again</button>
+        <button id="exportBtn">Export CSV</button>
+        <button id="resetSettingsBtn">Reset Settings</button>
+      </div>
+    </div>
+
+    <div class="canvas-wrap panel" id="viewer" aria-live="polite">
+      <div class="top-right-info" id="ppcLabel">Pixels/cm: --</div>
+      <video id="video" autoplay playsinline style="display:none"></video>
+      <canvas id="canvas" role="img" aria-label="Camera feed or Cursor canvas"></canvas>
+      <div id="countdownOverlay" class="overlay-countdown" style="display:none"></div>
+      <div id="calibSuccessOverlay" class="overlay-success" style="display:none;"></div>
+
+      <!-- Calibration UI (visible in Cursor mode) -->
+      <div id="calibUI" class="calib-ui" style="display:none;">
+        <div>
+          <div class="calib-instr" id="calibInstr">Place a ruler or card (8.5 cm) against the bar to verify length.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-start;">
+          <div id="calibBar" class="calib-bar" style="width:120px"></div>
+          <div style="margin-top:6px;font-size:12px;color:var(--muted)">Green bar = 8.5 cm when measured on your screen. </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info and Status stay right under the viewer -->
+    <div style="display:flex;gap:12px;margin-top:8px; flex-wrap:wrap;">
+      <div class="panel" style="flex:1; min-height:80px;">
+        <div class="panel-header"><h2 style="margin:0;font-size:14px">Info</h2></div>
+        <div class="panel-body">
+          <div class="small-muted">Use the mode toggle to choose Cursor (mouse) or Camera test. Cursor Test runs on a blank canvas — calibrate with ruler for accurate pixels/cm.</div>
+        </div>
+      </div>
+      <div class="panel" style="width:320px; min-height:80px">
+        <div class="panel-header"><h2 style="margin:0;font-size:14px">Status</h2></div>
+        <div class="panel-body">
+          <div id="statusLine">Idle</div>
+          <div id="trialLine" class="small-muted" style="margin-top:6px">Trial: -</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom panels: Participant Metadata | Settings | Log -->
+  <div class="bottom-panels" role="region" aria-label="Bottom panels: Participant Metadata, Settings, Log">
+    <!-- Metadata panel -->
+    <div class="panel" id="metaPanel">
+      <div class="panel-header">
+        <div>
+          <h2 class="meta-title">Participant Metadata</h2>
+          <div class="small-muted" style="margin-top:4px">Large label for clarity</div>
+        </div>
+        <div class="header-actions">
+          <button id="saveMetaBtn">Save Metadata</button>
+        </div>
+      </div>
+
+      <div class="panel-body">
+        <div class="meta-grid">
+          <div>
+            <label>Participant ID *</label>
+            <input id="meta_participant" type="text" placeholder="e.g. P001" />
+          </div>
+          <div>
+            <label>Session ID</label>
+            <input id="meta_session" type="text" placeholder="e.g. S1" />
+          </div>
+          <div>
+            <label>Date</label>
+            <input id="meta_date" type="date" />
+          </div>
+          <div>
+            <label>Hand *</label>
+            <select id="meta_hand">
+              <option value="">Select</option>
+              <option value="R">Right</option>
+              <option value="L">Left</option>
+            </select>
+          </div>
+          <div style="grid-column:1/3">
+            <label>Notes</label>
+            <textarea id="meta_notes" rows="3" placeholder="Optional notes..."></textarea>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+          <div class="small-muted">Saved to device</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings panel -->
+    <div class="panel" id="settingsPanel" style="margin-top:0">
+      <div class="panel-header">
+        <div>
+          <h2 class="settings-title">Settings</h2>
+          <div class="small-muted" style="margin-top:4px">Core test parameters</div>
+        </div>
+        <div class="header-actions">
+          <button id="saveSettingsBtn">Save Settings</button>
+        </div>
+      </div>
+
+      <div class="panel-body">
+        <div class="col">
+          <div class="row">
+            <div style="flex:1">
+              <label>Targets</label>
+              <input id="cfg_targets" type="number" value="5" min="1" />
+            </div>
+            <div style="width:120px">
+              <label>Target interval (s)</label>
+              <input id="cfg_interval" type="number" value="2.0" step="0.1" min="0.1" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1">
+              <label>Target radius (cm)</label>
+              <input id="cfg_radius_cm" type="number" value="5.0" step="0.1" />
+            </div>
+            <div style="width:120px">
+              <label>Edge width (px)</label>
+              <input id="cfg_edge_px" type="number" value="5" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div style="flex:1">
+              <label>Minimum distance between targets (cm)</label>
+              <input id="cfg_min_distance_cm" type="number" value="10" step="0.1" />
+            </div>
+            <div style="width:120px">
+              <label>Center dot (1 cm)</label>
+              <select id="cfg_center_dot"><option value="1">Yes</option><option value="0">No</option></select>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:6px">
+            <div style="flex:1">
+              <label>Trail animation between targets</label>
+              <select id="cfg_trail"><option value="1">Yes</option><option value="0">No</option></select>
+            </div>
+            <div style="width:140px">
+              <label>Countdown / Sound cue</label>
+              <select id="cfg_countdown"><option value="0">Off</option><option value="1">On</option></select>
+            </div>
+          </div>
+
+          <!-- Editable Pixels per cm + single Calibrate button -->
+          <div class="row" style="margin-top:10px;align-items:center">
+            <div style="flex:1">
+              <label>Pixels / cm (default)</label>
+              <input id="cfg_ppc" type="number" step="0.1" value="30.0" />
+              <div class="small-muted" style="margin-top:6px">Set a default pixels-per-cm or press Calibrate to automatically measure index-finger length (camera) or estimate from monitor.</div>
+            </div>
+            <div style="width:140px">
+              <label>&nbsp;</label>
+              <button id="calibrateBtn" style="width:100%">Calibrate</button>
+            </div>
+          </div>
+          
+          <div class="row" style="margin-top:8px">
+            <div style="flex:1">
+                <label>Finger length for calibration (cm)</label>
+                <input id="cfg_finger_cm" type="number" step="0.1" value="7.5" />
+                <div class="small-muted" style="margin-top:6px">Used to compute pixels/cm during automatic calibration.</div>
+            </div>
+          </div>
+
+
+          <!-- Monitor size selection for Cursor Test -->
+          <div style="margin-top:10px">
+            <label>Monitor size (diagonal)</label>
+            <div class="monitor-row">
+              <select id="monitorSize">
+                <option value="15.6">15.6"</option>
+                <option value="24">24"</option>
+                <option value="27">27"</option>
+                <option value="custom">Custom</option>
+              </select>
+              <input id="monitorCustom" type="number" step="0.1" placeholder="Inches (if custom)" style="display:none" />
+              <button id="estimatePpcBtn">Estimate ppc</button>
+            </div>
+            <div class="small-muted" style="margin-top:8px">Estimating pixels/cm from monitor diagonal and screen CSS width. Verify with the green bar in Cursor Test.</div>
+          </div>
+
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <button id="applySettingsBtnLite">Apply (temporary)</button>
+            <button id="resetSettingsBtnLocal">Reset</button>
+          </div>
+          <div class="small-muted" style="margin-top:8px">Settings are saved to this device and restored next time.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log panel -->
+    <div class="panel" id="logPanel">
+      <div class="panel-header log-header">
+        <div>
+          <h2 style="margin:0;font-size:15px">Log</h2>
+          <div class="small-muted" style="margin-top:4px">Activity & result summary</div>
+        </div>
+        <div class="header-actions">
+          <button id="clearLogBtn">Clear Log</button>
+        </div>
+      </div>
+
+      <div class="panel-body" style="display:flex;flex-direction:column;padding:0;">
+        <div id="logArea" class="log" role="log" aria-live="polite" style="border-radius:0;"></div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+<script>
+/* RT Finger Chase — Clinic edition (with Cursor Test)
+   UI rearranged: viewer & info at top; 3 columns at bottom (metadata, settings, log).
+   Calibration fix: sample index fingertip -> MCP pixel distance while calibRunning
+*/
+
+/* DOM */
+const viewer = document.getElementById('viewer');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const modeCursor = document.getElementById('modeCursor');
+const modeCamera = document.getElementById('modeCamera');
+const modeBadge = document.getElementById('modeBadge');
+
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const runAgainBtn = document.getElementById('runAgainBtn');
+const exportBtn = document.getElementById('exportBtn');
+const resetSettingsBtn = document.getElementById('resetSettingsBtn');
+
+const meta_participant = document.getElementById('meta_participant');
+const meta_session = document.getElementById('meta_session');
+const meta_date = document.getElementById('meta_date');
+const meta_hand = document.getElementById('meta_hand');
+const meta_notes = document.getElementById('meta_notes');
+const saveMetaBtn = document.getElementById('saveMetaBtn');
+
+const cfg_targets = document.getElementById('cfg_targets');
+const cfg_interval = document.getElementById('cfg_interval');
+const cfg_radius_cm = document.getElementById('cfg_radius_cm');
+const cfg_edge_px = document.getElementById('cfg_edge_px');
+const cfg_min_distance_cm = document.getElementById('cfg_min_distance_cm');
+const cfg_center_dot = document.getElementById('cfg_center_dot');
+const cfg_trail = document.getElementById('cfg_trail');
+const cfg_countdown = document.getElementById('cfg_countdown');
+const cfg_finger_cm = document.getElementById('cfg_finger_cm');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const applySettingsBtnLite = document.getElementById('applySettingsBtnLite');
+const resetSettingsBtnLocal = document.getElementById('resetSettingsBtnLocal');
+const calibrateBtn = document.getElementById('calibrateBtn');
+const cfg_ppc = document.getElementById('cfg_ppc');
+
+const monitorSize = document.getElementById('monitorSize');
+const monitorCustom = document.getElementById('monitorCustom');
+const estimatePpcBtn = document.getElementById('estimatePpcBtn');
+
+const statusLine = document.getElementById('statusLine');
+const trialLine = document.getElementById('trialLine');
+const ppcLabel = document.getElementById('ppcLabel');
+
+const logArea = document.getElementById('logArea');
+const clearLogBtn = document.getElementById('clearLogBtn');
+const countdownOverlay = document.getElementById('countdownOverlay');
+
+const calibUI = document.getElementById('calibUI');
+const calibBar = document.getElementById('calibBar');
+const calibInstr = document.getElementById('calibInstr');
+
+let camera = null;
+let hands = null;
+
+/* Modes */
+let mode = 'cursor'; // 'cursor' or 'camera'
+
+/* Video intrinsic */
+let VIDEO_W = 640, VIDEO_H = 480;
+
+/* Backing buffer scaling */
+function resizeCanvasBacking(){
+  const viewerRect = viewer.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = Math.max(1, Math.floor(viewerRect.width));
+  const cssH = Math.max(1, Math.floor(viewerRect.height));
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // update calibration bar immediate width
+  updateCalibBar();
+}
+window.addEventListener('resize', resizeCanvasBacking);
+
+/* localStorage keys */
+const LS_PREFIX = 'rt_fingerchase_v1_';
+const LS_SETTINGS = LS_PREFIX + 'settings';
+const LS_META = LS_PREFIX + 'meta';
+
+/* default settings */
+const DEFAULTS = {
+  targets: 5,
+  interval_s: 2.0,
+  radius_cm: 5.0,
+  edge_px: 20,
+  min_distance_cm: 20.0,
+  center_dot: true,
+  trail: true,
+  countdown: false,
+  ppc: 30.0,
+  finger_cm: 7.5
+};
+
+
+/* runtime config */
+let cfg = {...DEFAULTS};
+
+/* persistent metadata */
+let meta = { participant:'', session:'', date:'', hand:'', notes:'' };
+
+/* pixels per cm (set from settings / calibration) */
+let pixels_per_cm = DEFAULTS.ppc;
+ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+
+/* calibration state */
+let calibRunning = false;
+let calibSamples = [];
+let calibStartMs = null;
+const CALIB_DURATION_MS = 3000;
+let calibDone = false;
+
+/* trial / data storage */
+let allTouches = [];
+let allTargetSummaries = [];
+let allFinalSummaries = [];
+
+/* per-run runtime */
+let running = false;
+let trialIndex = 0;
+let targets = [];
+let trialRunning = false;
+let trialState = null;
+let trailAnimation = null;
+let fpsUsed = 30;
+
+/* letterbox layout cache */
+let drawLayout = { destW:0, destH:0, offsetX:0, offsetY:0, scale:1 };
+
+/* cursor mode state */
+let cursorIsDown = false;
+let lastMousePos = null;
+
+/* utility logging */
+function appendLog(html){
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  logArea.appendChild(el);
+  logArea.scrollTop = logArea.scrollHeight;
+}
+function clearLog(){
+  logArea.textContent = '';
+}
+
+/* save/load settings & meta */
+function saveSettingsToLocal(){
+  const s = {
+    targets: parseInt(cfg_targets.value)||DEFAULTS.targets,
+    interval_s: parseFloat(cfg_interval.value)||DEFAULTS.interval_s,
+    radius_cm: parseFloat(cfg_radius_cm.value)||DEFAULTS.radius_cm,
+    edge_px: parseInt(cfg_edge_px.value)||DEFAULTS.edge_px,
+    min_distance_cm: parseFloat(cfg_min_distance_cm.value)||DEFAULTS.min_distance_cm,
+    center_dot: (cfg_center_dot.value === '1'),
+    trail: (cfg_trail.value === '1'),
+    countdown: (cfg_countdown.value === '1'),
+    ppc: parseFloat(cfg_ppc.value) || DEFAULTS.ppc,
+    finger_cm: parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm
+  };
+  localStorage.setItem(LS_SETTINGS, JSON.stringify(s));
+  loadSettingsIntoRuntime();
+  appendLog('<div class="small-muted">Settings saved</div>');
+}
+function loadSettingsFromLocal(){
+  try{
+    const raw = localStorage.getItem(LS_SETTINGS);
+    if(raw){
+      const s = JSON.parse(raw);
+      cfg_targets.value = s.targets || DEFAULTS.targets;
+      cfg_interval.value = s.interval_s || DEFAULTS.interval_s;
+      cfg_radius_cm.value = s.radius_cm || DEFAULTS.radius_cm;
+      cfg_edge_px.value = s.edge_px || DEFAULTS.edge_px;
+      cfg_min_distance_cm.value = s.min_distance_cm || DEFAULTS.min_distance_cm;
+      cfg_center_dot.value = s.center_dot ? '1':'0';
+      cfg_trail.value = s.trail ? '1':'0';
+      cfg_countdown.value = s.countdown ? '1':'0';
+      cfg_ppc.value = (typeof s.ppc === 'number') ? s.ppc : DEFAULTS.ppc;
+      cfg_finger_cm.value = (typeof s.finger_cm === 'number') ? s.finger_cm : DEFAULTS.finger_cm;
+    } else {
+      cfg_targets.value = DEFAULTS.targets;
+      cfg_interval.value = DEFAULTS.interval_s;
+      cfg_radius_cm.value = DEFAULTS.radius_cm;
+      cfg_edge_px.value = DEFAULTS.edge_px;
+      cfg_min_distance_cm.value = DEFAULTS.min_distance_cm;
+      cfg_center_dot.value = DEFAULTS.center_dot ? '1':'0';
+      cfg_trail.value = DEFAULTS.trail ? '1':'0';
+      cfg_countdown.value = DEFAULTS.countdown ? '1':'0';
+      cfg_ppc.value = DEFAULTS.ppc;
+      cfg_finger_cm = DEFAULTS.finger_cm;
+    }
+    loadSettingsIntoRuntime();
+  }catch(e){ console.warn('load settings fail',e); }
+}
+function loadSettingsIntoRuntime(){
+  cfg.targets = parseInt(cfg_targets.value)||DEFAULTS.targets;
+  cfg.interval_s = parseFloat(cfg_interval.value)||DEFAULTS.interval_s;
+  cfg.radius_cm = parseFloat(cfg_radius_cm.value)||DEFAULTS.radius_cm;
+  cfg.edge_px = parseInt(cfg_edge_px.value)||DEFAULTS.edge_px;
+  cfg.min_distance_cm = parseFloat(cfg_min_distance_cm.value)||DEFAULTS.min_distance_cm;
+  cfg.center_dot = (cfg_center_dot.value === '1');
+  cfg.trail = (cfg_trail.value === '1');
+  cfg.countdown = (cfg_countdown.value === '1');
+  cfg.finger_cm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
+  pixels_per_cm = parseFloat(cfg_ppc.value) || DEFAULTS.ppc;
+  ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+  appendLog(`<div class="small-muted">Settings applied: ${cfg.targets} targets • ${cfg.radius_cm} cm • ${cfg.interval_s}s</div>`);
+  updateCalibBar();
+}
+
+function saveMetaToLocal(){
+  meta.participant = meta_participant.value.trim();
+  meta.session = meta_session.value.trim();
+  meta.date = meta_date.value;
+  meta.hand = meta_hand.value;
+  meta.notes = meta_notes.value.trim();
+  localStorage.setItem(LS_META, JSON.stringify(meta));
+  appendLog(`<div class="small-muted">Metadata saved for participant ${meta.participant || '(unset)'}</div>`);
+}
+function loadMetaFromLocal(){
+  try{
+    const raw = localStorage.getItem(LS_META);
+    if(raw){
+      const m = JSON.parse(raw);
+      meta_participant.value = m.participant || '';
+      meta_session.value = m.session || '';
+      meta_date.value = m.date || new Date().toISOString().slice(0,10);
+      meta_hand.value = m.hand || '';
+      meta_notes.value = m.notes || '';
+      meta = {...m};
+    } else {
+      meta_date.value = new Date().toISOString().slice(0,10);
+    }
+  }catch(e){ meta_date.value = new Date().toISOString().slice(0,10); }
+}
+
+/* reset settings */
+function resetSettings(){
+  localStorage.removeItem(LS_SETTINGS);
+  loadSettingsFromLocal();
+  appendLog(`<div class="small-muted">Settings reset to defaults</div>`);
+}
+
+/* WebAudio beep */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function beep(freq=880, dur=120, vol=0.06){
+  try{
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    setTimeout(()=>{ o.stop(); o.disconnect(); g.disconnect(); }, dur);
+  }catch(e){}
+}
+
+/* MediaPipe hands (camera) */
+async function initHands(){
+  hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
+  hands.setOptions({ modelComplexity:0, maxNumHands:1, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+  hands.onResults(onHandsResults);
+}
+
+/* start camera */
+async function startCamera(){
+  const vw = 640, vh = 480;
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:vw},height:{ideal:vh}}, audio:false});
+    video.srcObject = stream;
+    await video.play();
+    VIDEO_W = video.videoWidth || vw;
+    VIDEO_H = video.videoHeight || vh;
+    appendLog(`<div class="small-muted">Camera ready: ${VIDEO_W}x${VIDEO_H}</div>`);
+    resizeCanvasBacking();
+    camera = new Camera(video, { onFrame: async () => { await hands.send({image:video}); }, width:VIDEO_W, height:VIDEO_H });
+    camera.start();
+  }catch(e){
+    appendLog(`<div style="color:#f88">Camera error: ${e.message}</div>`);
+    throw e;
+  }
+}
+
+/* stop camera safely */
+function stopCamera(){
+  try{
+    if(camera?.stop) camera.stop();
+    if(video?.srcObject){
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach(t=>t.stop());
+      video.srcObject = null;
+    }
+  }catch(e){}
+  camera = null;
+  hands = null;
+}
+
+/* calibration by camera or user: existing implementation measures fingertip->mcp for finger
+   FIX: collect samples from onHandsResults while calibRunning and mode==='camera'
+*/
+function startCalibrationPromise(){
+  return new Promise((resolve)=>{
+    calibRunning = true;
+    calibStartMs = performance.now();
+    calibSamples = [];
+    appendLog('<div class="small-muted">Calibration started — hold index finger out for 3 seconds</div>');
+    const check = setInterval(()=> {
+      const elapsed = performance.now() - calibStartMs;
+      if(elapsed >= CALIB_DURATION_MS){
+        calibRunning = false;
+        clearInterval(check);
+        if(calibSamples.length > 0){
+          const avgPx = calibSamples.reduce((a,b)=>a+b,0)/calibSamples.length;
+          const userCm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
+          pixels_per_cm = avgPx / userCm;
+          cfg_ppc.value = pixels_per_cm.toFixed(2);
+          ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+          calibDone = true;
+          appendLog(`<div class="small-muted">Calibration success — ${avgPx.toFixed(1)} px → ${pixels_per_cm.toFixed(2)} px/cm</div>`);
+          updateCalibBar();
+          // Show calibration success overlay on camera feed
+          const overlay = document.getElementById('calibSuccessOverlay');
+          overlay.textContent = `Calibration Successful!  Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+          overlay.style.display = 'flex';
+          setTimeout(() => { overlay.style.display = 'none'; }, 3000);
+          resolve(true);
+        } else {
+          appendLog('<div class="small-muted">Calibration failed — no hand seen</div>');
+          resolve(false);
+        }
+      }
+    }, 120);
+  });
+}
+
+/* on hands results
+   also: sample fingertip->mcp distance when calibration is running (camera mode)
+*/
+let lastResults = null;
+let drawRequest = null;
+function onHandsResults(results){
+  lastResults = results;
+
+  // CALIBRATION SAMPLING FIX:
+  // While startCalibrationPromise() is active (calibRunning), sample index fingertip (landmark 8)
+  // to index MCP (landmark 5) pixel distance and push to calibSamples.
+  // This was missing before (calibSamples never filled).
+  if(calibRunning && mode === 'camera' && results?.multiHandLandmarks?.length > 0){
+    try{
+      const lm = results.multiHandLandmarks[0];
+      const tip = lm[8];
+      const mcp = lm[5];
+      const tipPxX = tip.x * VIDEO_W;
+      const tipPxY = tip.y * VIDEO_H;
+      const mcpPxX = mcp.x * VIDEO_W;
+      const mcpPxY = mcp.y * VIDEO_H;
+      const dist_px = Math.hypot(tipPxX - mcpPxX, tipPxY - mcpPxY);
+      // store only valid finite distances
+      if(Number.isFinite(dist_px) && dist_px > 0 && dist_px < Math.max(VIDEO_W, VIDEO_H)){
+        calibSamples.push(dist_px);
+      }
+    }catch(e){}
+  }
+
+  if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
+}
+
+/* compute letterbox layout */
+function computeLetterboxLayout(cssW, cssH, vidW, vidH){
+  const scale = Math.min(cssW / vidW, cssH / vidH);
+  const destW = vidW * scale;
+  const destH = vidH * scale;
+  const offsetX = (cssW - destW) / 2;
+  const offsetY = (cssH - destH) / 2;
+  return { destW, destH, offsetX, offsetY, scale };
+}
+
+/* draw frame */
+function drawFrame(){
+  drawRequest = null;
+  // CSS dims of canvas
+  const cssW = parseFloat(canvas.style.width);
+  const cssH = parseFloat(canvas.style.height);
+
+  // For camera mode we letterbox the camera feed; for cursor mode we treat canvas as full working area.
+  let layout;
+  if(mode === 'camera'){
+    layout = computeLetterboxLayout(cssW, cssH, VIDEO_W, VIDEO_H);
+    drawLayout = layout;
+    // clear canvas
+    ctx.clearRect(0,0,cssW,cssH);
+    // draw mirrored video into letterbox region
+    if(video && video.readyState >= 2){
+      ctx.save();
+      ctx.translate(layout.offsetX + layout.destW, layout.offsetY);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, VIDEO_W, VIDEO_H, 0, 0, layout.destW, layout.destH);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#000"; ctx.fillRect(layout.offsetX, layout.offsetY, layout.destW, layout.destH);
+    }
+  } else {
+    // cursor mode: canvas is blank working area (no camera). We'll treat VIDEO_W/VIDEO_H as logical working dims.
+    const vidW = cssW, vidH = cssH;
+    layout = { destW: vidW, destH: vidH, offsetX:0, offsetY:0, scale:1 };
+    drawLayout = layout;
+    ctx.clearRect(0,0,cssW,cssH);
+    // draw a subtle background for cursor mode
+    ctx.fillStyle = '#04121a';
+    ctx.fillRect(0,0,cssW,cssH);
+  }
+
+  // draw calibration UI (green bar) only visible in cursor mode
+  // (DOM overlay handles it visually)
+
+  // draw fingertip marker from camera (mirrored mapping applied earlier) when available
+  if(mode === 'camera' && lastResults?.multiHandLandmarks?.length > 0){
+    const lm = lastResults.multiHandLandmarks[0];
+    const tip = lm[8];
+    const cx_px = tip.x * VIDEO_W;
+    const cy_px = tip.y * VIDEO_H;
+    // map to canvas (mirror horizontally)
+    const cx = layout.offsetX + layout.destW - (cx_px * (layout.destW / VIDEO_W));
+    const cy = layout.offsetY + (cy_px * (layout.destH / VIDEO_H));
+    ctx.fillStyle = 'rgba(255,0,0,0.95)';
+    ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI*2); ctx.fill();
+  }
+
+  // draw targets & trail & trial text (map coordinates depending on mode)
+  if(trialRunning && trialState){
+    // mapping function: world px coords (based on VIDEO_W/VIDEO_H) -> canvas coords
+    const mapX = (x) => (layout.offsetX + (mode === 'camera' ? (layout.destW - (x * (layout.destW/VIDEO_W))) : x * (layout.destW / VIDEO_W)));
+    const mapY = (y) => (layout.offsetY + (mode === 'camera' ? (y * (layout.destH/VIDEO_H)) : y * (layout.destH / VIDEO_H)));
+
+    const tx = trialState.target.x, ty = trialState.target.y, r_px = trialState.target.radius_px;
+    const txCanvas = mapX(tx);
+    const tyCanvas = mapY(ty);
+    ctx.strokeStyle = 'rgba(0,200,120,0.95)';
+    ctx.lineWidth = Math.max(2, cfg.edge_px);
+    ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.round(r_px * (layout.destW / VIDEO_W)), 0, Math.PI*2); ctx.stroke();
+    if(cfg.center_dot){
+      const cpx = cm_to_px(1.0);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.max(3, Math.round(cpx * (layout.destW/VIDEO_W))), 0, Math.PI*2); ctx.fill();
+    }
+    // info (text non-mirrored / drawn at top-left of working area)
+    ctx.fillStyle = "#fff"; ctx.font = '14px Inter';
+    ctx.fillText(`Trial ${trialIndex+1}/${cfg.targets}`, layout.offsetX + 12, layout.offsetY + 20);
+  }
+
+  // trail animation display (map points)
+  if(trailAnimation){
+    const now = performance.now();
+    const t = Math.min(1, (now - trailAnimation.start) / trailAnimation.duration);
+    const ease = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+    const sx = trailAnimation.startPt.x, sy = trailAnimation.startPt.y;
+    const ex = trailAnimation.endPt.x, ey = trailAnimation.endPt.y;
+    const dx_ = sx + (ex - sx)*ease;
+    const dy_ = sy + (ey - sy)*ease;
+    // map
+    const mapX = (x) => (drawLayout.offsetX + (mode === 'camera' ? (drawLayout.destW - (x * (drawLayout.destW/VIDEO_W))) : x * (drawLayout.destW / VIDEO_W)));
+    const mapY = (y) => (drawLayout.offsetY + (y * (drawLayout.destH / VIDEO_H)));
+    ctx.fillStyle = 'rgba(255,255,0,0.95)';
+    ctx.beginPath(); ctx.arc(mapX(dx_), mapY(dy_), 8, 0, Math.PI*2); ctx.fill();
+    if(t >= 1) trailAnimation = null;
+  }
+
+  // handle trial logic outside of draw transforms
+  if(trialRunning && trialState){
+    if(mode === 'camera'){
+      handleFrameForTrial(lastResults);
+    } else {
+      handleFrameForTrialCursor();
+    }
+  }
+}
+
+/* coordinate conversions */
+function px_to_cm(px){ return px / pixels_per_cm; }
+function cm_to_px(cm){ return Math.round(cm * pixels_per_cm); }
+
+function compute_tremor_cm(positions){
+  if(positions.length < 2) return 0.0;
+  const n = positions.length;
+  let meanX=0, meanY=0;
+  positions.forEach(p=>{ meanX+=p.x; meanY+=p.y; });
+  meanX /= n; meanY /= n;
+  const radial = positions.map(p => Math.hypot(p.x-meanX, p.y-meanY));
+  const meanRad = radial.reduce((a,b)=>a+b,0)/radial.length;
+  const variance = radial.reduce((s,r)=>s+(r-meanRad)*(r-meanRad),0)/radial.length;
+  const sd_px = Math.sqrt(variance);
+  return sd_px / pixels_per_cm;
+}
+function compute_smoothness(positions,fps){
+  if(positions.length < 3) return 0.0;
+  const vel=[];
+  for(let i=1;i<positions.length;i++){
+    const dx=positions[i].x-positions[i-1].x;
+    const dy=positions[i].y-positions[i-1].y;
+    const dist_px = Math.hypot(dx,dy);
+    const v_cm_s = (dist_px*fps)/pixels_per_cm;
+    vel.push(v_cm_s);
+  }
+  if(vel.length < 2) return 0.0;
+  const changes=[];
+  for(let i=1;i<vel.length;i++) changes.push(Math.abs(vel[i]-vel[i-1]));
+  const meanChange = changes.reduce((a,b)=>a+b,0)/changes.length;
+  return meanChange;
+}
+
+function trial_sara_score(final_dist_cm, reaction_time_s, missed){
+  if(missed) return null;
+  if(final_dist_cm !== null && final_dist_cm < 3.0 && reaction_time_s !== null && reaction_time_s < 2.0) return 0;
+  if(final_dist_cm !== null && final_dist_cm >= 3.0 && final_dist_cm < 7.0) return 1;
+  if(final_dist_cm !== null && final_dist_cm >= 7.0 && final_dist_cm < 15.0) return 2;
+  if(final_dist_cm !== null && (final_dist_cm >= 15.0 || (reaction_time_s !== null && reaction_time_s > 4.0))) return 3;
+  return 1;
+}
+
+function pushFrameTouch(trialIdx, frameIdx, ts, x_px, y_px, inside){
+  allTouches.push({trialIdx,frameIdx,ts,x_px,y_px,inside});
+}
+
+function handleFrameForTrial(results){
+  const fps = fpsUsed;
+  let fingertip = false;
+  let cx=null, cy=null;
+  if(results && results.multiHandLandmarks && results.multiHandLandmarks.length>0){
+    const tip = results.multiHandLandmarks[0][8];
+    cx = Math.round(tip.x * VIDEO_W);
+    cy = Math.round(tip.y * VIDEO_H);
+    fingertip = true;
+  }
+  const frameIdx = trialState.positions.length + trialState.missingFrames;
+  const timestamp = (new Date()).toISOString();
+
+  if(fingertip){
+    const dist_px = Math.hypot(cx - trialState.target.x, cy - trialState.target.y);
+    const inside = dist_px <= trialState.target.radius_px;
+    trialState.inside_flags.push(inside);
+    trialState.positions.push({x:cx,y:cy});
+    pushFrameTouch(trialIndex+1, frameIdx, timestamp, cx, cy, inside);
+    if(inside && trialState.reaction_time === null){
+      trialState.reaction_time = (performance.now() - trialState.start_time_ms)/1000.0;
+    }
+  } else {
+    trialState.inside_flags.push(false);
+    trialState.missingFrames++;
+    pushFrameTouch(trialIndex+1, frameIdx, timestamp, '', '', false);
+  }
+
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    const final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    const final_dist_cm = px_to_cm(final_dist_px);
+    statusLine.textContent = `Running — final err: ${final_dist_cm.toFixed(2)} cm`;
+  } else {
+    statusLine.textContent = `Running — no touch yet`;
+  }
+
+  const elapsed = (performance.now() - trialState.start_time_ms)/1000.0;
+  trialLine.textContent = `Trial: ${trialIndex+1}/${cfg.targets}`;
+
+  if(elapsed >= cfg.interval_s){
+    finalizeTrialAndScheduleNext(fps);
+  }
+}
+
+function handleFrameForTrialCursor(){
+  const fps = fpsUsed;
+  let fingertip = false;
+  let cx=null, cy=null;
+  if(lastMousePos){
+    fingertip = true;
+    const canvasCssW = parseFloat(canvas.style.width), canvasCssH = parseFloat(canvas.style.height);
+    const scaleX = VIDEO_W / canvasCssW;
+    const scaleY = VIDEO_H / canvasCssH;
+    cx = Math.round(lastMousePos.x * scaleX);
+    cy = Math.round(lastMousePos.y * scaleY);
+  }
+
+  const frameIdx = trialState.positions.length + trialState.missingFrames;
+  const timestamp = (new Date()).toISOString();
+
+  if(fingertip){
+    const dist_px = Math.hypot(cx - trialState.target.x, cy - trialState.target.y);
+    const inside = dist_px <= trialState.target.radius_px;
+    trialState.inside_flags.push(inside);
+    trialState.positions.push({x:cx,y:cy});
+    pushFrameTouch(trialIndex+1, frameIdx, timestamp, cx, cy, inside);
+    if(inside && trialState.reaction_time === null){
+      trialState.reaction_time = (performance.now() - trialState.start_time_ms)/1000.0;
+    }
+  } else {
+    trialState.inside_flags.push(false);
+    trialState.missingFrames++;
+    pushFrameTouch(trialIndex+1, frameIdx, timestamp, '', '', false);
+  }
+
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    const final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    const final_dist_cm = px_to_cm(final_dist_px);
+    statusLine.textContent = `Running — final err: ${final_dist_cm.toFixed(2)} cm`;
+  } else {
+    statusLine.textContent = `Running — no touch yet`;
+  }
+
+  const elapsed = (performance.now() - trialState.start_time_ms)/1000.0;
+  trialLine.textContent = `Trial: ${trialIndex+1}/${cfg.targets}`;
+
+  if(elapsed >= cfg.interval_s){
+    finalizeTrialAndScheduleNext(fps);
+  }
+}
+
+function finalizeTrialAndScheduleNext(fps){
+  const frames_recorded = trialState.inside_flags.length;
+  const time_inside_s = trialState.inside_flags.filter(Boolean).length / Math.max(1,fps);
+  const percent_time_inside = 100.0 * trialState.inside_flags.filter(Boolean).length / Math.max(1,frames_recorded);
+
+  let final_dist_px=null, final_dist_cm=null, tremor_cm=0.0, smoothness_val=0.0;
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    final_dist_cm = px_to_cm(final_dist_px);
+    tremor_cm = compute_tremor_cm(trialState.positions);
+    smoothness_val = compute_smoothness(trialState.positions, fps);
+  }
+
+  const missed = (trialState.positions.length === 0);
+  const trial_score = trial_sara_score(final_dist_cm !== null ? final_dist_cm : null, trialState.reaction_time, missed);
+
+  const summary = {
+    trial: allTargetSummaries.length + 1,
+    tx: trialState.target.x, ty: trialState.target.y,
+    radius_px: trialState.target.radius_px, radius_cm: cfg.radius_cm,
+    final_dist_cm: final_dist_cm !== null ? final_dist_cm : null,
+    final_dist_px: final_dist_px !== null ? final_dist_px : null,
+    tremor_cm: tremor_cm,
+    smoothness: smoothness_val,
+    time_inside_s,
+    percent_time_inside,
+    reaction_time: trialState.reaction_time,
+    frames_recorded,
+    missed,
+    trial_score
+  };
+  allTargetSummaries.push(summary);
+
+  if(missed){
+    appendLog(`<div>⚠️ <strong>Target ${summary.trial} — Missing</strong> — no valid touch detected in ${cfg.interval_s}s<br><small>Score: (not counted)</small></div>`);
+  } else {
+    const rt_ms = summary.reaction_time !== null ? Math.round(summary.reaction_time*1000) : '-';
+    appendLog(`<div>🎯 <strong>Target ${summary.trial}</strong><br>
+      Final error: ${summary.final_dist_cm.toFixed(2)} cm<br>
+      Smoothness: ${summary.smoothness.toFixed(3)}<br>
+      Tremor: ${summary.tremor_cm.toFixed(3)} cm<br>
+      Reaction time: ${rt_ms} ms<br>
+      Percent time inside: ${summary.percent_time_inside.toFixed(1)}%<br>
+      Score (SARA bucket): ${summary.trial_score}</div>`);
+  }
+
+  trialRunning = false;
+  trialState = null;
+  trialIndex++;
+  setTimeout(async ()=>{
+    if(trialIndex < cfg.targets && running){
+      if(cfg.trail && allTargetSummaries.length >= 1){
+        const prev = targets[Math.max(0, trialIndex-1)];
+        const next = targets[trialIndex];
+        startTrail(prev, next);
+        await new Promise(r=>setTimeout(r, 260));
+      }
+      if(cfg.countdown && !firstTrialCountdownDone){
+        await runCountdownAndCue();
+        firstTrialCountdownDone = true;
+      }
+      startTrialInternal();
+    } else {
+      finalizeRunAndLog();
+    }
+  }, 180);
+}
+
+function startTrialInternal(){
+  const [tx,ty] = targets[trialIndex];
+  const radius_px = cm_to_px(cfg.radius_cm);
+  trialState = {
+    target: {x:tx,y:ty, radius_px},
+    positions: [],
+    inside_flags: [],
+    reaction_time: null,
+    start_time_ms: performance.now(),
+    missingFrames: 0
+  };
+  trialRunning = true;
+  appendLog(`<div class="small-muted">Starting trial ${trialIndex+1} (radius ${cfg.radius_cm} cm)</div>`);
+  beep(900,100,0.04);
+}
+
+function finalizeRunAndLog(){
+  appendLog(`<div class="small-muted">Finalizing run...</div>`);
+  const count = cfg.targets;
+  const summaries = allTargetSummaries.slice(-count);
+  const scored = summaries.filter(s=>!s.missed && (typeof s.trial_score === 'number'));
+  const scores = scored.map(s => s.trial_score).filter(v=>v!==null && v!==undefined);
+
+  let totalScoreText = 'No valid targets (all missed)';
+  let finalScore = null;
+  if(scores.length === 0){
+    totalScoreText = 'Total Score: — (no valid targets counted)';
+  } else {
+    let arr = scores.slice().sort((a,b)=>a-b);
+    let removedBestWorst = false;
+    if(arr.length >= 5){
+      arr = arr.slice(1, -1);
+      removedBestWorst = true;
+    }
+    const avg = arr.reduce((a,b)=>a+b,0)/arr.length;
+    finalScore = avg;
+    const removeNote = removedBestWorst ? ` (average of ${arr.length} targets with best & worst removed)` : ` (average of ${arr.length} targets)`;
+    totalScoreText = `Total Score: ${finalScore.toFixed(2)}${removeNote}`;
+  }
+
+  appendLog(`<div style="margin-top:8px"><strong>✅ Test completed successfully.</strong></div>`);
+  appendLog(`<div style="margin-top:6px"><strong>${totalScoreText}</strong></div>`);
+  const runSummary = {
+    ts: new Date().toISOString(),
+    participant: meta_participant.value.trim(),
+    session: meta_session.value.trim(),
+    date: meta_date.value,
+    hand: meta_hand.value,
+    notes: meta_notes.value.trim(),
+    cfg: {...cfg},
+    mode,
+    targets: summaries,
+    finalScore
+  };
+  allFinalSummaries.push(runSummary);
+  running = false;
+  firstTrialCountdownDone = false;
+}
+
+function random_target_position_with_constraints(existingTargetsPx, radius_px, minDistPx){
+  const maxAttempts = 300;
+  const marginX = radius_px + 8;
+  const marginY = radius_px + 8;
+  for(let a=0;a<maxAttempts;a++){
+    const x = Math.floor(Math.random()*(Math.max(1, VIDEO_W - 2*marginX))) + marginX;
+    const y = Math.floor(Math.random()*(Math.max(1, VIDEO_H - 2*marginY))) + marginY;
+    let ok = true;
+    for(const t of existingTargetsPx){
+      const d = Math.hypot(x - t[0], y - t[1]);
+      if(d < minDistPx){ ok = false; break; }
+    }
+    if(ok) return [x,y];
+  }
+  return [Math.floor(VIDEO_W/2), Math.floor(VIDEO_H/2)];
+}
+
+function startTrail(startPt, endPt, duration=260){
+  if(!cfg.trail) return;
+  trailAnimation = {start:performance.now(), duration, startPt:{x:startPt[0],y:startPt[1]}, endPt:{x:endPt[0],y:endPt[1]}}; 
+}
+
+async function runCountdownAndCue(){
+  if(!cfg.countdown) return;
+  countdownOverlay.style.display = 'flex';
+  const seq = [3,2,1];
+  for(let i=0;i<seq.length;i++){
+    countdownOverlay.textContent = String(seq[i]);
+    beep(700 - i*100, 180, 0.06);
+    await new Promise(r=>setTimeout(r, 600));
+  }
+  countdownOverlay.style.display = 'none';
+}
+
+let firstTrialCountdownDone = false;
+
+startBtn.addEventListener('click', async ()=>{
+  const pid = meta_participant.value.trim();
+  const hand = meta_hand.value;
+  if(!pid || !hand){
+    appendLog('<div style="color:#f88">Please fill Participant ID and Hand before starting.</div>');
+    return;
+  }
+
+  saveSettingsToLocal();
+
+  // camera init only if in camera mode
+  if(mode === 'camera'){
+    if(!hands) await initHands();
+    if(!camera) await startCamera();
+    resizeCanvasBacking();
+  } else {
+    // cursor mode: set VIDEO_W/VIDEO_H to working canvas virtual pixel space (CSS pixels)
+    const viewerRect = viewer.getBoundingClientRect();
+    VIDEO_W = Math.max(1, Math.floor(viewerRect.width));
+    VIDEO_H = Math.max(1, Math.floor(viewerRect.height));
+    resizeCanvasBacking();
+    // show calibration UI overlay
+    calibUI.style.display = 'flex';
+  }
+
+  running = true;
+  trialIndex = 0;
+  targets = [];
+
+  // generate targets relative to VIDEO_W/VIDEO_H (which we've set above)
+  const minDistPx = cm_to_px(cfg.min_distance_cm);
+  const radius_px = cm_to_px(cfg.radius_cm);
+  for(let i=0;i<cfg.targets;i++){
+    const p = random_target_position_with_constraints(targets, radius_px, minDistPx);
+    targets.push(p);
+  }
+  appendLog(`<div class="small-muted">Generated ${targets.length} targets (${mode})</div>`);
+
+  // start-of-run countdown once
+  if(cfg.countdown){
+    await runCountdownAndCue();
+    firstTrialCountdownDone = true;
+  } else {
+    firstTrialCountdownDone = false;
+  }
+
+  // start capturing mouse events if cursor mode
+  if(mode === 'cursor'){
+    attachCursorListeners();
+  }
+
+  startTrialInternal();
+});
+
+/* Run Again */
+runAgainBtn.addEventListener('click', async ()=>{
+  if(running){
+    appendLog('<div class="small-muted">Already running — stop first to run again.</div>');
+    return;
+  }
+  startBtn.click();
+});
+
+/* stop */
+stopBtn.addEventListener('click', ()=>{
+  running = false;
+  trialRunning = false;
+  trialState = null;
+  detachCursorListeners();
+  stopCamera();
+  calibUI.style.display = 'none';
+  appendLog('<div class="small-muted">Test stopped by user.</div>');
+  statusLine.textContent = 'Stopped';
+});
+
+/* calibrate button (camera or user) */
+calibrateBtn.addEventListener('click', async ()=>{
+  if(mode === 'camera'){
+    if(!hands) await initHands();
+    if(!camera) await startCamera();
+    resizeCanvasBacking();
+    const ok = await startCalibrationPromise();
+    if(ok){
+      appendLog('<div class="small-muted">Calibration OK</div>');
+      cfg_ppc.value = pixels_per_cm.toFixed(2);
+      ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+    }
+  } else {
+    // In cursor mode, we can re-compute ppc estimate from monitor controls
+    estimatePpcFromMonitor();
+    appendLog('<div class="small-muted">Pixels/cm estimated for Cursor Test — verify with the green bar.</div>');
+  }
+});
+
+/* export CSV (3 files) - include mode in final summary export */
+exportBtn.addEventListener('click', ()=>{
+  const pid = (meta_participant.value || 'UNKNOWN').replace(/\s+/g,'');
+  const ts = new Date();
+  const YYYY = String(ts.getFullYear());
+  const MM = String(ts.getMonth()+1).padStart(2,'0');
+  const DD = String(ts.getDate()).padStart(2,'0');
+  const hh = String(ts.getHours()).padStart(2,'0');
+  const mm = String(ts.getMinutes()).padStart(2,'0');
+  const ss = String(ts.getSeconds()).padStart(2,'0');
+  const stamp = `${YYYY}${MM}${DD}_${hh}${mm}${ss}`;
+
+  // touches csv
+  const touchesHeader = ['trial_idx','frame_idx','timestamp','x_px','y_px','inside'];
+  const touchesLines = [touchesHeader.join(',')];
+  for(const t of allTouches){
+    touchesLines.push([t.trialIdx, t.frameIdx, t.ts, t.x_px===undefined?'':t.x_px, t.y_px===undefined?'':t.y_px, t.inside?1:0].join(','));
+  }
+  downloadBlob(touchesLines.join('\n'), `RT_touches_${pid}_${stamp}.csv`);
+
+  // targets summary csv
+  const targHeader = ['trial_global_index','target_x_px','target_y_px','radius_cm','radius_px','final_error_cm','final_error_px','tremor_cm','smoothness','time_inside_s','percent_time_inside','reaction_time_s','frames_recorded','missed','sara_score'];
+  const targLines = [targHeader.join(',')];
+  for(const s of allTargetSummaries){
+    targLines.push([
+      s.trial,
+      s.tx, s.ty,
+      s.radius_cm, s.radius_px,
+      s.final_dist_cm!==null ? s.final_dist_cm.toFixed(3):'',
+      s.final_dist_px!==null ? s.final_dist_px.toFixed(2):'',
+      s.tremor_cm.toFixed(4),
+      s.smoothness.toFixed(4),
+      s.time_inside_s.toFixed(3),
+      s.percent_time_inside.toFixed(2),
+      s.reaction_time!==null ? s.reaction_time.toFixed(3):'',
+      s.frames_recorded,
+      s.missed?1:0,
+      s.trial_score!==null? s.trial_score : ''
+    ].join(','));
+  }
+  downloadBlob(targLines.join('\n'), `RT_targets_summary_${pid}_${stamp}.csv`);
+
+  // final summary
+  const finalHeader = ['run_ts','participant','session','date','hand','notes','mode','num_targets','final_score'];
+  const finalLines = [finalHeader.join(',')];
+  for(const f of allFinalSummaries){
+    finalLines.push([
+      f.ts, f.participant, f.session, f.date, f.hand, `"${(f.notes||'').replace(/"/g,'""')}"`, f.mode || 'cursor', (f.cfg.targets||''), f.finalScore!==null? f.finalScore.toFixed(3):''
+    ].join(','));
+  }
+  downloadBlob(finalLines.join('\n'), `RT_final_summary_${pid}_${stamp}.csv`);
+  appendLog(`<div class="small-muted">Exported CSVs for participant ${pid}</div>`);
+});
+
+/* helper download */
+function downloadBlob(text, filename){
+  const blob = new Blob([text], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* clear log */
+clearLogBtn.addEventListener('click', ()=>{ clearLog(); });
+
+/* save/apply settings */
+saveSettingsBtn.addEventListener('click', ()=>{ saveSettingsToLocal(); });
+applySettingsBtnLite.addEventListener('click', ()=>{ loadSettingsIntoRuntime(); appendLog('<div class="small-muted">Settings applied (temporary)</div>'); });
+resetSettingsBtnLocal.addEventListener('click', ()=>{ resetSettings(); });
+
+/* save metadata */
+saveMetaBtn.addEventListener('click', ()=>{ saveMetaToLocal(); });
+
+/* attach/detach cursor listeners */
+function attachCursorListeners(){
+  canvas.style.cursor = 'crosshair';
+  canvas.addEventListener('mousemove', onCanvasMouseMove);
+  canvas.addEventListener('mousedown', onCanvasMouseDown);
+  canvas.addEventListener('mouseup', onCanvasMouseUp);
+  canvas.addEventListener('mouseleave', onCanvasMouseLeave);
+}
+function detachCursorListeners(){
+  canvas.style.cursor = 'default';
+  canvas.removeEventListener('mousemove', onCanvasMouseMove);
+  canvas.removeEventListener('mousedown', onCanvasMouseDown);
+  canvas.removeEventListener('mouseup', onCanvasMouseUp);
+  canvas.removeEventListener('mouseleave', onCanvasMouseLeave);
+  lastMousePos = null;
+}
+
+/* mouse handlers store last position in CSS pixels (relative to canvas) */
+function onCanvasMouseMove(e){
+  const rect = canvas.getBoundingClientRect();
+  lastMousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+function onCanvasMouseDown(e){
+  cursorIsDown = true;
+  onCanvasMouseMove(e);
+}
+function onCanvasMouseUp(e){
+  cursorIsDown = false;
+  onCanvasMouseMove(e);
+}
+function onCanvasMouseLeave(e){
+  lastMousePos = null;
+}
+
+/* monitor estimate -> pixels/cm */
+function estimatePpcFromMonitor(){
+  let diagIn = monitorSize.value === 'custom' ? parseFloat(monitorCustom.value) : parseFloat(monitorSize.value);
+  if(!diagIn || diagIn <= 0) diagIn = parseFloat(monitorSize.value) || 24;
+  const diagonal_mm = diagIn * 25.4;
+  const aspectW = 16, aspectH = 9;
+  const ratio = Math.sqrt(aspectW*aspectW + aspectH*aspectH);
+  const width_mm = diagonal_mm * (aspectW / ratio);
+  const width_cm = width_mm / 10.0;
+  const cssScreenPx = window.screen.width;
+  const est_ppc = cssScreenPx / width_cm;
+  pixels_per_cm = est_ppc;
+  cfg_ppc.value = pixels_per_cm.toFixed(2);
+  ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+  updateCalibBar();
+  return pixels_per_cm;
+}
+
+estimatePpcBtn.addEventListener('click', ()=>{
+  const p = estimatePpcFromMonitor();
+  appendLog(`<div class="small-muted">Estimated ${p.toFixed(2)} px/cm from monitor selection. Verify with green bar.</div>`);
+});
+
+monitorSize.addEventListener('change', ()=>{
+  if(monitorSize.value === 'custom'){
+    monitorCustom.style.display = 'inline-block';
+  } else {
+    monitorCustom.style.display = 'none';
+  }
+});
+
+/* update calibration bar width according to pixels_per_cm and current canvas scale
+   ensure bar doesn't overflow viewer area — cap to viewer width - margins
+*/
+function updateCalibBar(){
+  const viewerRect = viewer.getBoundingClientRect();
+  const pxFor8_5cm = Math.round(pixels_per_cm * 8.5);
+  const maxWidth = Math.max(24, Math.floor(viewerRect.width - 48)); // leave margins
+  const w = Math.min(pxFor8_5cm, maxWidth);
+  calibBar.style.width = w + 'px';
+}
+
+/* Mode toggle click handlers */
+modeCursor.addEventListener('click', ()=>{
+  setMode('cursor');
+});
+modeCamera.addEventListener('click', ()=>{
+  setMode('camera');
+});
+function setMode(m){
+  if(m === mode) return;
+  mode = m;
+  if(mode === 'cursor'){
+    modeCursor.classList.add('active');
+    modeCamera.classList.remove('active');
+    modeBadge.textContent = 'Cursor';
+    // stop camera if running
+    stopCamera();
+    calibUI.style.display = 'flex';
+  } else {
+    modeCamera.classList.add('active');
+    modeCursor.classList.remove('active');
+    modeBadge.textContent = 'Camera (Beta)';
+    calibUI.style.display = 'none';
+    // ensure camera will be initialized when starting
+  }
+  appendLog(`<div class="small-muted">Mode switched to ${mode}</div>`);
+  resizeCanvasBacking();
+}
+
+/* Run initialization */
+function init(){
+  loadSettingsFromLocal();
+  loadMetaFromLocal();
+  resizeCanvasBacking();
+  appendLog('<div class="small-muted">App ready. Verify metadata and settings. Use Cursor Test for mouse-based runs; Camera Test is beta.</div>');
+}
+init();
+
+/* observe viewer size changes */
+new ResizeObserver(()=>{ resizeCanvasBacking(); }).observe(document.getElementById('viewer'));
+
+/* Ensure page draws continuously when running/receiving data */
+(function tick(){
+  if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
+  requestAnimationFrame(tick);
+})();
+
+</script>
+</body>
+</html>
