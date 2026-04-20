@@ -300,8 +300,6 @@ input{
 /* ============================================
    HORIZONTAL TEST WIDTH LIMIT
    ============================================ */
-
 .horizontal-mode #canvas-container{
-  width:65%;
-  margin:auto;
+  width:100%;
 }
