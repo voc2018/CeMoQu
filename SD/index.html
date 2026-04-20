@@ -7,39 +7,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../shared/header.css">
   <script src="../shared/header.js" defer></script>
+  <link rel="stylesheet" href="../shared/common.css">
+
   <style>
-    :root{
-      --bg:#020617;
-      --panel:#02091b;
-      --panel-soft:#020b21;
-      --accent:#203fdb;
-      --muted:#94a3b8;
-      --text:#e5e7eb;
-      --danger:#ef4444;
-      --ok:#22c55e;
-      color-scheme:dark;
-    }
-    *{box-sizing:border-box;}
-
-    html,body{
-      height:100%; margin:0;
-      font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      background:radial-gradient(circle at top,#020b21 0,#020617 45%,#000 100%);
-      color:var(--text);
-    }
-    body{
-      display:flex; align-items:flex-start; justify-content:center;
-      padding:16px; min-height:100vh; overflow-y:auto; padding-top:130px;
-    }
-
-    .app{
-      width:100%; max-width:1024px; border-radius:24px;
-      background:linear-gradient(145deg,rgba(15,23,42,0.96),rgba(15,23,42,0.92));
-      border:1px solid #111827; padding:0 0 22px;
-      box-shadow:0 24px 80px rgba(0,0,0,0.7);
-      display:flex; flex-direction:column; overflow:hidden;
-    }
-
+  
     /* ── Patient metadata header — sits flush at the top of .app ── */
     .patient-header{
       background:linear-gradient(135deg,rgba(20,30,70,0.98),rgba(10,15,40,0.99));
@@ -93,94 +64,13 @@
       background:#4a7aff; box-shadow:0 0 5px rgba(74,122,255,0.7); flex-shrink:0;
     }
 
-    /* ── Rest of page ── */
-    .page-body{
-      display:flex; flex-direction:column; gap:16px; padding:20px 20px 0;
-    }
-
-    .topbar{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-    .title-block h1{ margin:0; font-size:22px; letter-spacing:0.02em; }
-    .small-muted{ font-size:13px; color:var(--muted); margin-top:4px; }
-
-    .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-
-    .pill{
-      padding:6px 10px; border-radius:999px;
-      background:rgba(15,23,42,0.9); border:1px solid rgba(148,163,184,0.35);
-      color:var(--muted); font-size:11px;
-      display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
-    }
-    .pill-dot{
-      width:7px; height:7px; border-radius:999px;
-      background:var(--accent); box-shadow:0 0 10px rgba(37,99,235,0.7);
-    }
-
-    .card{
-      position:relative; border-radius:18px; padding:14px 14px 12px;
-      background:radial-gradient(circle at top left,rgba(15,23,42,0.95),var(--panel-soft));
-      border:1px solid rgba(30,64,175,0.35);
-      box-shadow:0 18px 45px rgba(15,23,42,0.9);
-      display:flex; flex-direction:column; gap:10px; overflow:hidden;
-    }
-    .card::before{
-      content:""; position:absolute; inset:-80%;
-      background:radial-gradient(circle at 0 0,rgba(56,189,248,0.08),transparent 55%);
-      opacity:0.7; pointer-events:none;
-    }
-    .card h3{ margin:0; font-size:15px; }
-
-    .controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-
-    .btn-pill, button{
-      display:inline-flex; align-items:center; justify-content:center;
-      gap:6px; padding:8px 10px; border-radius:999px;
-      font-size:13px; font-weight:600; text-decoration:none; border:0; cursor:pointer;
-      background:linear-gradient(135deg,var(--accent),#21c1fb); color:#052012;
-      transition:transform .08s ease, filter .08s ease;
-    }
-    button:hover:enabled{ transform:translateY(-1px); filter:brightness(1.03); }
-    button:disabled{ opacity:0.45; cursor:not-allowed; filter:none; }
-    button.secondary{
-      background:rgba(15,23,42,0.9); color:var(--text);
-      border:1px solid rgba(148,163,184,0.35);
-    }
-    button.danger{
-      background:linear-gradient(135deg,var(--danger),#f97373); color:#fff;
-    }
-
-    label{ font-size:12px; color:var(--muted); }
-    select, input[type="text"], input[type="number"]{
-      background:#02091b; border:1px solid #1e293b;
-      color:var(--text); border-radius:999px; padding:7px 10px; font-size:13px;
-    }
-
-    .grid{ display:grid; grid-template-columns:1.3fr 1fr; gap:12px; }
-    @media(max-width:900px){ .grid{ grid-template-columns:1fr; } }
-
-    audio{ width:100%; border-radius:8px; outline:none; }
-
-    table{ width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; }
-    th,td{ border-bottom:1px solid #1f2937; padding:6px 8px; text-align:left; }
-    thead th{
-      font-size:11px; text-transform:uppercase; letter-spacing:0.04em;
-      color:var(--muted); background:rgba(15,23,42,0.7);
-    }
-
-    .mono{ font-family:ui-monospace,Consolas,Menlo,monospace; }
-    .small{ font-size:11px; color:var(--muted); }
-    .ok{ color:var(--ok); }
-
+   
     #meter{
       background:#02091b; border:1px solid #1e293b;
       border-radius:10px; margin-top:6px; width:100%; height:40px; display:block;
     }
 
-    footer{
-      margin-top:4px; font-size:11px; color:var(--muted);
-      display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;
-    }
-    footer a{ color:var(--muted); text-decoration:none; font-weight:500; font-size:11px; }
-    footer a:hover{ text-decoration:underline; }
+    
   </style>
 </head>
 <body>
@@ -222,7 +112,7 @@
     <div class="page-body">
 
       <div class="topbar">
-        <a href="../Homepage/index.html" class="btn-pill" style="font-size:12px;padding:6px 12px;">← Back</a>
+        <a href="../index.html" class="btn-pill" style="font-size:12px;padding:6px 12px;">← Back</a>
         <div class="title-block">
           <h1>Speech Disturbance Test · Reading (5 Sentences)</h1>
           <div class="small-muted">Guided reading with automatic loudness &amp; pitch stability scoring (0–6).</div>
