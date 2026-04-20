@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../shared/header.css">
   <script src="../shared/header.js" defer></script>
+  <link rel="stylesheet" href="../shared/common.css">
 
   <style>
     /* ---------- Design tokens (from homepage) ---------- */
@@ -360,20 +361,20 @@
       z-index:1;
     }
 
-    input[type="text"],
-    input[type="number"],
-    input[type="date"],
-    select,
-    textarea{
-      width:100%;
-      padding:8px;
-      border-radius:8px;
-      background:rgba(0,0,0,0.25);
-      border:1px solid rgba(148,163,184,0.26);
-      color:var(--text);
-      font-size:13px;
+    .shell input[type="text"],
+    .shell input[type="number"],
+    .shell input[type="date"],
+    .shell select,
+    .shell textarea {
+      width: 100%;
+      padding: 8px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(148,163,184,0.26);
+      color: var(--text);
+      font-size: 13px;
     }
-    textarea{resize:vertical}
+    .shell textarea { resize: vertical; }
 
     .col{display:flex;flex-direction:column;gap:8px}
     .row{display:flex;gap:8px;align-items:center}
@@ -426,7 +427,7 @@
     <!-- Header -->
     <div class="topbar">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <a href="../Homepage/index.html" class="btn-pill" style="font-size:12px;padding:6px 12px;">← Back</a>
+        <a href="../index.html" class="btn-pill" style="font-size:12px;padding:6px 12px;">← Back</a>
         <div class="title-block">
           <h1>Random Target Touch Test</h1>
           <div class="small-muted">Point-to-target cursor/camera task with time-in-target and error metrics.</div>
@@ -499,7 +500,6 @@
           <div style="display:flex;gap:8px;align-items:center;">
             <div class="small-muted" id="statusLine">Idle</div>
             <a id="quickRunLink" href="#" class="test-link" style="font-size:12px;">Quick Run</a>
-            <button id="resetDataBtn" style="font-size:12px;">Reset Data</button>
           </div>
         </div>
       </section>
@@ -512,8 +512,8 @@
           </div>
           <div class="panel-body">
             <div class="small-muted">
-              Random target touch test for ataxia and upper-limb control. Targets appear at random positions; the system logs time-to-target, time in target, final error, tremor, and smoothness.
-              Runs are scored using a SARA-like composite (0 = no impairment, 4 = severe) that combines final error, reaction time, percent time inside the target, tremor, and movement smoothness.
+              Random target touch test for ataxia and upper-limb control. Targets appear at random positions;
+              the system logs time-to-target, time in target, and movement distance.
             </div>
           </div>
         </section>
@@ -575,39 +575,6 @@
                   <option value="1">Yes</option>
                   <option value="0">No</option>
                 </select>
-              </div>
-            </div>
-
-            <div class="row" style="margin-top:8px;">
-              <div style="flex:1;">
-                <label>Participant ID</label>
-                <input id="meta_participant" type="text" placeholder="P001" />
-              </div>
-              <div style="width:120px;">
-                <label>Session</label>
-                <input id="meta_session" type="text" placeholder="S1" />
-              </div>
-            </div>
-
-            <div class="row" style="margin-top:8px;">
-              <div style="flex:1;">
-                <label>Date</label>
-                <input id="meta_date" type="date" />
-              </div>
-              <div style="width:120px;">
-                <label>Hand</label>
-                <select id="meta_hand">
-                  <option value="">Unknown</option>
-                  <option value="R">Right</option>
-                  <option value="L">Left</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="row" style="margin-top:8px;">
-              <div style="flex:1;">
-                <label>Notes</label>
-                <input id="meta_notes" type="text" placeholder="Optional notes" />
               </div>
             </div>
 
@@ -838,4 +805,3 @@
   </script>
 </body>
 </html>
-
