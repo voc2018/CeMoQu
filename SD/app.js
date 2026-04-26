@@ -112,11 +112,109 @@
   }
 
   // ------------------------------
-  // WER (Word Error Rate)
   // ------------------------------
-  function computeWER(reference, hypothesis){
+  // Fuzzy Word Matching (enhanced WER)
+  // ------------------------------
+  
+  // Levenshtein distance between two strings
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] = a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  // Similarity score between 0 and 1
+  function wordSimilarity(target, spoken) {
+    if (!target || !spoken) return 0;
+    const t = target.toLowerCase().replace(/[^a-z]/g, '');
+    const s = spoken.toLowerCase().replace(/[^a-z]/g, '');
+    if (t === s) return 1;
+    if (!t.length || !s.length) return 0;
+    const dist = levenshtein(t, s);
+    const maxLen = Math.max(t.length, s.length);
+    return Math.max(0, 1 - dist / maxLen);
+  }
+
+  // Match ASR words to target words using greedy best-match alignment
+  // Returns { wordsCorrect, wordsTotal, accuracyPct, details[] }
+  function matchWords(targetWords, asrText, similarityThreshold = 0.6) {
+    const spokenWords = normalizeText(asrText);
+    const total = targetWords.length;
+    
+    if (spokenWords.length === 0) {
+      return {
+        wordsCorrect: 0,
+        wordsTotal: total,
+        accuracyPct: 0,
+        details: targetWords.map(w => ({ target: w, spoken: '—', similarity: 0, correct: false })),
+      };
+    }
+
+    // Dynamic programming alignment: greedy best-match
+    const used = new Set();
+    const details = [];
+    let correct = 0;
+
+    for (const tw of targetWords) {
+      let bestIdx = -1, bestSim = 0;
+      for (let j = 0; j < spokenWords.length; j++) {
+        if (used.has(j)) continue;
+        const sim = wordSimilarity(tw, spokenWords[j]);
+        if (sim > bestSim) { bestSim = sim; bestIdx = j; }
+      }
+
+      // Threshold: similarity ≥ 0.6 counts as a "correct" word
+      const isCorrect = bestSim >= similarityThreshold;
+      if (bestIdx >= 0 && isCorrect) {
+        used.add(bestIdx);
+        correct++;
+        details.push({ target: tw, spoken: spokenWords[bestIdx], similarity: bestSim, correct: true });
+      } else {
+        details.push({ target: tw, spoken: bestIdx >= 0 ? spokenWords[bestIdx] : '—', similarity: bestSim, correct: false });
+      }
+    }
+
+    return {
+      wordsCorrect: correct,
+      wordsTotal: total,
+      accuracyPct: (correct / total) * 100,
+      details,
+    };
+  }
+
+  // Enhanced computeWER with fuzzy matching
+  function computeWER(reference, hypothesis, useFuzzy = true){
     const ref = normalizeText(reference);
     const hyp = normalizeText(hypothesis);
+    
+    if(useFuzzy && hyp.length > 0) {
+      // Use fuzzy matching for accuracy calculation
+      const match = matchWords(ref, hypothesis);
+      const correctWords = match.wordsCorrect;
+      const accuracyPct = match.accuracyPct;
+      const wer = 1 - (accuracyPct / 100); // WER = 1 - accuracy
+      
+      return {
+        wer: Math.min(wer, 1.0),
+        sub: 0, del: 0, ins: 0, // Not applicable with fuzzy matching
+        refLen: ref.length,
+        hypLen: hyp.length,
+        correctWords,
+        accuracyPct,
+        details: match.details
+      };
+    }
+    
+    // Original exact matching WER
     if(ref.length === 0) return { wer: hyp.length > 0 ? 1.0 : 0.0, sub: 0, del: 0, ins: hyp.length, refLen: 0, hypLen: hyp.length };
 
     // DP matrix
@@ -148,11 +246,13 @@
       }
     }
 
+    const correctWords = Math.max(0, ref.length - del - sub);
     return {
       wer: Math.min((sub + del + ins) / ref.length, 1.0),
       sub, del, ins,
       refLen: ref.length,
-      hypLen: hyp.length
+      hypLen: hyp.length,
+      correctWords
     };
   }
 
@@ -172,6 +272,17 @@
     for(let i = 0; i < thresholds.length; i++){
       if(wer <= thresholds[i]) return i;
     }
+    return 6;
+  }
+
+  // Accuracy → 0–6 score (higher accuracy = lower score)
+  function accuracyToScore(pct) {
+    if (pct >= 90) return 0;
+    if (pct >= 80) return 1;
+    if (pct >= 65) return 2;
+    if (pct >= 50) return 3;
+    if (pct >= 30) return 4;
+    if (pct >= 10) return 5;
     return 6;
   }
 
@@ -252,20 +363,24 @@
     const rmsCV = coeffVar(rmsSeries);
     const f0CV  = coeffVar(f0Series);
 
-    // --- WER ---
+    // --- WER / Accuracy ---
     const referenceText = SENTENCES[state.iTask];
     let werResult = null;
     if(currentTranscript.length > 0){
-      werResult = computeWER(referenceText, currentTranscript);
+      werResult = computeWER(referenceText, currentTranscript, true); // Use fuzzy matching
     }
 
-    // --- Scoring: blend acoustic CVs + WER ---
+    // --- Scoring: blend acoustic CVs + Accuracy ---
     const sRMS = cvToScore(rmsCV, [0.45, 0.60, 0.75, 0.90, 1.10, 1.35]);
     const sF0  = cvToScore(f0CV,  [0.20, 0.30, 0.40, 0.55, 0.70, 0.90]);
     const sWER = werResult ? werToScore(werResult.wer) : null;
+    const sAcc = werResult ? accuracyToScore(werResult.accuracyPct || 0) : null;
 
     let score06;
-    if(sWER !== null){
+    if(sWER !== null && sAcc !== null){
+      // Use average of WER score and Accuracy score
+      score06 = Math.round((sRMS + sF0 + sWER + sAcc) / 4);
+    } else if(sWER !== null){
       score06 = Math.round((sRMS + sF0 + sWER) / 3);
     } else {
       score06 = Math.round((sRMS + sF0) / 2);
@@ -288,6 +403,9 @@
         werSubs: werResult?.sub ?? null,
         werDels: werResult?.del ?? null,
         werIns: werResult?.ins ?? null,
+        correctWords: werResult?.correctWords ?? null,
+        refLen: werResult?.refLen ?? null,
+        accuracyPct: werResult?.accuracyPct ?? null,
         score06,
         sampleRate: decoded.sampleRate,
         ...meta
@@ -352,6 +470,7 @@
       `<td>${num(f.meanF0,1,true)}</td>`+
       `<td>${num(f.f0CV,3)}</td>`+
       `<td>${f.wer != null ? (f.wer * 100).toFixed(1) + '%' : '—'}</td>`+
+      `<td>${f.correctWords != null ? f.correctWords + '/' + f.refLen : '—'}</td>`+
       `<td><b>${f.score06}</b></td>`;
     const td = document.createElement('td'); td.appendChild(dl); tr.appendChild(td);
     els.rows.appendChild(tr);
@@ -433,6 +552,7 @@
       'participant','session','test','duration_s',
       'mean_rms','rms_cv','mean_f0_hz','f0_cv',
       'wer','wer_subs','wer_dels','wer_ins',
+      'correct_words','total_words','accuracy_pct',
       'score_0_6',
       'sample_rate','mic_cm','recorded_at','device_caps',
       'reference_text','transcript'
@@ -453,6 +573,9 @@
         f.werSubs ?? '',
         f.werDels ?? '',
         f.werIns ?? '',
+        f.correctWords ?? '',
+        f.refLen ?? '',
+        f.accuracyPct != null ? f.accuracyPct.toFixed(1) : '',
         f.score06 ?? '',
         f.sampleRate ?? '',
         f.micDistanceCM ?? '',
