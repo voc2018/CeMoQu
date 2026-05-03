@@ -4,11 +4,16 @@
   // Sentences to read (can be edited)
   // ------------------------------
   const SENTENCES = [
-    'The quick brown fox jumps over the lazy dog.',
-    'We were away a year ago, and we saw a wide view of the valley.',
-    'Please pack my box with five dozen liquor jugs.',
-    'She sells sea shells by the sea shore.',
-    'Many men, many minds; every voice tells a different story.'
+    'The source of the huge river is the clear spring.',
+    'Press the pants and sew a button on the vest.',
+    'The set of china hit the floor with a crash.',
+    'The bark of the pine tree was shiny and dark.',
+    'Hold the hammer near the end to drive the nail.',
+    'The horse trotted around the field at a brisk pace.',
+    'Carry the pail to the wall and spill it there.',
+    'Mud was spattered on the front of his white shirt.',
+    'Sever the twine with a quick snip of the knife.',
+    'Sell your gift to a buyer at a good gain.'
   ];
 
   // Build 5 "tests" out of the sentences
@@ -275,7 +280,8 @@
     return 6;
   }
 
-  // Accuracy → 0–6 score (higher accuracy = lower score)
+  // Accuracy → 0–6 score based on % of words correctly spoken via ASR
+  // 0: ≥90%  1: ≥80%  2: ≥65%  3: ≥50%  4: ≥30%  5: ≥10%  6: <10%
   function accuracyToScore(pct) {
     if (pct >= 90) return 0;
     if (pct >= 80) return 1;
@@ -370,20 +376,20 @@
       werResult = computeWER(referenceText, currentTranscript, true); // Use fuzzy matching
     }
 
-    // --- Scoring: blend acoustic CVs + Accuracy ---
+    // --- Scoring: blend acoustic CVs + Accuracy + Duration ---
     const sRMS = cvToScore(rmsCV, [0.45, 0.60, 0.75, 0.90, 1.10, 1.35]);
     const sF0  = cvToScore(f0CV,  [0.20, 0.30, 0.40, 0.55, 0.70, 0.90]);
+    const sDur = durationToScore(dur, referenceText);
     const sWER = werResult ? werToScore(werResult.wer) : null;
     const sAcc = werResult ? accuracyToScore(werResult.accuracyPct || 0) : null;
 
     let score06;
-    if(sWER !== null && sAcc !== null){
-      // Use average of WER score and Accuracy score
-      score06 = Math.round((sRMS + sF0 + sWER + sAcc) / 4);
-    } else if(sWER !== null){
-      score06 = Math.round((sRMS + sF0 + sWER) / 3);
+    if(sAcc !== null){
+      // Primary: accuracy score from ASR (% words correctly spoken → 0–6)
+      score06 = sAcc;
     } else {
-      score06 = Math.round((sRMS + sF0) / 2);
+      // Fallback when ASR unavailable: blend acoustic features
+      score06 = Math.round((sRMS + sF0 + sDur) / 3);
     }
 
     const meta = currentMeta();
@@ -399,6 +405,8 @@
         meanRMS, meanF0: meanF0||null,
         rmsCV: isFinite(rmsCV)?rmsCV:null,
         f0CV:  isFinite(f0CV)?f0CV:null,
+        duration: dur,
+        durationScore: sDur,
         wer: werResult?.wer ?? null,
         werSubs: werResult?.sub ?? null,
         werDels: werResult?.del ?? null,
@@ -452,6 +460,28 @@
       if(cv <= thresholds[i]) return i;
     }
     return 6;
+  }
+
+  // Duration scoring: based on speaking time vs expected time
+  // Expected WPM range: 120-160 (use 140 as midpoint)
+  // Thresholds:
+  //   ±0.5 sec: normal (0)
+  //   ±1-1.5 sec: mildly slow/fast (1)
+  //   ±1.5-2 sec: moderately slow/fast (2)
+  //   ±2-3 sec: severely slow/fast (4-5)
+  //   >3 sec: extremely slow/fast (6)
+  function durationToScore(actualDur, referenceText) {
+    const words = normalizeText(referenceText).length;
+    const expectedWPM = 140; // Midpoint between 120-160 WPM
+    const expectedDur = (words / expectedWPM) * 60; // Convert WPM to sec
+    const diff = Math.abs(actualDur - expectedDur);
+    
+    if (diff <= 0.5) return 0;      // Normal range
+    if (diff <= 1.5) return 1;      // Mildly off
+    if (diff <= 2.0) return 2;      // Moderately off
+    if (diff <= 3.0) return 4;      // Severely off (skip 3 to emphasize severity)
+    if (diff <= 4.5) return 5;      // Very severe
+    return 6;                        // Extremely slow/fast
   }
 
   function appendRow(idx){
@@ -531,11 +561,69 @@
     }
   }
 
+  const SCORE_LABELS = ['Normal','Minimal','Mild','Moderate','Mod-Severe','Severe','Very Severe'];
+  const SCORE_COLORS = ['#22c55e','#84cc16','#eab308','#f97316','#f97316','#ef4444','#dc2626'];
+
+  function showScoreSummary() {
+    if (!results.length) return;
+    const panel = document.getElementById('score-summary');
+    if (!panel) return;
+    panel.style.display = '';
+
+    const avg = results.reduce((s,r) => s + r.features.score06, 0) / results.length;
+    const overall = Math.round(avg);
+    const totalDur = results.reduce((s,r) => s + r.duration, 0);
+
+    const f0CVs = results.map(r => r.features.f0CV).filter(v => v != null && isFinite(v));
+    const meanF0CV = f0CVs.length ? f0CVs.reduce((s,v) => s+v, 0) / f0CVs.length : null;
+    const pitchLabel = meanF0CV == null ? '—'
+      : meanF0CV < 0.15 ? 'Stable' : meanF0CV < 0.30 ? 'Moderate' : 'Variable';
+
+    const withAcc = results.filter(r => r.features.accuracyPct != null);
+    const avgAcc = withAcc.length
+      ? withAcc.reduce((s,r) => s + r.features.accuracyPct, 0) / withAcc.length : null;
+    const totalCorrect = withAcc.reduce((s,r) => s + (r.features.correctWords || 0), 0);
+    const totalWords   = withAcc.reduce((s,r) => s + (r.features.refLen || 0), 0);
+
+    const rows = results.map(r => {
+      const c = SCORE_COLORS[r.features.score06];
+      const words = (r.features.correctWords != null && r.features.refLen != null)
+        ? `${r.features.correctWords}/${r.features.refLen}` : '—';
+      const acc = r.features.accuracyPct != null ? r.features.accuracyPct.toFixed(0) + '%' : '—';
+      return `<tr>
+        <td>${r.taskTitle}</td>
+        <td style="color:${c};font-weight:700">${r.features.score06}</td>
+        <td>${words}</td>
+        <td>${acc}</td>
+        <td>${r.duration.toFixed(1)}s</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('score-content').innerHTML = `
+      <div class="score-badge">
+        <div class="score-big" style="color:${SCORE_COLORS[overall]}">${overall}</div>
+        <div class="score-interp">${SCORE_LABELS[overall]} &nbsp;·&nbsp; 0 = Normal &nbsp;|&nbsp; 6 = Most Severe</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-box-lbl">Tests Done</div><div class="stat-box-val">${results.length} / ${TASKS.length}</div></div>
+        <div class="stat-box"><div class="stat-box-lbl">Total Time</div><div class="stat-box-val">${totalDur.toFixed(1)}s</div></div>
+        <div class="stat-box"><div class="stat-box-lbl">Words Correct</div><div class="stat-box-val">${totalWords > 0 ? totalCorrect + '/' + totalWords : '—'}</div></div>
+        <div class="stat-box"><div class="stat-box-lbl">Avg Accuracy</div><div class="stat-box-val">${avgAcc != null ? avgAcc.toFixed(0) + '%' : '—'}</div></div>
+        <div class="stat-box"><div class="stat-box-lbl">Pitch</div><div class="stat-box-val">${pitchLabel}</div></div>
+      </div>
+      <table class="bk-tbl">
+        <thead><tr><th>Test</th><th>Score (0–6)</th><th>Words</th><th>Accuracy</th><th>Duration</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
   function finishTest(){
     state.running = false;
     setInstruction('All tests are complete. Please export CSV/JSON.');
     els.status.textContent = 'Done';
     els.btnRecord.disabled = true; els.btnDone.disabled = true;
+    showScoreSummary();
   }
 
   // ------------------------------
@@ -598,6 +686,8 @@
     els.rows.innerHTML='';
     updateExportsEnabled();
     els.playback.removeAttribute('src');
+    const panel = document.getElementById('score-summary');
+    if (panel) { panel.style.display = 'none'; document.getElementById('score-content').innerHTML = ''; }
   }
 
   // ------------------------------

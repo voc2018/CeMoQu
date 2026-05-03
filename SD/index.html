@@ -70,7 +70,17 @@
       border-radius:10px; margin-top:6px; width:100%; height:40px; display:block;
     }
 
-    
+    #score-summary { display:none; }
+    .score-badge { text-align:center; padding:18px 0 10px; }
+    .score-big { font-size:56px; font-weight:700; line-height:1; }
+    .score-interp { font-size:13px; color:#64748b; margin-top:6px; }
+    .stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin:12px 0; }
+    .stat-box { background:rgba(2,9,27,0.7); border:1px solid #1e293b; border-radius:10px; padding:10px 12px; }
+    .stat-box-lbl { font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:.06em; }
+    .stat-box-val { font-size:19px; font-weight:700; margin-top:2px; }
+    .bk-tbl { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; }
+    .bk-tbl th,.bk-tbl td { border-bottom:1px solid #1f2937; padding:5px 8px; text-align:left; }
+    .bk-tbl thead th { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:#64748b; background:rgba(15,23,42,.7); }
   </style>
 </head>
 <body>
@@ -201,6 +211,14 @@
             </thead>
             <tbody id="rows"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Score Summary — shown after all tests complete -->
+      <div class="card" id="score-summary">
+        <div style="position:relative;z-index:1;">
+          <h3>Session Score Summary</h3>
+          <div id="score-content"></div>
         </div>
       </div>
 
@@ -456,11 +474,59 @@
       if(state.iTask>=TASKS.length) finishTest(); else stepUI();
     }
   }
+  const SCORE_LABELS = ['Normal','Minimal','Mild','Moderate','Mod-Severe','Severe','Very Severe'];
+  const SCORE_COLORS = ['#22c55e','#84cc16','#eab308','#f97316','#f97316','#ef4444','#dc2626'];
+
+  function showScoreSummary() {
+    if (!results.length) return;
+    const panel = document.getElementById('score-summary');
+    if (!panel) return;
+    panel.style.display = '';
+
+    const avg = results.reduce((s,r) => s + r.features.score06, 0) / results.length;
+    const overall = Math.round(avg);
+    const totalDur = results.reduce((s,r) => s + r.duration, 0);
+    const f0CVs = results.map(r => r.features.f0CV).filter(v => v != null && isFinite(v));
+    const meanF0CV = f0CVs.length ? f0CVs.reduce((s,v) => s+v, 0) / f0CVs.length : null;
+    const pitchLabel = meanF0CV == null ? '—'
+      : meanF0CV < 0.15 ? 'Stable' : meanF0CV < 0.30 ? 'Moderate' : 'Variable';
+
+    const rows = results.map(r => {
+      const c = SCORE_COLORS[r.features.score06];
+      const p = (r.features.f0CV != null && isFinite(r.features.f0CV))
+        ? (r.features.f0CV < 0.15 ? 'Stable' : r.features.f0CV < 0.30 ? 'Mod.' : 'Variable') : '—';
+      return `<tr>
+        <td>${r.taskTitle}</td>
+        <td style="color:${c};font-weight:700">${r.features.score06}</td>
+        <td>${r.duration.toFixed(1)}s</td>
+        <td>${p}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('score-content').innerHTML = `
+      <div class="score-badge">
+        <div class="score-big" style="color:${SCORE_COLORS[overall]}">${overall}</div>
+        <div class="score-interp">${SCORE_LABELS[overall]} &nbsp;·&nbsp; 0 = Normal &nbsp;|&nbsp; 6 = Most Severe</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-box-lbl">Tests Done</div><div class="stat-box-val">${results.length} / ${TASKS.length}</div></div>
+        <div class="stat-box"><div class="stat-box-lbl">Total Time</div><div class="stat-box-val">${totalDur.toFixed(1)}s</div></div>
+        <div class="stat-box"><div class="stat-box-lbl">Avg Score</div><div class="stat-box-val" style="color:${SCORE_COLORS[overall]}">${avg.toFixed(1)}</div></div>
+        <div class="stat-box"><div class="stat-box-lbl">Pitch</div><div class="stat-box-val">${pitchLabel}</div></div>
+      </div>
+      <table class="bk-tbl">
+        <thead><tr><th>Test</th><th>Score (0–6)</th><th>Duration</th><th>Pitch Stability</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
   function finishTest(){
     state.running=false;
     setInstruction('All tests are complete. Please export CSV/JSON.');
     els.status.textContent='Done';
     els.btnRecord.disabled=true; els.btnDone.disabled=true;
+    showScoreSummary();
   }
 
   // ── Exports ────────────────────────────────────────────────────────────────
@@ -504,6 +570,8 @@
   function clearAll(){
     results.splice(0); els.rows.innerHTML='';
     updateExportsEnabled(); els.playback.removeAttribute('src');
+    const panel = document.getElementById('score-summary');
+    if (panel) { panel.style.display = 'none'; document.getElementById('score-content').innerHTML = ''; }
   }
 
   async function probeCaps(){
