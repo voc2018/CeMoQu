@@ -1,5 +1,5 @@
 /* ============================= */
-/* CSS VARIABLES */
+/* CSS VARIABLES                 */
 /* ============================= */
 :root {
   --bg:         #020617;
@@ -14,15 +14,16 @@
 }
 
 /* ============================= */
-/* RESET / BASE */
+/* RESET / BASE                  */
 /* ============================= */
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 html, body {
   height: 100%;
-  margin: 0;
   font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   background: radial-gradient(circle at top, #020b21 0, #020617 45%, #000 100%);
   color: var(--text);
@@ -39,23 +40,24 @@ body {
 }
 
 /* ============================= */
-/* APP CONTAINER */
+/* APP CONTAINER (.app = .shell) */
 /* ============================= */
-.app {
+.app,
+.shell {
   width: 100%;
   max-width: 1024px;
   border-radius: 24px;
   background: linear-gradient(145deg, rgba(15,23,42,0.96), rgba(15,23,42,0.92));
   border: 1px solid #111827;
-  padding: 0 0 22px;
+  padding: 20px 20px 22px;
   box-shadow: 0 24px 80px rgba(0,0,0,0.7);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  gap: 16px;
 }
 
 /* ============================= */
-/* PAGE BODY */
+/* PAGE BODY                     */
 /* ============================= */
 .page-body {
   display: flex;
@@ -65,7 +67,7 @@ body {
 }
 
 /* ============================= */
-/* TOPBAR */
+/* TOPBAR / TITLE                */
 /* ============================= */
 .topbar {
   display: flex;
@@ -80,6 +82,12 @@ body {
   letter-spacing: 0.02em;
 }
 
+.title-block p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
 .small-muted {
   font-size: 13px;
   color: var(--muted);
@@ -87,7 +95,18 @@ body {
 }
 
 /* ============================= */
-/* LAYOUT UTIL */
+/* PAGE HEADER (내부 타이틀 영역) */
+/* ============================= */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* ============================= */
+/* LAYOUT UTIL                   */
 /* ============================= */
 .row {
   display: flex;
@@ -114,18 +133,19 @@ body {
 }
 
 /* ============================= */
-/* CARD */
+/* CARD                          */
 /* ============================= */
 .card {
   position: relative;
   border-radius: 18px;
-  padding: 14px 14px 12px;
+  padding: 16px 14px 14px;
   background: radial-gradient(circle at top left, rgba(15,23,42,0.95), var(--panel-soft));
   border: 1px solid rgba(30,64,175,0.35);
   box-shadow: 0 18px 45px rgba(15,23,42,0.9);
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 160px;
   overflow: hidden;
 }
 
@@ -134,8 +154,13 @@ body {
   position: absolute;
   inset: -80%;
   background: radial-gradient(circle at 0 0, rgba(56,189,248,0.08), transparent 55%);
-  opacity: 0.7;
+  opacity: 0.9;
   pointer-events: none;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 16px;
 }
 
 .card h3 {
@@ -143,69 +168,60 @@ body {
   font-size: 15px;
 }
 
+.card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 /* ============================= */
-/* BUTTONS */
+/* BADGE                         */
 /* ============================= */
-.btn-pill, button {
+.badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  padding: 8px 10px;
+  font-size: 11px;
+  padding: 3px 8px;
   border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  border: 0;
-  cursor: pointer;
-  background: linear-gradient(135deg, var(--accent), #21c1fb);
-  color: #052012;
-  transition: transform .08s ease, filter .08s ease;
-}
-
-button:hover:enabled {
-  transform: translateY(-1px);
-  filter: brightness(1.03);
-}
-
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  filter: none;
-}
-
-button.secondary {
   background: rgba(15,23,42,0.9);
-  color: var(--text);
   border: 1px solid rgba(148,163,184,0.35);
-}
-
-button.danger {
-  background: linear-gradient(135deg, var(--danger), #f97373);
-  color: #fff;
-}
-
-/* ============================= */
-/* FORM ELEMENTS */
-/* ============================= */
-label {
-  font-size: 12px;
   color: var(--muted);
 }
 
-select,
-input[type="text"],
-input[type="number"] {
-  background: #02091b;
-  border: 1px solid #1e293b;
-  color: var(--text);
+.badge-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
-  padding: 7px 10px;
-  font-size: 13px;
+  background: var(--accent);
 }
 
 /* ============================= */
-/* STATUS PILL */
+/* TAG PILL                      */
+/* ============================= */
+.tag-pill {
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  border: 1px solid rgba(148,163,184,0.4);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.tag-pill span.led {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(16,185,174,0.7);
+}
+
+/* ============================= */
+/* STATUS PILL                   */
 /* ============================= */
 .pill {
   padding: 6px 10px;
@@ -229,7 +245,214 @@ input[type="number"] {
 }
 
 /* ============================= */
-/* TABLE */
+/* CHIP                          */
+/* ============================= */
+.chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.9);
+  border: 1px solid rgba(31,41,55,0.9);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ============================= */
+/* META ROW                      */
+/* ============================= */
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ============================= */
+/* BUTTONS                       */
+/* ============================= */
+.btn-pill,
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 0;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), #21c1fb);
+  color: #052012;
+  transition: transform .08s ease, filter .08s ease;
+  white-space: nowrap;
+}
+
+/* .btn 은 rounded rectangle (10px) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), #21c1fb);
+  color: #052012;
+  transition: transform .08s ease, filter .08s ease;
+  white-space: nowrap;
+  outline: none;
+}
+
+button:hover:enabled,
+.btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+button.secondary {
+  background: rgba(15,23,42,0.9);
+  color: var(--text);
+  border: 1px solid rgba(148,163,184,0.35);
+}
+
+button.danger {
+  background: linear-gradient(135deg, var(--danger), #f97373);
+  color: #fff;
+}
+
+.btn.ghost {
+  background: transparent;
+  border: 1px solid rgba(148,163,184,0.12);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Link styled as pill button */
+a.test-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 0;
+  outline: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  background: linear-gradient(135deg, var(--accent), #21c1fb);
+  color: #052012;
+  transition: transform .08s ease, filter .08s ease;
+  white-space: nowrap;
+}
+
+a.test-link:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+/* ============================= */
+/* FORM ELEMENTS                 */
+/* ============================= */
+label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+select,
+input[type="text"],
+input[type="number"] {
+  background: rgba(10,12,20,0.6);
+  border: 1px solid rgba(148,163,184,0.08);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  min-height: 36px;
+}
+
+textarea {
+  background: rgba(10,12,20,0.6);
+  border: 1px solid rgba(148,163,184,0.08);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  outline: none;
+  font-size: 14px;
+  min-height: 84px;
+  resize: vertical;
+  width: 100%;
+}
+
+input[readonly] {
+  opacity: 0.85;
+  background: rgba(10,12,20,0.35);
+}
+
+/* ============================= */
+/* METADATA FORM                 */
+/* ============================= */
+.metadata-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .metadata-form { grid-template-columns: 1fr; }
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.field-grid {
+  display: flex;
+  gap: 8px;
+}
+
+.field-grid > * {
+  flex: 1;
+}
+
+.muted-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.small-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ============================= */
+/* TABLE                         */
 /* ============================= */
 table {
   width: 100%;
@@ -253,7 +476,7 @@ thead th {
 }
 
 /* ============================= */
-/* AUDIO */
+/* AUDIO                         */
 /* ============================= */
 audio {
   width: 100%;
@@ -262,14 +485,14 @@ audio {
 }
 
 /* ============================= */
-/* TEXT UTIL */
+/* TEXT UTIL                     */
 /* ============================= */
 .mono  { font-family: ui-monospace, Consolas, Menlo, monospace; }
 .small { font-size: 11px; color: var(--muted); }
 .ok    { color: var(--ok); }
 
 /* ============================= */
-/* FOOTER */
+/* FOOTER                        */
 /* ============================= */
 footer {
   margin-top: 4px;
@@ -277,17 +500,48 @@ footer {
   color: var(--muted);
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+footer .left {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+footer .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148,163,184,0.7);
 }
 
 footer a {
   color: var(--muted);
   text-decoration: none;
   font-weight: 500;
-  font-size: 11px;
 }
 
 footer a:hover {
   text-decoration: underline;
+}
+
+/* ============================= */
+/* HOMEPAGE GRID                 */
+/* ============================= */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .home-grid { grid-template-columns: minmax(0, 1fr); }
 }
