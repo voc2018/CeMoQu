@@ -1,7 +1,18 @@
 async function loadHeader() {
-    const response = await fetch('../shared/header.html'); // Adjust path as needed
+    const container = document.getElementById('header-container');
+    const base = container?.dataset?.base || '../';
+
+    const response = await fetch(base + 'shared/header.html');
     const text = await response.text();
-    document.getElementById('header-container').innerHTML = text;
+    container.innerHTML = text;
+
+    // root 페이지일 경우 nav 링크 보정
+    if (base === './') {
+        document.getElementById('nav-home').href = './index.html';
+        document.getElementById('nav-sd').href   = './SD/index.html';
+        document.getElementById('nav-rt').href   = './RT/index.html';
+        document.getElementById('nav-ld').href   = './LD/index.html';
+    }
 
     setupPersistence();
     setCurrentDate();
@@ -9,16 +20,10 @@ async function loadHeader() {
 
 function setupPersistence() {
     const fields = ['glob-id', 'glob-name', 'glob-age', 'glob-sex', 'glob-sess', 'glob-op'];
-    
     fields.forEach(id => {
         const el = document.getElementById(id);
-        // Load existing data
         if (localStorage.getItem(id)) el.value = localStorage.getItem(id);
-        
-        // Save data on change
-        el.addEventListener('input', () => {
-            localStorage.setItem(id, el.value);
-        });
+        el.addEventListener('input', () => localStorage.setItem(id, el.value));
     });
 }
 
