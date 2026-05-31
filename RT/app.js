@@ -1,741 +1,1163 @@
-// Keep everything scoped, and rely on <script defer> so DOM is ready
-(function(){
-  // ------------------------------
-  // Sentences to read (can be edited)
-  // ------------------------------
-  const SENTENCES = [
-    'The source of the huge river is the clear spring.',
-    'Press the pants and sew a button on the vest.',
-    'The set of china hit the floor with a crash.',
-    'The bark of the pine tree was shiny and dark.',
-    'Hold the hammer near the end to drive the nail.',
-    'The horse trotted around the field at a brisk pace.',
-    'Carry the pail to the wall and spill it there.',
-    'Mud was spattered on the front of his white shirt.',
-    'Sever the twine with a quick snip of the knife.',
-    'Sell your gift to a buyer at a good gain.'
-  ];
+/* RT Finger Chase — Clinic edition (with Cursor Test)
+   UI rearranged: viewer & info at top; 3 columns at bottom (metadata, settings, log).
+   Calibration fix: sample index fingertip -> MCP pixel distance while calibRunning
+*/
 
-  // Build 5 "tests" out of the sentences
-  const TASKS = SENTENCES.map((text, i) => ({
-    key: `test${i+1}`,
-    title: `Test ${i+1}`,
-    seconds: 8, // recording window per sentence
-    repeat: 1,
-    prompt: `Read aloud: "${text}"`
-  }));
+/* DOM */
+const viewer = document.getElementById('viewer');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
 
-  // ------------------------------
-  // State
-  // ------------------------------
-  let stream, audioCtx, analyser, source;
-  let mediaRecorder, chunks = [];
-  let recognition = null;
-  let currentTranscript = '';
-  let state = { iTask: -1, iRep: 0, running: false, sampleRate: null };
-  const results = []; // {task, rep, blob, duration, features}
+const modeCursor = document.getElementById('modeCursor');
+const modeCamera = document.getElementById('modeCamera');
+const modeBadge = document.getElementById('modeBadgeText');
 
-  // UI refs
-  const $ = sel => document.querySelector(sel);
-  const els = {
-    status: $('#status'), caps: $('#caps'), sr: $('#sr'), rms: $('#rms'), f0: $('#f0'), meter: $('#meter'),
-    instr: $('#task-instructions'), playback: $('#playback'), rows: $('#rows'),
-    btnPerm: $('#btn-permission'), btnStart: $('#btn-start'), btnStop: $('#btn-stop'), btnRecord: $('#btn-record'), btnDone: $('#btn-done'),
-    btnCSV: $('#btn-export-csv'), btnJSON: $('#btn-export-json'), btnClear: $('#btn-clear'),
-    pid: $('#pid'), sid: $('#sid'), micdist: $('#micdist')
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const runAgainBtn = document.getElementById('runAgainBtn');
+const exportBtn = document.getElementById('exportBtn');
+const resetSettingsBtn = document.getElementById('resetSettingsBtn');
+
+const cfg_targets = document.getElementById('cfg_targets');
+const cfg_interval = document.getElementById('cfg_interval');
+const cfg_radius_cm = document.getElementById('cfg_radius_cm');
+const cfg_edge_px = document.getElementById('cfg_edge_px');
+const cfg_min_distance_cm = document.getElementById('cfg_min_distance_cm');
+const cfg_center_dot = document.getElementById('cfg_center_dot');
+const cfg_trail = document.getElementById('cfg_trail');
+const cfg_countdown = document.getElementById('cfg_countdown');
+const cfg_finger_cm = document.getElementById('cfg_finger_cm');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const applySettingsBtnLite = document.getElementById('applySettingsBtnLite');
+const resetSettingsBtnLocal = document.getElementById('resetSettingsBtnLocal');
+const calibrateBtn = document.getElementById('calibrateBtn');
+const cfg_ppc = document.getElementById('cfg_ppc');
+
+const meta_participant = document.getElementById('meta_participant');
+const meta_session = document.getElementById('meta_session');
+const meta_date = document.getElementById('meta_date');
+const meta_hand = document.getElementById('meta_hand');
+const meta_notes = document.getElementById('meta_notes');
+
+const monitorSize = document.getElementById('monitorSize');
+const monitorCustom = document.getElementById('monitorCustom');
+const estimatePpcBtn = document.getElementById('estimatePpcBtn');
+
+const statusLine = document.getElementById('statusLine');
+const trialLine = document.getElementById('trialLine');
+const ppcLabel = document.getElementById('ppcLabel');
+
+const logArea = document.getElementById('logArea');
+const clearLogBtn = document.getElementById('clearLogBtn');
+const countdownOverlay = document.getElementById('countdownOverlay');
+
+const calibUI = document.getElementById('calibUI');
+const calibBar = document.getElementById('calibBar');
+const calibInstr = document.getElementById('calibInstr');
+
+let camera = null;
+let hands = null;
+
+/* Modes */
+let mode = 'cursor'; // 'cursor' or 'camera'
+
+/* Video intrinsic */
+let VIDEO_W = 640, VIDEO_H = 480;
+
+/* Backing buffer scaling */
+function resizeCanvasBacking(){
+  const viewerRect = viewer.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = Math.max(1, Math.floor(viewerRect.width));
+  const cssH = Math.max(1, Math.floor(viewerRect.height));
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // update calibration bar immediate width
+  updateCalibBar();
+}
+window.addEventListener('resize', resizeCanvasBacking);
+
+/* localStorage keys */
+const LS_PREFIX = 'rt_fingerchase_v1_';
+const LS_SETTINGS = LS_PREFIX + 'settings';
+
+/* default settings */
+const DEFAULTS = {
+  targets: 5,
+  interval_s: 2.0,
+  radius_cm: 5.0,
+  edge_px: 20,
+  min_distance_cm: 20.0,
+  center_dot: true,
+  trail: true,
+  countdown: false,
+  ppc: 30.0,
+  finger_cm: 7.5
+};
+
+
+/* runtime config */
+let cfg = {...DEFAULTS};
+
+const DEFAULT_META = {
+  participant: 'P000',
+  session: 'S1',
+  date: new Date().toISOString().slice(0,10),
+  hand: '',
+  notes: ''
+};
+let metaData = {...DEFAULT_META};
+
+/* pixels per cm (set from settings / calibration) */
+let pixels_per_cm = DEFAULTS.ppc;
+ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+
+/* calibration state */
+let calibRunning = false;
+let calibSamples = [];
+let calibStartMs = null;
+const CALIB_DURATION_MS = 3000;
+let calibDone = false;
+
+/* trial / data storage */
+let allTouches = [];
+let allTargetSummaries = [];
+let allFinalSummaries = [];
+
+/* per-run runtime */
+let running = false;
+let trialIndex = 0;
+let targets = [];
+let trialRunning = false;
+let trialState = null;
+let trailAnimation = null;
+let fpsUsed = 30;
+
+/* letterbox layout cache */
+let drawLayout = { destW:0, destH:0, offsetX:0, offsetY:0, scale:1 };
+
+/* cursor mode state */
+let cursorIsDown = false;
+let lastMousePos = null;
+
+/* utility logging */
+function appendLog(html){
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  logArea.appendChild(el);
+  logArea.scrollTop = logArea.scrollHeight;
+}
+function clearLog(){
+  logArea.textContent = '';
+}
+
+/* save/load settings */
+function saveSettingsToLocal(){
+  const s = {
+    targets: parseInt(cfg_targets.value)||DEFAULTS.targets,
+    interval_s: parseFloat(cfg_interval.value)||DEFAULTS.interval_s,
+    radius_cm: parseFloat(cfg_radius_cm.value)||DEFAULTS.radius_cm,
+    edge_px: parseInt(cfg_edge_px.value)||DEFAULTS.edge_px,
+    min_distance_cm: parseFloat(cfg_min_distance_cm.value)||DEFAULTS.min_distance_cm,
+    center_dot: (cfg_center_dot.value === '1'),
+    trail: (cfg_trail.value === '1'),
+    countdown: (cfg_countdown.value === '1'),
+    ppc: parseFloat(cfg_ppc.value) || DEFAULTS.ppc,
+    finger_cm: parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm,
+    participant: meta_participant.value.trim() || DEFAULT_META.participant,
+    session: meta_session.value.trim() || DEFAULT_META.session,
+    date: meta_date.value || DEFAULT_META.date,
+    hand: meta_hand.value || DEFAULT_META.hand,
+    notes: meta_notes.value.trim() || DEFAULT_META.notes
+  };
+  localStorage.setItem(LS_SETTINGS, JSON.stringify(s));
+  loadSettingsIntoRuntime();
+  appendLog('<div class="small-muted">Settings saved</div>');
+}
+function loadSettingsFromLocal(){
+  try{
+    const raw = localStorage.getItem(LS_SETTINGS);
+    if(raw){
+      const s = JSON.parse(raw);
+      cfg_targets.value = s.targets || DEFAULTS.targets;
+      cfg_interval.value = s.interval_s || DEFAULTS.interval_s;
+      cfg_radius_cm.value = s.radius_cm || DEFAULTS.radius_cm;
+      cfg_edge_px.value = s.edge_px || DEFAULTS.edge_px;
+      cfg_min_distance_cm.value = s.min_distance_cm || DEFAULTS.min_distance_cm;
+      cfg_center_dot.value = s.center_dot ? '1':'0';
+      cfg_trail.value = s.trail ? '1':'0';
+      cfg_countdown.value = s.countdown ? '1':'0';
+      cfg_ppc.value = (typeof s.ppc === 'number') ? s.ppc : DEFAULTS.ppc;
+      cfg_finger_cm.value = (typeof s.finger_cm === 'number') ? s.finger_cm : DEFAULTS.finger_cm;
+      meta_participant.value = s.participant || DEFAULT_META.participant;
+      meta_session.value = s.session || DEFAULT_META.session;
+      meta_date.value = s.date || DEFAULT_META.date;
+      meta_hand.value = s.hand || DEFAULT_META.hand;
+      meta_notes.value = s.notes || DEFAULT_META.notes;
+    } else {
+      cfg_targets.value = DEFAULTS.targets;
+      cfg_interval.value = DEFAULTS.interval_s;
+      cfg_radius_cm.value = DEFAULTS.radius_cm;
+      cfg_edge_px.value = DEFAULTS.edge_px;
+      cfg_min_distance_cm.value = DEFAULTS.min_distance_cm;
+      cfg_center_dot.value = DEFAULTS.center_dot ? '1':'0';
+      cfg_trail.value = DEFAULTS.trail ? '1':'0';
+      cfg_countdown.value = DEFAULTS.countdown ? '1':'0';
+      cfg_ppc.value = DEFAULTS.ppc;
+      cfg_finger_cm.value = DEFAULTS.finger_cm;
+      meta_participant.value = DEFAULT_META.participant;
+      meta_session.value = DEFAULT_META.session;
+      meta_date.value = DEFAULT_META.date;
+      meta_hand.value = DEFAULT_META.hand;
+      meta_notes.value = DEFAULT_META.notes;
+    }
+    loadSettingsIntoRuntime();
+  }catch(e){ console.warn('load settings fail',e); }
+}
+function loadSettingsIntoRuntime(){
+  cfg.targets = parseInt(cfg_targets.value)||DEFAULTS.targets;
+  cfg.interval_s = parseFloat(cfg_interval.value)||DEFAULTS.interval_s;
+  cfg.radius_cm = parseFloat(cfg_radius_cm.value)||DEFAULTS.radius_cm;
+  cfg.edge_px = parseInt(cfg_edge_px.value)||DEFAULTS.edge_px;
+  cfg.min_distance_cm = parseFloat(cfg_min_distance_cm.value)||DEFAULTS.min_distance_cm;
+  cfg.center_dot = (cfg_center_dot.value === '1');
+  cfg.trail = (cfg_trail.value === '1');
+  cfg.countdown = (cfg_countdown.value === '1');
+  cfg.finger_cm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
+  pixels_per_cm = parseFloat(cfg_ppc.value) || DEFAULTS.ppc;
+  ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+  metaData = {
+    participant: meta_participant.value.trim() || DEFAULT_META.participant,
+    session: meta_session.value.trim() || DEFAULT_META.session,
+    date: meta_date.value || DEFAULT_META.date,
+    hand: meta_hand.value || DEFAULT_META.hand,
+    notes: meta_notes.value.trim() || DEFAULT_META.notes
+  };
+  appendLog(`<div class="small-muted">Settings applied: ${cfg.targets} targets • ${cfg.radius_cm} cm • ${cfg.interval_s}s</div>`);
+  updateCalibBar();
+}
+
+/* reset settings */
+function resetSettings(){
+  localStorage.removeItem(LS_SETTINGS);
+  loadSettingsFromLocal();
+  appendLog(`<div class="small-muted">Settings reset to defaults</div>`);
+}
+
+/* WebAudio beep */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function beep(freq=880, dur=120, vol=0.06){
+  try{
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    setTimeout(()=>{ o.stop(); o.disconnect(); g.disconnect(); }, dur);
+  }catch(e){}
+}
+
+/* MediaPipe hands (camera) */
+async function initHands(){
+  hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
+  hands.setOptions({ modelComplexity:0, maxNumHands:1, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+  hands.onResults(onHandsResults);
+}
+
+/* start camera */
+async function startCamera(){
+  const vw = 640, vh = 480;
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:vw},height:{ideal:vh}}, audio:false});
+    video.srcObject = stream;
+    await video.play();
+    VIDEO_W = video.videoWidth || vw;
+    VIDEO_H = video.videoHeight || vh;
+    appendLog(`<div class="small-muted">Camera ready: ${VIDEO_W}x${VIDEO_H}</div>`);
+    resizeCanvasBacking();
+    camera = new Camera(video, { onFrame: async () => { await hands.send({image:video}); }, width:VIDEO_W, height:VIDEO_H });
+    camera.start();
+  }catch(e){
+    appendLog(`<div style="color:#f88">Camera error: ${e.message}</div>`);
+    throw e;
+  }
+}
+
+/* stop camera safely */
+function stopCamera(){
+  try{
+    if(camera?.stop) camera.stop();
+    if(video?.srcObject){
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach(t=>t.stop());
+      video.srcObject = null;
+    }
+  }catch(e){}
+  camera = null;
+  hands = null;
+}
+
+/* calibration by camera or user: existing implementation measures fingertip->mcp for finger
+   FIX: collect samples from onHandsResults while calibRunning and mode==='camera'
+*/
+function startCalibrationPromise(){
+  return new Promise((resolve)=>{
+    calibRunning = true;
+    calibStartMs = performance.now();
+    calibSamples = [];
+    appendLog('<div class="small-muted">Calibration started — hold index finger out for 3 seconds</div>');
+    const check = setInterval(()=> {
+      const elapsed = performance.now() - calibStartMs;
+      if(elapsed >= CALIB_DURATION_MS){
+        calibRunning = false;
+        clearInterval(check);
+        if(calibSamples.length > 0){
+          const avgPx = calibSamples.reduce((a,b)=>a+b,0)/calibSamples.length;
+          const userCm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
+          pixels_per_cm = avgPx / userCm;
+          cfg_ppc.value = pixels_per_cm.toFixed(2);
+          ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+          calibDone = true;
+          appendLog(`<div class="small-muted">Calibration success — ${avgPx.toFixed(1)} px → ${pixels_per_cm.toFixed(2)} px/cm</div>`);
+          updateCalibBar();
+          // Show calibration success overlay on camera feed
+          const overlay = document.getElementById('calibSuccessOverlay');
+          overlay.textContent = `Calibration Successful!  Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+          overlay.style.display = 'flex';
+          setTimeout(() => { overlay.style.display = 'none'; }, 3000);
+          resolve(true);
+        } else {
+          appendLog('<div class="small-muted">Calibration failed — no hand seen</div>');
+          resolve(false);
+        }
+      }
+    }, 120);
+  });
+}
+
+/* on hands results
+   also: sample fingertip->mcp distance when calibration is running (camera mode)
+*/
+let lastResults = null;
+let drawRequest = null;
+function onHandsResults(results){
+  lastResults = results;
+
+  // CALIBRATION SAMPLING FIX:
+  // While startCalibrationPromise() is active (calibRunning), sample index fingertip (landmark 8)
+  // to index MCP (landmark 5) pixel distance and push to calibSamples.
+  // This was missing before (calibSamples never filled).
+  if(calibRunning && mode === 'camera' && results?.multiHandLandmarks?.length > 0){
+    try{
+      const lm = results.multiHandLandmarks[0];
+      const tip = lm[8];
+      const mcp = lm[5];
+      const tipPxX = tip.x * VIDEO_W;
+      const tipPxY = tip.y * VIDEO_H;
+      const mcpPxX = mcp.x * VIDEO_W;
+      const mcpPxY = mcp.y * VIDEO_H;
+      const dist_px = Math.hypot(tipPxX - mcpPxX, tipPxY - mcpPxY);
+      // store only valid finite distances
+      if(Number.isFinite(dist_px) && dist_px > 0 && dist_px < Math.max(VIDEO_W, VIDEO_H)){
+        calibSamples.push(dist_px);
+      }
+    }catch(e){}
+  }
+
+  if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
+}
+
+/* compute letterbox layout */
+function computeLetterboxLayout(cssW, cssH, vidW, vidH){
+  const scale = Math.min(cssW / vidW, cssH / vidH);
+  const destW = vidW * scale;
+  const destH = vidH * scale;
+  const offsetX = (cssW - destW) / 2;
+  const offsetY = (cssH - destH) / 2;
+  return { destW, destH, offsetX, offsetY, scale };
+}
+
+/* draw frame */
+function drawFrame(){
+  drawRequest = null;
+  // CSS dims of canvas
+  const cssW = parseFloat(canvas.style.width);
+  const cssH = parseFloat(canvas.style.height);
+
+  // For camera mode we letterbox the camera feed; for cursor mode we treat canvas as full working area.
+  let layout;
+  if(mode === 'camera'){
+    layout = computeLetterboxLayout(cssW, cssH, VIDEO_W, VIDEO_H);
+    drawLayout = layout;
+    // clear canvas
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,cssW,cssH);
+    // draw mirrored video into letterbox region
+    if(video && video.readyState >= 2){
+      ctx.save();
+      ctx.translate(layout.offsetX + layout.destW, layout.offsetY);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, VIDEO_W, VIDEO_H, 0, 0, layout.destW, layout.destH);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#000"; ctx.fillRect(layout.offsetX, layout.offsetY, layout.destW, layout.destH);
+    }
+  } else {
+    // cursor mode: canvas is blank working area (no camera). We'll treat VIDEO_W/VIDEO_H as logical working dims.
+    const vidW = cssW, vidH = cssH;
+    layout = { destW: vidW, destH: vidH, offsetX:0, offsetY:0, scale:1 };
+    drawLayout = layout;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,cssW,cssH);
+    // draw a subtle background for cursor mode
+    ctx.fillStyle = '#04121a';
+    ctx.fillRect(0,0,cssW,cssH);
+  }
+
+  // draw fingertip marker from camera (mirrored mapping applied earlier) when available
+  if(mode === 'camera' && lastResults?.multiHandLandmarks?.length > 0){
+    const lm = lastResults.multiHandLandmarks[0];
+    const tip = lm[8];
+    const cx_px = tip.x * VIDEO_W;
+    const cy_px = tip.y * VIDEO_H;
+    // map to canvas (mirror horizontally)
+    const cx = layout.offsetX + layout.destW - (cx_px * (layout.destW / VIDEO_W));
+    const cy = layout.offsetY + (cy_px * (layout.destH / VIDEO_H));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(255,0,0,0.95)';
+    ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI*2); ctx.fill();
+  }
+
+  // draw targets & trail & trial text (map coordinates depending on mode)
+  if(trialRunning && trialState){
+    // mapping function: world px coords (based on VIDEO_W/VIDEO_H) -> canvas coords
+    const mapX = (x) => (layout.offsetX + (mode === 'camera' ? (layout.destW - (x * (layout.destW/VIDEO_W))) : x * (layout.destW / VIDEO_W)));
+    const mapY = (y) => (layout.offsetY + (mode === 'camera' ? (y * (layout.destH/VIDEO_H)) : y * (layout.destH / VIDEO_H)));
+
+    const tx = trialState.target.x, ty = trialState.target.y, r_px = trialState.target.radius_px;
+    const txCanvas = mapX(tx);
+    const tyCanvas = mapY(ty);
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = 'rgba(0,200,120,0.95)';
+    ctx.lineWidth = Math.max(2, cfg.edge_px);
+    ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.round(r_px * (layout.destW / VIDEO_W)), 0, Math.PI*2); ctx.stroke();
+    if(cfg.center_dot){
+      const cpx = cm_to_px(1.0);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.max(3, Math.round(cpx * (layout.destW/VIDEO_W))), 0, Math.PI*2); ctx.fill();
+    }
+    // info (text non-mirrored / drawn at top-left of working area)
+    ctx.fillStyle = "#fff"; ctx.font = '14px Inter';
+    ctx.fillText(`Trial ${trialIndex+1}/${cfg.targets}`, layout.offsetX + 12, layout.offsetY + 20);
+  }
+
+  // trail animation display (map points)
+  if(trailAnimation){
+    const now = performance.now();
+    const t = Math.min(1, (now - trailAnimation.start) / trailAnimation.duration);
+    const ease = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+    const sx = trailAnimation.startPt.x, sy = trailAnimation.startPt.y;
+    const ex = trailAnimation.endPt.x, ey = trailAnimation.endPt.y;
+    const dx_ = sx + (ex - sx)*ease;
+    const dy_ = sy + (ey - sy)*ease;
+    // map
+    const mapX = (x) => (drawLayout.offsetX + (mode === 'camera' ? (drawLayout.destW - (x * (drawLayout.destW/VIDEO_W))) : x * (drawLayout.destW / VIDEO_W)));
+    const mapY = (y) => (drawLayout.offsetY + (y * (drawLayout.destH / VIDEO_H)));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(255,255,0,0.95)';
+    ctx.beginPath(); ctx.arc(mapX(dx_), mapY(dy_), 8, 0, Math.PI*2); ctx.fill();
+    if(t >= 1) trailAnimation = null;
+  }
+
+  // handle trial logic outside of draw transforms
+  if(trialRunning && trialState){
+    if(mode === 'camera'){
+      handleFrameForTrial(lastResults);
+    } else {
+      handleFrameForTrialCursor();
+    }
+  }
+}
+
+/* coordinate conversions */
+function px_to_cm(px){ return px / pixels_per_cm; }
+function cm_to_px(cm){ return Math.round(cm * pixels_per_cm); }
+
+function enhanced_sara_score(final_dist_cm, reaction_time_s, missed, percent_time_inside){
+  // If the trial was missed entirely, give the maximum impairment score (4)
+  if(missed) return 4;
+
+  // Helper: clamp null/undefined to a conservative mid/high impairment
+  const safe = (v, fallback) => (v === null || v === undefined || Number.isNaN(v)) ? fallback : v;
+  const fd = safe(final_dist_cm, 30.0);
+  const rt = safe(reaction_time_s, 6.0);
+  const pti = safe(percent_time_inside, 0.0);
+
+  // Convert each metric into a 0-4 subscore (0 = best, 4 = worst)
+  const score_from_final_dist = (d) => {
+    if(d < 3.0) return 0;
+    if(d < 5.0) return 1;
+    if(d < 15.0) return 2;
+    if(d < 30.0) return 3;
+    return 4;
+  };
+  const score_from_reaction = (s) => {
+    if(s < 1.5) return 0;
+    if(s < 3.0) return 1;
+    if(s < 4.0) return 2;
+    if(s < 5.0) return 3;
+    return 4;
+  };
+  const score_from_percent_inside = (p) => {
+    if(p >= 50.0) return 0;
+    if(p >= 30.0) return 1;
+    if(p >= 15.0) return 2;
+    if(p >= 10.0) return 3;
+    return 4;
   };
 
-  // ------------------------------
-  // Mic & monitor
-  // ------------------------------
-  async function ensureMic(){
-    if(stream) return stream;
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        noiseSuppression: true,
-        echoCancellation: true,
-        autoGainControl: false
+  const s_fd = score_from_final_dist(fd);
+  const s_rt = score_from_reaction(rt);
+  const s_pti = score_from_percent_inside(pti);
+
+  // Weights reflect relative importance (sum = 1)
+  const w_fd = 0.45;
+  const w_rt = 0.30;
+  const w_pti = 0.25;
+
+  const combined = (s_fd * w_fd) + (s_rt * w_rt) + (s_pti * w_pti);
+
+  // Round to nearest integer in 0..4
+  const finalScore = Math.min(4, Math.max(0, Math.round(combined)));
+  return finalScore;
+}
+
+function trial_sara_score(final_dist_cm, reaction_time_s, missed, percent_time_inside){
+  // If the trial was missed entirely, give the maximum impairment score (4)
+  if(missed) return 4;
+
+  // Helper: clamp null/undefined to a conservative mid/high impairment
+  const safe = (v, fallback) => (v === null || v === undefined || Number.isNaN(v)) ? fallback : v;
+  const fd = safe(final_dist_cm, 30.0);
+
+  // Convert each metric into a 0-4 subscore (0 = best, 4 = worst)
+  const score_from_final_dist = (d) => {
+    if(d < 3.0) return 0;
+    if(d < 5.0) return 1;
+    if(d < 15.0) return 2;
+    if(d < 30.0) return 3;
+    return 4;
+  };
+
+  return score_from_final_dist(fd);
+}
+
+function pushFrameTouch(trialIdx, frameIdx, ts, x_px, y_px, inside){
+  allTouches.push({trialIdx,frameIdx,ts,x_px,y_px,inside});
+}
+
+function handleFrameForTrial(results){
+  const fps = fpsUsed;
+  let fingertip = false;
+  let cx=null, cy=null;
+  if(results && results.multiHandLandmarks && results.multiHandLandmarks.length>0){
+    const tip = results.multiHandLandmarks[0][8];
+    cx = Math.round(tip.x * VIDEO_W);
+    cy = Math.round(tip.y * VIDEO_H);
+    fingertip = true;
+  }
+  const frameIdx = trialState.positions.length + trialState.missingFrames;
+  const timestamp = (new Date()).toISOString();
+
+  if(fingertip){
+    const dist_px = Math.hypot(cx - trialState.target.x, cy - trialState.target.y);
+    const inside = dist_px <= trialState.target.radius_px;
+    trialState.inside_flags.push(inside);
+    trialState.positions.push({x:cx,y:cy});
+    pushFrameTouch(trialIndex+1, frameIdx, timestamp, cx, cy, inside);
+    if(inside && trialState.reaction_time === null){
+      trialState.reaction_time = (performance.now() - trialState.start_time_ms)/1000.0;
+    }
+  } else {
+    trialState.inside_flags.push(false);
+    trialState.missingFrames++;
+  }
+
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    const final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    const final_dist_cm = px_to_cm(final_dist_px);
+    statusLine.textContent = `Running — final err: ${final_dist_cm.toFixed(2)} cm`;
+  } else {
+    statusLine.textContent = `Running — no touch yet`;
+  }
+
+  const elapsed = (performance.now() - trialState.start_time_ms)/1000.0;
+  trialLine.textContent = `Trial: ${trialIndex+1}/${cfg.targets}`;
+
+  if(elapsed >= cfg.interval_s){
+    finalizeTrialAndScheduleNext(fps);
+  }
+}
+
+function handleFrameForTrialCursor(){
+  const fps = fpsUsed;
+  let fingertip = false;
+  let cx=null, cy=null;
+  if(lastMousePos){
+    fingertip = true;
+    const canvasCssW = parseFloat(canvas.style.width), canvasCssH = parseFloat(canvas.style.height);
+    const scaleX = VIDEO_W / canvasCssW;
+    const scaleY = VIDEO_H / canvasCssH;
+    cx = Math.round(lastMousePos.x * scaleX);
+    cy = Math.round(lastMousePos.y * scaleY);
+  }
+
+  const frameIdx = trialState.positions.length + trialState.missingFrames;
+  const timestamp = (new Date()).toISOString();
+
+  if(fingertip){
+    const dist_px = Math.hypot(cx - trialState.target.x, cy - trialState.target.y);
+    const inside = dist_px <= trialState.target.radius_px;
+    trialState.inside_flags.push(inside);
+    trialState.positions.push({x:cx,y:cy});
+    pushFrameTouch(trialIndex+1, frameIdx, timestamp, cx, cy, inside);
+    if(inside && trialState.reaction_time === null){
+      trialState.reaction_time = (performance.now() - trialState.start_time_ms)/1000.0;
+    }
+  } else {
+    trialState.inside_flags.push(false);
+    trialState.missingFrames++;
+  }
+
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    const final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    const final_dist_cm = px_to_cm(final_dist_px);
+    statusLine.textContent = `Running — final err: ${final_dist_cm.toFixed(2)} cm`;
+  } else {
+    statusLine.textContent = `Running — no touch yet`;
+  }
+
+  const elapsed = (performance.now() - trialState.start_time_ms)/1000.0;
+  trialLine.textContent = `Trial: ${trialIndex+1}/${cfg.targets}`;
+
+  if(elapsed >= cfg.interval_s){
+    finalizeTrialAndScheduleNext(fps);
+  }
+}
+
+function finalizeTrialAndScheduleNext(fps){
+  const frames_recorded = trialState.inside_flags.length;
+  const time_inside_s = trialState.inside_flags.filter(Boolean).length / Math.max(1,fps);
+  const percent_time_inside = 100.0 * trialState.inside_flags.filter(Boolean).length / Math.max(1,frames_recorded);
+
+  let final_dist_px=null, final_dist_cm=null;
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    final_dist_cm = px_to_cm(final_dist_px);
+  }
+
+  const missed = (trialState.positions.length === 0);
+  const trial_score = trial_sara_score(final_dist_cm !== null ? final_dist_cm : null, trialState.reaction_time, missed, percent_time_inside);
+  const enhanced_score = enhanced_sara_score(final_dist_cm !== null ? final_dist_cm : null, trialState.reaction_time, missed, percent_time_inside);
+
+  const summary = {
+    trial: allTargetSummaries.length + 1,
+    tx: trialState.target.x, ty: trialState.target.y,
+    radius_px: trialState.target.radius_px, radius_cm: cfg.radius_cm,
+    final_dist_cm: final_dist_cm !== null ? final_dist_cm : null,
+    final_dist_px: final_dist_px !== null ? final_dist_px : null,
+    tremor_cm: null,
+    smoothness: null,
+    time_inside_s,
+    percent_time_inside,
+    reaction_time: trialState.reaction_time,
+    frames_recorded,
+    missed,
+    trial_score,
+    enhanced_score
+  };
+  allTargetSummaries.push(summary);
+
+  if(missed){
+    appendLog(`<div>⚠️ <strong>Target ${summary.trial} — Missing</strong> — no valid touch detected in ${cfg.interval_s}s<br><small>Score: (not counted)</small></div>`);
+  } else {
+    const rt_ms = summary.reaction_time !== null ? Math.round(summary.reaction_time*1000) : '-';
+    appendLog(`<div>🎯 <strong>Target ${summary.trial}</strong><br>
+      Final error: ${summary.final_dist_cm.toFixed(2)} cm<br>
+      Reaction time: ${rt_ms} ms<br>
+      Percent time inside: ${summary.percent_time_inside.toFixed(1)}%<br>
+      Score (SARA bucket): ${summary.trial_score}</div>`);
+  }
+
+  trialRunning = false;
+  trialState = null;
+  trialIndex++;
+  setTimeout(async ()=>{
+    if(trialIndex < cfg.targets && running){
+      if(cfg.trail && allTargetSummaries.length >= 1){
+        const prev = targets[Math.max(0, trialIndex-1)];
+        const next = targets[trialIndex];
+        startTrail(prev, next);
+        await new Promise(r=>setTimeout(r, 260));
       }
-    });
-    setupMonitor(stream);
-    els.status.textContent = 'Mic ready';
-    return stream;
-  }
-
-  function setupMonitor(str){
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    state.sampleRate = audioCtx.sampleRate;
-    els.sr.textContent = `${Math.round(state.sampleRate)} Hz`;
-    source = audioCtx.createMediaStreamSource(str);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-
-    const timeData = new Float32Array(analyser.fftSize);
-    const ctx = els.meter.getContext('2d');
-
-    function loop(){
-      if(!analyser) return;
-      analyser.getFloatTimeDomainData(timeData);
-      const rms = Math.sqrt(timeData.reduce((s,v)=>s+v*v,0)/timeData.length) || 0;
-      els.rms.textContent = rms.toFixed(3);
-      drawMeter(ctx, rms);
-
-      const f0 = estimateF0(timeData, state.sampleRate);
-      els.f0.textContent = f0 ? f0.toFixed(1) : '—';
-      requestAnimationFrame(loop);
-    }
-    loop();
-  }
-
-  function drawMeter(ctx, rms){
-    const w = ctx.canvas.width, h = ctx.canvas.height;
-    ctx.clearRect(0,0,w,h);
-    ctx.fillStyle = '#1f2a44';
-    ctx.fillRect(0,0,w,h);
-    const v = Math.min(1, rms * 10);
-    ctx.fillStyle = '#10b981';
-    ctx.fillRect(0,0,w*v,h);
-  }
-
-  // Simple autocorrelation-based F0 (works for clean vowels; heuristic)
-  function estimateF0(buf, sr){
-    let mean = 0; for(let i=0;i<buf.length;i++) mean += buf[i]; mean/=buf.length;
-    const x = new Float32Array(buf.length); for(let i=0;i<buf.length;i++) x[i]=buf[i]-mean;
-    const n = x.length; const corr = new Float32Array(n);
-    for(let lag=0;lag<n;lag++){
-      let s=0; for(let i=0;i<n-lag;i++){ s += x[i]*x[i+lag]; }
-      corr[lag]=s;
-    }
-    const minLag = Math.floor(sr/400), maxLag = Math.floor(sr/60);
-    let bestLag=0, bestVal=-1;
-    for(let lag=minLag; lag<=Math.min(maxLag, n-1); lag++){
-      if(corr[lag] > bestVal){ bestVal = corr[lag]; bestLag = lag; }
-    }
-    if(bestLag>0) return sr / bestLag; else return null;
-  }
-
-  // ------------------------------
-  // ------------------------------
-  // Fuzzy Word Matching (enhanced WER)
-  // ------------------------------
-  
-  // Levenshtein distance between two strings
-  function levenshtein(a, b) {
-    const m = a.length, n = b.length;
-    const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        dp[i][j] = a[i - 1] === b[j - 1]
-          ? dp[i - 1][j - 1]
-          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      if(cfg.countdown && !firstTrialCountdownDone){
+        await runCountdownAndCue();
+        firstTrialCountdownDone = true;
       }
-    }
-    return dp[m][n];
-  }
-
-  // Similarity score between 0 and 1
-  function wordSimilarity(target, spoken) {
-    if (!target || !spoken) return 0;
-    const t = target.toLowerCase().replace(/[^a-z]/g, '');
-    const s = spoken.toLowerCase().replace(/[^a-z]/g, '');
-    if (t === s) return 1;
-    if (!t.length || !s.length) return 0;
-    const dist = levenshtein(t, s);
-    const maxLen = Math.max(t.length, s.length);
-    return Math.max(0, 1 - dist / maxLen);
-  }
-
-  // Match ASR words to target words using greedy best-match alignment
-  // Returns { wordsCorrect, wordsTotal, accuracyPct, details[] }
-  function matchWords(targetWords, asrText, similarityThreshold = 0.6) {
-    const spokenWords = normalizeText(asrText);
-    const total = targetWords.length;
-    
-    if (spokenWords.length === 0) {
-      return {
-        wordsCorrect: 0,
-        wordsTotal: total,
-        accuracyPct: 0,
-        details: targetWords.map(w => ({ target: w, spoken: '—', similarity: 0, correct: false })),
-      };
-    }
-
-    // Dynamic programming alignment: greedy best-match
-    const used = new Set();
-    const details = [];
-    let correct = 0;
-
-    for (const tw of targetWords) {
-      let bestIdx = -1, bestSim = 0;
-      for (let j = 0; j < spokenWords.length; j++) {
-        if (used.has(j)) continue;
-        const sim = wordSimilarity(tw, spokenWords[j]);
-        if (sim > bestSim) { bestSim = sim; bestIdx = j; }
-      }
-
-      // Threshold: similarity ≥ 0.6 counts as a "correct" word
-      const isCorrect = bestSim >= similarityThreshold;
-      if (bestIdx >= 0 && isCorrect) {
-        used.add(bestIdx);
-        correct++;
-        details.push({ target: tw, spoken: spokenWords[bestIdx], similarity: bestSim, correct: true });
-      } else {
-        details.push({ target: tw, spoken: bestIdx >= 0 ? spokenWords[bestIdx] : '—', similarity: bestSim, correct: false });
-      }
-    }
-
-    return {
-      wordsCorrect: correct,
-      wordsTotal: total,
-      accuracyPct: (correct / total) * 100,
-      details,
-    };
-  }
-
-  // Enhanced computeWER with fuzzy matching
-  function computeWER(reference, hypothesis, useFuzzy = true){
-    const ref = normalizeText(reference);
-    const hyp = normalizeText(hypothesis);
-    
-    if(useFuzzy && hyp.length > 0) {
-      // Use fuzzy matching for accuracy calculation
-      const match = matchWords(ref, hypothesis);
-      const correctWords = match.wordsCorrect;
-      const accuracyPct = match.accuracyPct;
-      const wer = 1 - (accuracyPct / 100); // WER = 1 - accuracy
-      
-      return {
-        wer: Math.min(wer, 1.0),
-        sub: 0, del: 0, ins: 0, // Not applicable with fuzzy matching
-        refLen: ref.length,
-        hypLen: hyp.length,
-        correctWords,
-        accuracyPct,
-        details: match.details
-      };
-    }
-    
-    // Original exact matching WER
-    if(ref.length === 0) return { wer: hyp.length > 0 ? 1.0 : 0.0, sub: 0, del: 0, ins: hyp.length, refLen: 0, hypLen: hyp.length };
-
-    // DP matrix
-    const n = ref.length, m = hyp.length;
-    const d = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-    for(let i = 0; i <= n; i++) d[i][0] = i;
-    for(let j = 0; j <= m; j++) d[0][j] = j;
-    for(let i = 1; i <= n; i++){
-      for(let j = 1; j <= m; j++){
-        const cost = ref[i - 1] === hyp[j - 1] ? 0 : 1;
-        d[i][j] = Math.min(
-          d[i - 1][j] + 1,        // deletion
-          d[i][j - 1] + 1,        // insertion
-          d[i - 1][j - 1] + cost  // substitution
-        );
-      }
-    }
-
-    // Backtrace to count S, D, I
-    let i = n, j = m, sub = 0, del = 0, ins = 0;
-    while(i > 0 || j > 0){
-      if(i > 0 && j > 0 && d[i][j] === d[i-1][j-1] + (ref[i-1] !== hyp[j-1] ? 1 : 0)){
-        if(ref[i-1] !== hyp[j-1]) sub++;
-        i--; j--;
-      } else if(i > 0 && d[i][j] === d[i-1][j] + 1){
-        del++; i--;
-      } else {
-        ins++; j--;
-      }
-    }
-
-    const correctWords = Math.max(0, ref.length - del - sub);
-    return {
-      wer: Math.min((sub + del + ins) / ref.length, 1.0),
-      sub, del, ins,
-      refLen: ref.length,
-      hypLen: hyp.length,
-      correctWords
-    };
-  }
-
-  function normalizeText(text){
-    return text
-      .toLowerCase()
-      .replace(/[^\w\s']/g, '')   // strip punctuation except apostrophes
-      .replace(/\s+/g, ' ')
-      .trim()
-      .split(' ')
-      .filter(w => w.length > 0);
-  }
-
-  // WER → 0–6 score (lower WER = better = lower score)
-  function werToScore(wer){
-    const thresholds = [0.05, 0.10, 0.20, 0.35, 0.50, 0.70];
-    for(let i = 0; i < thresholds.length; i++){
-      if(wer <= thresholds[i]) return i;
-    }
-    return 6;
-  }
-
-  // Accuracy → 0–6 score based on % of words correctly spoken via ASR
-  // 0: ≥90%  1: ≥80%  2: ≥65%  3: ≥50%  4: ≥30%  5: ≥10%  6: <10%
-  function accuracyToScore(pct) {
-    if (pct >= 90) return 0;
-    if (pct >= 80) return 1;
-    if (pct >= 65) return 2;
-    if (pct >= 50) return 3;
-    if (pct >= 30) return 4;
-    if (pct >= 10) return 5;
-    return 6;
-  }
-
-  // ------------------------------
-  // Recording pipeline
-  // ------------------------------
-  function startRecording(){
-    chunks = [];
-    currentTranscript = '';
-
-    // -- MediaRecorder (audio capture) --
-    mediaRecorder = new MediaRecorder(stream, { mimeType: pickMime() });
-    mediaRecorder.ondataavailable = e => { if(e.data && e.data.size>0) chunks.push(e.data); };
-    mediaRecorder.onstop = () => { handleRecordingStop(); };
-    mediaRecorder.start();
-
-    // -- SpeechRecognition (runs in parallel for WER) --
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if(SpeechRec){
-      recognition = new SpeechRec();
-      recognition.continuous = true;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-      recognition.onresult = (e) => {
-        let transcript = '';
-        for(let i = 0; i < e.results.length; i++){
-          if(e.results[i].isFinal){
-            transcript += e.results[i][0].transcript + ' ';
-          }
-        }
-        currentTranscript = transcript.trim();
-      };
-      recognition.onerror = (e) => {
-        console.warn('SpeechRecognition error:', e.error);
-      };
-      recognition.start();
-    }
-
-    els.status.textContent = 'Recording…';
-  }
-
-  function stopRecording(){
-    if(mediaRecorder && mediaRecorder.state==='recording') mediaRecorder.stop();
-    if(recognition){
-      try { recognition.stop(); } catch(e){ /* already stopped */ }
-      recognition = null;
-    }
-  }
-
-  function pickMime(){
-    const prefs = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'];
-    for(const m of prefs){ if(MediaRecorder.isTypeSupported(m)) return m; }
-    return '';
-  }
-
-  async function handleRecordingStop(){
-    const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
-    const url = URL.createObjectURL(blob);
-    els.playback.src = url;
-
-    const arrBuf = await blob.arrayBuffer();
-    const audioCtxTmp = new (window.AudioContext || window.webkitAudioContext)();
-    const decoded = await audioCtxTmp.decodeAudioData(arrBuf);
-    const ch0 = decoded.getChannelData(0);
-    const dur = decoded.duration;
-
-    // --- Mean features ---
-    const meanRMS = Math.sqrt(ch0.reduce((s,v)=>s+v*v,0)/ch0.length);
-    const meanF0 = estimateF0(ch0.subarray(0, Math.min(ch0.length, 44100*2)), decoded.sampleRate);
-
-    // --- Frame-wise series -> CVs ---
-    const frameWinSec = 0.030; // 30 ms
-    const hopSec = 0.015;      // 15 ms
-    const frameWin = Math.max(64, Math.floor(decoded.sampleRate * frameWinSec));
-    const hop = Math.max(32, Math.floor(decoded.sampleRate * hopSec));
-
-    const { rmsSeries, f0Series } = seriesFromFrames(ch0, decoded.sampleRate, frameWin, hop);
-    const rmsCV = coeffVar(rmsSeries);
-    const f0CV  = coeffVar(f0Series);
-
-    // --- WER / Accuracy ---
-    const referenceText = SENTENCES[state.iTask];
-    let werResult = null;
-    if(currentTranscript.length > 0){
-      werResult = computeWER(referenceText, currentTranscript, true); // Use fuzzy matching
-    }
-
-    // --- Scoring: blend acoustic CVs + Accuracy + Duration ---
-    const sRMS = cvToScore(rmsCV, [0.45, 0.60, 0.75, 0.90, 1.10, 1.35]);
-    const sF0  = cvToScore(f0CV,  [0.20, 0.30, 0.40, 0.55, 0.70, 0.90]);
-    const sDur = durationToScore(dur, referenceText);
-    const sWER = werResult ? werToScore(werResult.wer) : null;
-    const sAcc = werResult ? accuracyToScore(werResult.accuracyPct || 0) : null;
-
-    let score06;
-    if(sAcc !== null){
-      // Primary: accuracy score from ASR (% words correctly spoken → 0–6)
-      score06 = sAcc;
+      startTrialInternal();
     } else {
-      // Fallback when ASR unavailable: blend acoustic features
-      score06 = Math.round((sRMS + sF0 + sDur) / 3);
+      finalizeRunAndLog();
     }
+  }, 180);
+}
 
-    const meta = currentMeta();
-    const rec = {
-      task: TASKS[state.iTask].key,
-      taskTitle: TASKS[state.iTask].title,
-      rep: state.iRep+1,
-      text: referenceText,
-      transcript: currentTranscript || null,
-      duration: dur,
-      blob, url,
-      features: {
-        meanRMS, meanF0: meanF0||null,
-        rmsCV: isFinite(rmsCV)?rmsCV:null,
-        f0CV:  isFinite(f0CV)?f0CV:null,
-        duration: dur,
-        durationScore: sDur,
-        wer: werResult?.wer ?? null,
-        werSubs: werResult?.sub ?? null,
-        werDels: werResult?.del ?? null,
-        werIns: werResult?.ins ?? null,
-        correctWords: werResult?.correctWords ?? null,
-        refLen: werResult?.refLen ?? null,
-        accuracyPct: werResult?.accuracyPct ?? null,
-        score06,
-        sampleRate: decoded.sampleRate,
-        ...meta
-      }
-    };
-    results.push(rec);
-    appendRow(results.length-1);
-    updateExportsEnabled();
-    els.status.textContent = 'Segment saved';
-  }
+function startTrialInternal(){
+  const [tx,ty] = targets[trialIndex];
+  const radius_px = cm_to_px(cfg.radius_cm);
+  trialState = {
+    target: {x:tx, y:ty, radius_px},
+    positions: [],
+    inside_flags: [],
+    reaction_time: null,
+    start_time_ms: performance.now(),
+    missingFrames: 0
+  };
+  trialRunning = true;
+  appendLog(`<div class="small-muted">Starting trial ${trialIndex+1} (radius ${cfg.radius_cm} cm)</div>`);
+  beep(900,100,0.04);
+}
 
-  // Frame → series helpers
-  function seriesFromFrames(x, sr, win, hop){
-    const n = x.length;
-    const rmsSeries = [];
-    const f0Series = [];
-    for(let start=0; start+win<=n; start+=hop){
-      const frame = x.subarray(start, start+win);
-      // RMS
-      const rms = Math.sqrt(frame.reduce((s,v)=>s+v*v,0)/frame.length);
-      rmsSeries.push(rms);
-      // F0 (skip very quiet frames to reduce pitch errors)
-      if(rms > 0.02){
-        const f0 = estimateF0(frame, sr);
-        if(f0 && isFinite(f0) && f0 > 60 && f0 < 400) f0Series.push(f0);
-      }
+function finalizeRunAndLog(){
+  appendLog(`<div class="small-muted">Finalizing run...</div>`);
+  const count = cfg.targets;
+  const summaries = allTargetSummaries.slice(-count);
+  const scored = summaries.filter(s=>!s.missed && (typeof s.trial_score === 'number'));
+  const scores = scored.map(s => s.trial_score).filter(v=>v!==null && v!==undefined);
+
+  let totalScoreText = 'No valid targets (all missed)';
+  let finalScore = null;
+  if(scores.length === 0){
+    totalScoreText = 'Total Score: — (no valid targets counted)';
+  } else {
+    let arr = scores.slice().sort((a,b)=>a-b);
+    let removedBestWorst = false;
+    if(arr.length >= 5){
+      arr = arr.slice(1, -1);
+      removedBestWorst = true;
     }
-    return { rmsSeries, f0Series };
+    const avg = arr.reduce((a,b)=>a+b,0)/arr.length;
+    finalScore = avg;
+    const removeNote = removedBestWorst ? ` (average of ${arr.length} targets with best & worst removed)` : ` (average of ${arr.length} targets)`;
+    totalScoreText = `Total Score: ${finalScore.toFixed(2)}${removeNote}`;
   }
 
-  function coeffVar(arr){
-    const a = (arr||[]).filter(v=>isFinite(v) && v>0);
-    if(a.length < 10) return NaN;
-    const mean = a.reduce((s,v)=>s+v,0)/a.length;
-    if(mean===0) return NaN;
-    const variance = a.reduce((s,v)=>s+(v-mean)*(v-mean),0)/a.length;
-    const sd = Math.sqrt(variance);
-    return sd/mean;
-  }
+  appendLog(`<div style="margin-top:8px"><strong>✅ Test completed successfully.</strong></div>`);
+  appendLog(`<div style="margin-top:6px"><strong>${totalScoreText}</strong></div>`);
+  const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+  const mean_sara_score = mean(summaries.map(s => s.trial_score).filter(v => typeof v === 'number'));
+  const mean_enhanced_score = mean(summaries.map(s => s.enhanced_score).filter(v => typeof v === 'number'));
+  const mean_distance_to_target_cm = mean(summaries.map(s => s.final_dist_cm).filter(v => typeof v === 'number'));
+  const mean_time_to_target_s = mean(summaries.map(s => s.reaction_time).filter(v => typeof v === 'number'));
+  const mean_percent_time_inside = mean(summaries.map(s => s.percent_time_inside).filter(v => typeof v === 'number'));
+  const mean_tremor = mean(summaries.map(s => s.tremor_cm).filter(v => typeof v === 'number'));
+  const mean_smoothness = mean(summaries.map(s => s.smoothness).filter(v => typeof v === 'number'));
 
-  function cvToScore(cv, thresholds){
-    if(!isFinite(cv)) return 6;
-    for(let i=0;i<thresholds.length;i++){
-      if(cv <= thresholds[i]) return i;
+  const runSummary = {
+    ts: new Date().toISOString(),
+    session_id: `${metaData.participant}_${metaData.date}_${metaData.session}`,
+    participant_id: metaData.participant,
+    session: metaData.session,
+    date: metaData.date,
+    hand: metaData.hand,
+    mode,
+    num_targets: cfg.targets,
+    mean_sara_score,
+    mean_enhanced_score,
+    mean_distance_to_target_cm,
+    mean_time_to_target_s,
+    mean_percent_time_inside,
+    mean_tremor,
+    mean_smoothness,
+    notes: metaData.notes,
+    cfg: {...cfg},
+    targets: summaries,
+    finalScore
+  };
+  window.lastRunSummary = runSummary;
+  allFinalSummaries.push(runSummary);
+  running = false;
+  firstTrialCountdownDone = false;
+}
+
+function random_target_position_with_constraints(existingTargetsPx, radius_px, minDistPx){
+  const maxAttempts = 300;
+  const marginX = radius_px + 8;
+  const marginY = radius_px + 8;
+  for(let a=0;a<maxAttempts;a++){
+    const x = Math.floor(Math.random()*(Math.max(1, VIDEO_W - 2*marginX))) + marginX;
+    const y = Math.floor(Math.random()*(Math.max(1, VIDEO_H - 2*marginY))) + marginY;
+    let ok = true;
+    for(const t of existingTargetsPx){
+      const d = Math.hypot(x - t[0], y - t[1]);
+      if(d < minDistPx){ ok = false; break; }
     }
-    return 6;
+    if(ok) return [x,y];
+  }
+  return [Math.floor(VIDEO_W/2), Math.floor(VIDEO_H/2)];
+}
+
+function startTrail(startPt, endPt, duration=260){
+  if(!cfg.trail) return;
+  trailAnimation = {start:performance.now(), duration, startPt:{x:startPt[0],y:startPt[1]}, endPt:{x:endPt[0],y:endPt[1]}}; 
+}
+
+async function runCountdownAndCue(){
+  if(!cfg.countdown) return;
+  countdownOverlay.style.display = 'flex';
+  const seq = [3,2,1];
+  for(let i=0;i<seq.length;i++){
+    countdownOverlay.textContent = String(seq[i]);
+    beep(700 - i*100, 180, 0.06);
+    await new Promise(r=>setTimeout(r, 600));
+  }
+  countdownOverlay.style.display = 'none';
+}
+
+let firstTrialCountdownDone = false;
+
+startBtn.addEventListener('click', async ()=>{
+  saveSettingsToLocal();
+
+  // camera init only if in camera mode
+  if(mode === 'camera'){
+    if(!hands) await initHands();
+    if(!camera) await startCamera();
+    resizeCanvasBacking();
+  } else {
+    // cursor mode: set VIDEO_W/VIDEO_H to working canvas virtual pixel space (CSS pixels)
+    const viewerRect = viewer.getBoundingClientRect();
+    VIDEO_W = Math.max(1, Math.floor(viewerRect.width));
+    VIDEO_H = Math.max(1, Math.floor(viewerRect.height));
+    resizeCanvasBacking();
+    // show calibration UI overlay
+    calibUI.style.display = 'flex';
   }
 
-  // Duration scoring: based on speaking time vs expected time
-  // Expected WPM range: 120-160 (use 140 as midpoint)
-  // Thresholds:
-  //   ±0.5 sec: normal (0)
-  //   ±1-1.5 sec: mildly slow/fast (1)
-  //   ±1.5-2 sec: moderately slow/fast (2)
-  //   ±2-3 sec: severely slow/fast (4-5)
-  //   >3 sec: extremely slow/fast (6)
-  function durationToScore(actualDur, referenceText) {
-    const words = normalizeText(referenceText).length;
-    const expectedWPM = 140; // Midpoint between 120-160 WPM
-    const expectedDur = (words / expectedWPM) * 60; // Convert WPM to sec
-    const diff = Math.abs(actualDur - expectedDur);
-    
-    if (diff <= 0.5) return 0;      // Normal range
-    if (diff <= 1.5) return 1;      // Mildly off
-    if (diff <= 2.0) return 2;      // Moderately off
-    if (diff <= 3.0) return 4;      // Severely off (skip 3 to emphasize severity)
-    if (diff <= 4.5) return 5;      // Very severe
-    return 6;                        // Extremely slow/fast
+  running = true;
+  trialIndex = 0;
+  targets = [];
+
+  // generate targets relative to VIDEO_W/VIDEO_H (which we've set above)
+  const minDistPx = cm_to_px(cfg.min_distance_cm);
+  const radius_px = cm_to_px(cfg.radius_cm);
+  for(let i=0;i<cfg.targets;i++){
+    const p = random_target_position_with_constraints(targets, radius_px, minDistPx);
+    targets.push(p);
+  }
+  appendLog(`<div class="small-muted">Generated ${targets.length} targets (${mode})</div>`);
+
+  // start-of-run countdown once
+  if(cfg.countdown){
+    await runCountdownAndCue();
+    firstTrialCountdownDone = true;
+  } else {
+    firstTrialCountdownDone = false;
   }
 
-  function appendRow(idx){
-    const r = results[idx];
-    const f = r.features;
-    const tr = document.createElement('tr');
-    const dl = document.createElement('a');
-    dl.textContent = 'AUDIO'; dl.href = r.url; dl.download = `${f.participant}_${r.task}.webm`;
-
-    tr.innerHTML =
-      `<td>${idx+1}</td>`+
-      `<td>${r.taskTitle}</td>`+
-      `<td>${r.duration.toFixed(2)}</td>`+
-      `<td>${num(f.meanRMS,3)}</td>`+
-      `<td>${num(f.rmsCV,3)}</td>`+
-      `<td>${num(f.meanF0,1,true)}</td>`+
-      `<td>${num(f.f0CV,3)}</td>`+
-      `<td>${f.wer != null ? (f.wer * 100).toFixed(1) + '%' : '—'}</td>`+
-      `<td>${f.correctWords != null ? f.correctWords + '/' + f.refLen : '—'}</td>`+
-      `<td><b>${f.score06}</b></td>`;
-    const td = document.createElement('td'); td.appendChild(dl); tr.appendChild(td);
-    els.rows.appendChild(tr);
+  // start capturing mouse events if cursor mode
+  if(mode === 'cursor'){
+    attachCursorListeners();
   }
 
-  function num(v, digits=3, dash=false){
-    if(v==null || !isFinite(v)) return dash?'—':'';
-    return Number(v).toFixed(digits);
+  startTrialInternal();
+});
+
+/* Run Again */
+runAgainBtn.addEventListener('click', async ()=>{
+  if(running){
+    appendLog('<div class="small-muted">Already running — stop first to run again.</div>');
+    return;
   }
+  startBtn.click();
+});
 
-  function updateExportsEnabled(){
-    const has = results.length>0;
-    els.btnCSV.disabled = !has; els.btnJSON.disabled = !has; els.btnClear.disabled = !has;
-  }
+/* stop */
+stopBtn.addEventListener('click', ()=>{
+  running = false;
+  trialRunning = false;
+  trialState = null;
+  detachCursorListeners();
+  stopCamera();
+  calibUI.style.display = 'none';
+  appendLog('<div class="small-muted">Test stopped by user.</div>');
+  statusLine.textContent = 'Stopped';
+});
 
-  function currentMeta(){
-    return {
-      participant: els.pid.value || 'NA',
-      session: els.sid.value || 'S1',
-      micDistanceCM: Number(els.micdist.value||0),
-      recordedAt: new Date().toISOString(),
-      deviceCaps: els.caps.textContent,
-    };
-  }
-
-  // ------------------------------
-  // Test flow
-  // ------------------------------
-  function setInstruction(text){ els.instr.textContent = text; }
-
-  function beginTest(){
-    state.running = true; state.iTask = 0; state.iRep = 0;
-    els.status.textContent = 'Ready';
-    stepUI();
-  }
-
-  function stepUI(){
-    if(!state.running){ setInstruction('Test was stopped.'); return; }
-    const T = TASKS[state.iTask];
-    setInstruction(`▶ ${T.title} · ${T.prompt}`);
-    els.btnRecord.disabled = false; els.btnDone.disabled = true;
-  }
-
-  function afterSegment(){
-    const T = TASKS[state.iTask];
-    state.iRep++;
-    if(state.iRep < T.repeat){
-      setInstruction(`Rest, then repeat. When ready, press "Start Recording".`);
-      els.btnRecord.disabled = false; els.btnDone.disabled = true;
-    } else {
-      state.iTask++;
-      state.iRep = 0;
-      if(state.iTask >= TASKS.length){
-        finishTest();
-      } else {
-        stepUI();
-      }
+/* calibrate button (camera or user) */
+calibrateBtn.addEventListener('click', async ()=>{
+  if(mode === 'camera'){
+    if(!hands) await initHands();
+    if(!camera) await startCamera();
+    resizeCanvasBacking();
+    const ok = await startCalibrationPromise();
+    if(ok){
+      appendLog('<div class="small-muted">Calibration OK</div>');
+      cfg_ppc.value = pixels_per_cm.toFixed(2);
+      ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
     }
+  } else {
+    // In cursor mode, we can re-compute ppc estimate from monitor controls
+    estimatePpcFromMonitor();
+    appendLog('<div class="small-muted">Pixels/cm estimated for Cursor Test — verify with the green bar.</div>');
   }
+});
 
-  const SCORE_LABELS = ['Normal','Minimal','Mild','Moderate','Mod-Severe','Severe','Very Severe'];
-  const SCORE_COLORS = ['#22c55e','#84cc16','#eab308','#f97316','#f97316','#ef4444','#dc2626'];
+/* export CSV (3 files) - include mode in final summary export */
+exportBtn.addEventListener('click', ()=>{
+  const sanitize = (value) => String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
+  const participant = sanitize(metaData.participant || DEFAULT_META.participant) || 'P000';
+  const sessionLabel = sanitize(metaData.session || DEFAULT_META.session) || 'S1';
+  const dateLabel = (metaData.date || DEFAULT_META.date).slice(0,10);
+  const handLabel = (metaData.hand && metaData.hand.trim()) ? sanitize(metaData.hand) : 'Unknown';
+  const sessionId = `${participant}_${dateLabel}_${sessionLabel}`;
+  const fileSuffix = `${participant}${dateLabel}${sessionLabel}`;
 
-  function showScoreSummary() {
-    if (!results.length) return;
-    const panel = document.getElementById('score-summary');
-    if (!panel) return;
-    panel.style.display = '';
-
-    const avg = results.reduce((s,r) => s + r.features.score06, 0) / results.length;
-    const overall = Math.round(avg);
-    const totalDur = results.reduce((s,r) => s + r.duration, 0);
-
-    const f0CVs = results.map(r => r.features.f0CV).filter(v => v != null && isFinite(v));
-    const meanF0CV = f0CVs.length ? f0CVs.reduce((s,v) => s+v, 0) / f0CVs.length : null;
-    const pitchLabel = meanF0CV == null ? '—'
-      : meanF0CV < 0.15 ? 'Stable' : meanF0CV < 0.30 ? 'Moderate' : 'Variable';
-
-    const withAcc = results.filter(r => r.features.accuracyPct != null);
-    const avgAcc = withAcc.length
-      ? withAcc.reduce((s,r) => s + r.features.accuracyPct, 0) / withAcc.length : null;
-    const totalCorrect = withAcc.reduce((s,r) => s + (r.features.correctWords || 0), 0);
-    const totalWords   = withAcc.reduce((s,r) => s + (r.features.refLen || 0), 0);
-
-    const rows = results.map(r => {
-      const c = SCORE_COLORS[r.features.score06];
-      const words = (r.features.correctWords != null && r.features.refLen != null)
-        ? `${r.features.correctWords}/${r.features.refLen}` : '—';
-      const acc = r.features.accuracyPct != null ? r.features.accuracyPct.toFixed(0) + '%' : '—';
-      return `<tr>
-        <td>${r.taskTitle}</td>
-        <td style="color:${c};font-weight:700">${r.features.score06}</td>
-        <td>${words}</td>
-        <td>${acc}</td>
-        <td>${r.duration.toFixed(1)}s</td>
-      </tr>`;
-    }).join('');
-
-    document.getElementById('score-content').innerHTML = `
-      <div class="score-badge">
-        <div class="score-big" style="color:${SCORE_COLORS[overall]}">${overall}</div>
-        <div class="score-interp">${SCORE_LABELS[overall]} &nbsp;·&nbsp; 0 = Normal &nbsp;|&nbsp; 6 = Most Severe</div>
-      </div>
-      <div class="stat-row">
-        <div class="stat-box"><div class="stat-box-lbl">Tests Done</div><div class="stat-box-val">${results.length} / ${TASKS.length}</div></div>
-        <div class="stat-box"><div class="stat-box-lbl">Total Time</div><div class="stat-box-val">${totalDur.toFixed(1)}s</div></div>
-        <div class="stat-box"><div class="stat-box-lbl">Words Correct</div><div class="stat-box-val">${totalWords > 0 ? totalCorrect + '/' + totalWords : '—'}</div></div>
-        <div class="stat-box"><div class="stat-box-lbl">Avg Accuracy</div><div class="stat-box-val">${avgAcc != null ? avgAcc.toFixed(0) + '%' : '—'}</div></div>
-        <div class="stat-box"><div class="stat-box-lbl">Pitch</div><div class="stat-box-val">${pitchLabel}</div></div>
-      </div>
-      <table class="bk-tbl">
-        <thead><tr><th>Test</th><th>Score (0–6)</th><th>Words</th><th>Accuracy</th><th>Duration</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
+  // touches csv
+  const touchesHeader = ['touch_id','session_id','target_id','participant_id','session','date','hand','trial_idx','frame_idx','timestamp','x_px','y_px','inside'];
+  const touchesLines = [touchesHeader.join(',')];
+  for(const t of allTouches){
+    const targetId = `${sessionId}_T${t.trialIdx+1}`;
+    const touchId = `${sessionId}_T${t.trialIdx+1}_F${t.frameIdx}`;
+    touchesLines.push([
+      touchId,
+      sessionId,
+      targetId,
+      participant,
+      sessionLabel,
+      dateLabel,
+      handLabel,
+      t.trialIdx,
+      t.frameIdx,
+      t.ts,
+      t.x_px===undefined?'':t.x_px,
+      t.y_px===undefined?'':t.y_px,
+      t.inside?1:0
+    ].join(','));
   }
+  downloadBlob(touchesLines.join('\n'), `RT_touches_${fileSuffix}.csv`);
 
-  function finishTest(){
-    state.running = false;
-    setInstruction('All tests are complete. Please export CSV/JSON.');
-    els.status.textContent = 'Done';
-    els.btnRecord.disabled = true; els.btnDone.disabled = true;
-    showScoreSummary();
+  // targets summary csv
+  const targHeader = ['target_id','session_id','participant_id','session','date','hand','trial_global_index','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','time_to_target_s','percent_time_inside','frames_recorded','missed','valid','sara_score','enhanced_score'];
+  const targLines = [targHeader.join(',')];
+  for(const s of allTargetSummaries){
+    const targetId = `${sessionId}_T${s.trial}`;
+    const valid = s.missed ? 0 : 1;
+    targLines.push([
+      targetId,
+      sessionId,
+      participant,
+      sessionLabel,
+      dateLabel,
+      handLabel,
+      s.trial,
+      s.tx,
+      s.ty,
+      s.radius_cm,
+      s.radius_px,
+      s.final_dist_cm!==null ? s.final_dist_cm.toFixed(3):'',
+      s.reaction_time!==null ? s.reaction_time.toFixed(3):'',
+      s.percent_time_inside.toFixed(2),
+      s.frames_recorded,
+      s.missed?1:0,
+      valid,
+      s.trial_score!==null ? s.trial_score.toFixed(3) : '',
+      s.enhanced_score!==null ? s.enhanced_score.toFixed(3) : ''
+    ].join(','));
   }
+  downloadBlob(targLines.join('\n'), `RT_targets_summary_${fileSuffix}.csv`);
 
-  // ------------------------------
-  // Exports
-  // ------------------------------
-  function saveText(name, text){
-    const blob = new Blob([text], {type:'text/plain'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
-  }
-
-  function exportCSV(){
-    const header = [
-      'participant','session','test','duration_s',
-      'mean_rms','rms_cv','mean_f0_hz','f0_cv',
-      'wer','wer_subs','wer_dels','wer_ins',
-      'correct_words','total_words','accuracy_pct',
-      'score_0_6',
-      'sample_rate','mic_cm','recorded_at','device_caps',
-      'reference_text','transcript'
-    ];
-    const lines = [header.join(',')];
-    for(const r of results){
-      const f = r.features;
-      lines.push([
-        f.participant,
+  // final summary
+  const finalHeader = ['session_id','participant_id','session','trial','date','hand','mode','num_targets','sara_score','enhanced_score','distance_to_target_cm','time_to_target_s','percent_time_inside','notes'];
+  const finalLines = [finalHeader.join(',')];
+  for(const f of allFinalSummaries){
+    for(const s of f.targets){
+      finalLines.push([
+        f.session_id,
+        f.participant_id,
         f.session,
-        r.taskTitle,
-        r.duration.toFixed(3),
-        f.meanRMS?.toFixed(6) ?? '',
-        isFinite(f.rmsCV)?f.rmsCV.toFixed(6):'',
-        f.meanF0!=null && isFinite(f.meanF0)?f.meanF0.toFixed(2):'',
-        isFinite(f.f0CV)?f.f0CV.toFixed(6):'',
-        f.wer != null ? f.wer.toFixed(4) : '',
-        f.werSubs ?? '',
-        f.werDels ?? '',
-        f.werIns ?? '',
-        f.correctWords ?? '',
-        f.refLen ?? '',
-        f.accuracyPct != null ? f.accuracyPct.toFixed(1) : '',
-        f.score06 ?? '',
-        f.sampleRate ?? '',
-        f.micDistanceCM ?? '',
-        f.recordedAt ?? '',
-        JSON.stringify(f.deviceCaps||''),
-        '"' + (r.text.replaceAll('"','\"')) + '"',
-        '"' + ((r.transcript||'').replaceAll('"','\"')) + '"'
+        s.trial,
+        f.date,
+        f.hand,
+        f.mode,
+        f.num_targets,
+        s.trial_score !== null ? s.trial_score.toFixed(3) : '',
+        s.enhanced_score !== null ? s.enhanced_score.toFixed(3) : '',
+        s.final_dist_cm !== null ? s.final_dist_cm.toFixed(3) : '',
+        s.reaction_time !== null ? s.reaction_time.toFixed(3) : '',
+        s.percent_time_inside.toFixed(2),
+        f.notes || ''
       ].join(','));
     }
-    saveText(`${(results[0]?.features.participant||'session')}_speech_reading.csv`, lines.join('\n'));
   }
+  downloadBlob(finalLines.join('\n'), `RT_final_summary_${fileSuffix}.csv`);
+  appendLog(`<div class="small-muted">Exported CSVs</div>`);
+});
 
-  function exportJSON(){
-    const out = results.map(({taskTitle,duration,features,text,transcript})=>({test:taskTitle,duration,features,text,transcript}));
-    saveText(`${(results[0]?.features.participant||'session')}_speech_reading.json`, JSON.stringify(out,null,2));
+/* helper download */
+function downloadBlob(text, filename){
+  const blob = new Blob([text], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* clear log */
+clearLogBtn.addEventListener('click', ()=>{ clearLog(); });
+
+/* reset data */
+resetDataBtn.addEventListener('click', ()=>{
+  allTouches = [];
+  allTargetSummaries = [];
+  allFinalSummaries = [];
+  appendLog('<div class="small-muted">All past data cleared</div>');
+});
+
+/* save/apply settings */
+saveSettingsBtn.addEventListener('click', ()=>{ saveSettingsToLocal(); });
+applySettingsBtnLite.addEventListener('click', ()=>{ loadSettingsIntoRuntime(); appendLog('<div class="small-muted">Settings applied (temporary)</div>'); });
+resetSettingsBtnLocal.addEventListener('click', ()=>{ resetSettings(); });
+
+
+/* attach/detach cursor listeners */
+function attachCursorListeners(){
+  canvas.style.cursor = 'crosshair';
+  canvas.addEventListener('mousemove', onCanvasMouseMove);
+  canvas.addEventListener('mousedown', onCanvasMouseDown);
+  canvas.addEventListener('mouseup', onCanvasMouseUp);
+  canvas.addEventListener('mouseleave', onCanvasMouseLeave);
+}
+function detachCursorListeners(){
+  canvas.style.cursor = 'default';
+  canvas.removeEventListener('mousemove', onCanvasMouseMove);
+  canvas.removeEventListener('mousedown', onCanvasMouseDown);
+  canvas.removeEventListener('mouseup', onCanvasMouseUp);
+  canvas.removeEventListener('mouseleave', onCanvasMouseLeave);
+  lastMousePos = null;
+}
+
+/* mouse handlers store last position in CSS pixels (relative to canvas) */
+function onCanvasMouseMove(e){
+  const rect = canvas.getBoundingClientRect();
+  lastMousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+function onCanvasMouseDown(e){
+  cursorIsDown = true;
+  onCanvasMouseMove(e);
+}
+function onCanvasMouseUp(e){
+  cursorIsDown = false;
+  onCanvasMouseMove(e);
+}
+function onCanvasMouseLeave(e){
+  lastMousePos = null;
+}
+
+/* monitor estimate -> pixels/cm */
+function estimatePpcFromMonitor(){
+  let diagIn = monitorSize.value === 'custom' ? parseFloat(monitorCustom.value) : parseFloat(monitorSize.value);
+  if(!diagIn || diagIn <= 0) diagIn = parseFloat(monitorSize.value) || 24;
+  const diagonal_mm = diagIn * 25.4;
+  const aspectW = 16, aspectH = 9;
+  const ratio = Math.sqrt(aspectW*aspectW + aspectH*aspectH);
+  const width_mm = diagonal_mm * (aspectW / ratio);
+  const width_cm = width_mm / 10.0;
+  const cssScreenPx = window.screen.width;
+  const est_ppc = cssScreenPx / width_cm;
+  pixels_per_cm = est_ppc;
+  cfg_ppc.value = pixels_per_cm.toFixed(2);
+  ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+  updateCalibBar();
+  return pixels_per_cm;
+}
+
+estimatePpcBtn.addEventListener('click', ()=>{
+  const p = estimatePpcFromMonitor();
+  appendLog(`<div class="small-muted">Estimated ${p.toFixed(2)} px/cm from monitor selection. Verify with green bar.</div>`);
+});
+
+monitorSize.addEventListener('change', ()=>{
+  if(monitorSize.value === 'custom'){
+    monitorCustom.style.display = 'inline-block';
+  } else {
+    monitorCustom.style.display = 'none';
   }
+});
 
-  function clearAll(){
-    results.splice(0,results.length);
-    els.rows.innerHTML='';
-    updateExportsEnabled();
-    els.playback.removeAttribute('src');
-    const panel = document.getElementById('score-summary');
-    if (panel) { panel.style.display = 'none'; document.getElementById('score-content').innerHTML = ''; }
+/* update calibration bar width according to pixels_per_cm and current canvas scale
+   ensure bar doesn't overflow viewer area — cap to viewer width - margins
+*/
+function updateCalibBar(){
+  const viewerRect = viewer.getBoundingClientRect();
+  const pxFor8_5cm = Math.round(pixels_per_cm * 8.5);
+  const maxWidth = Math.max(24, Math.floor(viewerRect.width - 48)); // leave margins
+  const w = Math.min(pxFor8_5cm, maxWidth);
+  calibBar.style.width = w + 'px';
+}
+
+/* Mode toggle click handlers */
+modeCursor.addEventListener('click', ()=>{
+  setMode('cursor');
+});
+modeCamera.addEventListener('click', ()=>{
+  setMode('camera');
+});
+function setMode(m){
+  if(m === mode) return;
+  mode = m;
+  if(mode === 'cursor'){
+    modeCursor.classList.add('active');
+    modeCamera.classList.remove('active');
+    modeBadge.textContent = 'Cursor';
+    // stop camera if running
+    stopCamera();
+    calibUI.style.display = 'flex';
+  } else {
+    modeCamera.classList.add('active');
+    modeCursor.classList.remove('active');
+    modeBadge.textContent = 'Camera (Beta)';
+    calibUI.style.display = 'none';
+    // ensure camera will be initialized when starting
   }
+  appendLog(`<div class="small-muted">Mode switched to ${mode}</div>`);
+  resizeCanvasBacking();
+}
 
-  // ------------------------------
-  // Capability probe
-  // ------------------------------
-  async function probeCaps(){
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const micNames = devices.filter(d=>d.kind==='audioinput').map(d=>d.label||'Mic');
-    els.caps.textContent = `${micNames[0]||'Mic'} · noiseSuppression:on · echoCancellation:on`;
-  }
+/* Run initialization */
+function init(){
+  loadSettingsFromLocal();
+  resizeCanvasBacking();
+  appendLog('<div class="small-muted">App ready. Verify settings. Use Cursor Test for mouse-based runs; Camera Test is beta.</div>');
+}
+init();
 
-  // ------------------------------
-  // Bindings
-  // ------------------------------
-  els.btnPerm.onclick = async()=>{ await ensureMic(); await probeCaps(); };
-  els.btnStart.onclick = async()=>{ await ensureMic(); await probeCaps(); beginTest(); };
-  els.btnStop.onclick = ()=>{ state.running=false; finishTest(); };
+/* observe viewer size changes */
+new ResizeObserver(()=>{ resizeCanvasBacking(); }).observe(document.getElementById('viewer'));
 
-  let countdownTimer=null; let countdownLeft=0;
-  els.btnRecord.onclick = ()=>{
-    if(!state.running) return;
-    const T = TASKS[state.iTask];
-    els.btnRecord.disabled = true; els.btnDone.disabled = true;
-    startRecording();
-    startCountdown(T.seconds, ()=>{
-      stopRecording();
-      els.btnDone.disabled = false;
-    });
-  };
-  els.btnDone.onclick = ()=>{ els.btnDone.disabled = true; afterSegment(); };
-
-  function startCountdown(seconds, onElapsed){
-    countdownLeft = seconds;
-    const label = (s)=>`Recording… ${s}s left`;
-    els.status.textContent = label(countdownLeft);
-    if(countdownTimer) clearInterval(countdownTimer);
-    countdownTimer = setInterval(()=>{
-      countdownLeft--;
-      els.status.textContent = label(countdownLeft);
-      if(countdownLeft<=0){ clearInterval(countdownTimer); onElapsed && onElapsed(); }
-    },1000);
-  }
-
-  // ------------------------------
-  // Hook up exports & clear
-  // ------------------------------
-  els.btnCSV.onclick = exportCSV;
-  els.btnJSON.onclick = exportJSON;
-  els.btnClear.onclick = clearAll;
-
+/* Ensure page draws continuously when running/receiving data */
+(function tick(){
+  if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
+  requestAnimationFrame(tick);
 })();
