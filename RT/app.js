@@ -1035,19 +1035,10 @@ function downloadBlob(text, filename){
 /* clear log */
 clearLogBtn.addEventListener('click', ()=>{ clearLog(); });
 
-/* reset data */
-resetDataBtn.addEventListener('click', ()=>{
-  allTouches = [];
-  allTargetSummaries = [];
-  allFinalSummaries = [];
-  appendLog('<div class="small-muted">All past data cleared</div>');
-});
-
 /* save/apply settings */
 saveSettingsBtn.addEventListener('click', ()=>{ saveSettingsToLocal(); });
 applySettingsBtnLite.addEventListener('click', ()=>{ loadSettingsIntoRuntime(); appendLog('<div class="small-muted">Settings applied (temporary)</div>'); });
 resetSettingsBtnLocal.addEventListener('click', ()=>{ resetSettings(); });
-
 
 /* attach/detach cursor listeners */
 function attachCursorListeners(){
@@ -1158,6 +1149,7 @@ function setMode(m){
     cfg_radius_cm.value = "5.0";
     cfg_min_distance_cm.value = "10.0";
   }
+}
 
 /* Run initialization */
 function init(){
