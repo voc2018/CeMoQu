@@ -90,9 +90,9 @@ const LS_SETTINGS = LS_PREFIX + 'settings';
 const DEFAULTS = {
   targets: 5,
   interval_s: 2.0,
-  radius_cm: 5.0,
+  radius_cm: 2.0,
   edge_px: 20,
-  min_distance_cm: 20.0,
+  min_distance_cm: 5.0,
   center_dot: true,
   trail: true,
   countdown: false,
@@ -277,15 +277,23 @@ async function initHands(){
 async function startCamera(){
   const vw = 640, vh = 480;
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:vw},height:{ideal:vh}}, audio:false});
-    video.srcObject = stream;
-    await video.play();
-    VIDEO_W = video.videoWidth || vw;
-    VIDEO_H = video.videoHeight || vh;
-    appendLog(`<div class="small-muted">Camera ready: ${VIDEO_W}x${VIDEO_H}</div>`);
+    VIDEO_W = vw;
+    VIDEO_H = vh;
     resizeCanvasBacking();
-    camera = new Camera(video, { onFrame: async () => { await hands.send({image:video}); }, width:VIDEO_W, height:VIDEO_H });
-    camera.start();
+    appendLog(`<div class="small-muted">Camera starting...</div>`);
+
+    camera = new Camera(video, { 
+      onFrame: async () => { await hands.send({image:video}); }, 
+      width: vw, 
+      height: vh 
+    });
+    await camera.start();
+
+    if(video.videoWidth) VIDEO_W = video.videoWidth;
+    if(video.videoHeight) VIDEO_H = video.videoHeight;
+    resizeCanvasBacking();
+    appendLog(`<div class="small-muted">Camera ready: ${VIDEO_W}x${VIDEO_H}</div>`);
+
   }catch(e){
     appendLog(`<div style="color:#f88">Camera error: ${e.message}</div>`);
     throw e;
@@ -451,7 +459,7 @@ function drawFrame(){
     ctx.lineWidth = Math.max(2, cfg.edge_px);
     ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.round(r_px * (layout.destW / VIDEO_W)), 0, Math.PI*2); ctx.stroke();
     if(cfg.center_dot){
-      const cpx = cm_to_px(1.0);
+      const cpx = cm_to_px(cfg.radius_cm*0.2);
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.max(3, Math.round(cpx * (layout.destW/VIDEO_W))), 0, Math.PI*2); ctx.fill();
     }
@@ -1127,6 +1135,7 @@ modeCamera.addEventListener('click', ()=>{
 function setMode(m){
   if(m === mode) return;
   mode = m;
+  
   if(mode === 'cursor'){
     modeCursor.classList.add('active');
     modeCamera.classList.remove('active');
@@ -1134,16 +1143,21 @@ function setMode(m){
     // stop camera if running
     stopCamera();
     calibUI.style.display = 'flex';
+    
+    // NEW: Set default radius to 1 cm for Cursor
+    cfg_radius_cm.value = "2.0"; 
+    cfg_min_distance_cm.value = "5.0";
   } else {
     modeCamera.classList.add('active');
     modeCursor.classList.remove('active');
     modeBadge.textContent = 'Camera (Beta)';
     calibUI.style.display = 'none';
     // ensure camera will be initialized when starting
+    
+    // NEW: Set default radius to 5 cm for Camera
+    cfg_radius_cm.value = "5.0";
+    cfg_min_distance_cm.value = "10.0";
   }
-  appendLog(`<div class="small-muted">Mode switched to ${mode}</div>`);
-  resizeCanvasBacking();
-}
 
 /* Run initialization */
 function init(){
