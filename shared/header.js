@@ -12,6 +12,7 @@ async function loadHeader() {
         document.getElementById('nav-sd').href   = './SD/index.html';
         document.getElementById('nav-rt').href   = './RT/index.html';
         document.getElementById('nav-ld').href   = './LD/index.html';
+        document.getElementById('nav-st').href   = './ST/index.html';
     }
 
     setupPersistence();
