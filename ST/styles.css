@@ -3,20 +3,20 @@
 /* ============================= */
 
 :root {
-  --st-accent: #00dfa2;
-  --st-accent2: #00b8ff;
+  --st-accent: #203fdb;
+  --st-accent2: #21c1fb;
   --st-warn: #f5c842;
   --st-border: #162a38;
   --st-border2: #1e3a50;
   --st-panel: #0b1a24;
   --st-panel2: #0e2030;
   --st-muted2: #6a90a0;
-  --s0: #00dfa2;
+  --s0: #22c55e;
   --s1: #80e000;
   --s2: #f5c842;
   --s3: #ff8c00;
   --s4: #ff3a3a;
-  --st-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --st-font-mono: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* ============================= */
@@ -310,8 +310,8 @@
 }
 
 #guideToggle:hover {
-  background: var(--st-accent) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--st-accent), var(--st-accent2)) !important;
+  color: #052012 !important;
 }
 
 /* ============================= */
@@ -401,8 +401,8 @@
 
 .gtip-btn {
   padding: 5px 12px !important;
-  background: var(--st-accent) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--st-accent), var(--st-accent2)) !important;
+  color: #052012 !important;
   border: none !important;
   border-radius: 999px !important;
   cursor: pointer;
@@ -489,8 +489,8 @@
 }
 
 .st-tab.active {
-  background: var(--st-accent) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--st-accent), var(--st-accent2)) !important;
+  color: #052012 !important;
   border-color: var(--st-accent) !important;
   font-weight: 700;
 }
@@ -553,15 +553,16 @@
 }
 
 .st-side button.pri {
-  background: var(--st-accent) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--st-accent), var(--st-accent2)) !important;
+  color: #052012 !important;
   border-color: var(--st-accent) !important;
   font-weight: 700;
 }
 
 .st-side button.pri:hover:enabled {
-  background: #00c07a !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--st-accent), var(--st-accent2)) !important;
+  color: #052012 !important;
+  filter: brightness(1.03);
 }
 
 .st-side button.dng {
@@ -784,17 +785,17 @@
   font-size: 13px !important;
   font-weight: 700;
   letter-spacing: 1px;
-  background: var(--st-accent) !important;
-  color: #000 !important;
+  background: linear-gradient(135deg, var(--st-accent), var(--st-accent2)) !important;
+  color: #052012 !important;
   border: none !important;
   border-radius: 999px !important;
   cursor: pointer;
   font-family: var(--st-font-mono);
   margin-top: 4px;
-  transition: background .2s;
+  transition: filter .2s;
 }
 
-#bigDlAll:hover:enabled { background: #00c07a !important; }
+#bigDlAll:hover:enabled { filter: brightness(1.03); }
 
 #noRuns {
   color: var(--muted);
@@ -819,18 +820,18 @@
 }
 
 #scoreOv button.pri {
-  background: var(--st-accent);
-  color: #000;
+  background: linear-gradient(135deg, var(--st-accent), var(--st-accent2));
+  color: #052012;
   border-color: var(--st-accent);
 }
 
 #scoreOv button:hover { border-color: var(--st-accent); color: var(--st-accent); }
-#scoreOv button.pri:hover { background: #00c07a; color: #000; }
+#scoreOv button.pri:hover { filter: brightness(1.03); color: #052012; }
 
 /* ============================= */
 /* TOPBAR PILLS (status)         */
 /* ============================= */
 .st-app .pill.ok   { border-color: var(--st-accent); color: var(--st-accent); }
-.st-app .pill.ok .pill-dot { background: var(--st-accent); box-shadow: 0 0 10px rgba(0, 223, 162, .7); }
+.st-app .pill.ok .pill-dot { background: var(--st-accent); box-shadow: 0 0 10px rgba(32, 63, 219, .7); }
 .st-app .pill.warn { border-color: var(--st-warn); color: var(--st-warn); }
 .st-app .pill.warn .pill-dot { background: var(--st-warn); box-shadow: 0 0 10px rgba(245, 200, 66, .7); }
