@@ -928,7 +928,7 @@ calibrateBtn.addEventListener('click', async ()=>{
   } else {
     // In cursor mode, we can re-compute ppc estimate from monitor controls
     estimatePpcFromMonitor();
-    appendLog('<div class="small-muted">Pixels/cm estimated for Cursor Test — verify with the green bar.</div>');
+    appendLog('<div class="small-muted">Pixels/cm estimated for Cursor Mode — verify with the green bar.</div>');
   }
 });
 
@@ -1155,7 +1155,7 @@ function setMode(m){
 function init(){
   loadSettingsFromLocal();
   resizeCanvasBacking();
-  appendLog('<div class="small-muted">App ready. Verify settings. Use Cursor Test for mouse-based runs; Camera Test is beta.</div>');
+  appendLog('<div class="small-muted">App ready. Verify settings. Use Cursor Mode for mouse-based runs; Camera Mode for a webcam.</div>');
 }
 init();
 
