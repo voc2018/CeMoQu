@@ -1,6 +1,6 @@
 # CeMoQu
 
-**Cerebellar Motion Quantification for Ataxia Assessment**
+**Cerebellar Motor Quantification for Ataxia Assessment**
 
 CeMoQu is a web-based digital assessment platform designed to support objective and quantitative evaluation of selected SARA-related motor and speech functions. It allows users to perform browser-based self-assessment tasks and generates structured quantitative metrics that may support longitudinal tracking, research, and clinical decision-making for ataxia and cerebellar disorders.
 
