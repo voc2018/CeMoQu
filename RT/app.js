@@ -66,11 +66,21 @@ let mode = 'cursor'; // 'cursor' or 'camera'
 let VIDEO_W = 640, VIDEO_H = 480;
 
 /* Backing buffer scaling */
+function getViewerContentSize(){
+  const viewerStyle = getComputedStyle(viewer);
+  const paddingX = parseFloat(viewerStyle.paddingLeft) + parseFloat(viewerStyle.paddingRight);
+  const paddingY = parseFloat(viewerStyle.paddingTop) + parseFloat(viewerStyle.paddingBottom);
+  return {
+    width: Math.max(1, Math.floor(viewer.clientWidth - paddingX)),
+    height: Math.max(1, Math.floor(viewer.clientHeight - paddingY))
+  };
+}
+
 function resizeCanvasBacking(){
-  const viewerRect = viewer.getBoundingClientRect();
+  const viewerSize = getViewerContentSize();
   const dpr = window.devicePixelRatio || 1;
-  const cssW = Math.max(1, Math.floor(viewerRect.width));
-  const cssH = Math.max(1, Math.floor(viewerRect.height));
+  const cssW = viewerSize.width;
+  const cssH = viewerSize.height;
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
   canvas.width = Math.round(cssW * dpr);
@@ -855,9 +865,9 @@ startBtn.addEventListener('click', async ()=>{
     resizeCanvasBacking();
   } else {
     // cursor mode: set VIDEO_W/VIDEO_H to working canvas virtual pixel space (CSS pixels)
-    const viewerRect = viewer.getBoundingClientRect();
-    VIDEO_W = Math.max(1, Math.floor(viewerRect.width));
-    VIDEO_H = Math.max(1, Math.floor(viewerRect.height));
+    const viewerSize = getViewerContentSize();
+    VIDEO_W = viewerSize.width;
+    VIDEO_H = viewerSize.height;
     resizeCanvasBacking();
     // show calibration UI overlay
     calibUI.style.display = 'flex';
