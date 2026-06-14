@@ -942,95 +942,104 @@ calibrateBtn.addEventListener('click', async ()=>{
   }
 });
 
-/* export CSV (3 files) - include mode in final summary export */
-exportBtn.addEventListener('click', ()=>{
+/* --- CLOUD EXPORT LOGIC --- */
+// INSERT YOUR GOOGLE APPS SCRIPT WEB APP URL HERE:
+const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycby5fnkhhk58RLH_jt-NAjKi-e0D0t-yVtIhX4h3Nqkq_665JClprgwdIY3SOfH7Pp-Cdg/exec";
+
+exportBtn.addEventListener('click', async () => {
+  if (!GOOGLE_SHEET_WEB_APP_URL || GOOGLE_SHEET_WEB_APP_URL === "INSERT_YOUR_GOOGLE_WEB_APP_URL_HERE") {
+    alert("Please configure the Google Sheet Web App URL in the code first.");
+    return;
+  }
+
+  appendLog(`<div class="small-muted">Preparing data for cloud export...</div>`);
+  exportBtn.disabled = true;
+  exportBtn.textContent = "Uploading...";
+
   const sanitize = (value) => String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
   const participant = sanitize(metaData.participant || DEFAULT_META.participant) || 'P000';
   const sessionLabel = sanitize(metaData.session || DEFAULT_META.session) || 'S1';
   const dateLabel = (metaData.date || DEFAULT_META.date).slice(0,10);
   const handLabel = (metaData.hand && metaData.hand.trim()) ? sanitize(metaData.hand) : 'Unknown';
   const sessionId = `${participant}_${dateLabel}_${sessionLabel}`;
-  const fileSuffix = `${participant}${dateLabel}${sessionLabel}`;
 
-  // touches csv
-  const touchesHeader = ['touch_id','session_id','target_id','participant_id','session','date','hand','trial_idx','frame_idx','timestamp','x_px','y_px','inside'];
-  const touchesLines = [touchesHeader.join(',')];
+  // 1. Prepare Touches Data (Arrays of values for Google Sheets)
+  const touchesData = [];
+  touchesData.push(['touch_id','session_id','target_id','participant_id','session','date','hand','trial_idx','frame_idx','timestamp','x_px','y_px','inside']);
   for(const t of allTouches){
-    const targetId = `${sessionId}_T${t.trialIdx+1}`;
-    const touchId = `${sessionId}_T${t.trialIdx+1}_F${t.frameIdx}`;
-    touchesLines.push([
-      touchId,
+    touchesData.push([
+      `${sessionId}_T${t.trialIdx+1}_F${t.frameIdx}`,
       sessionId,
-      targetId,
-      participant,
-      sessionLabel,
-      dateLabel,
-      handLabel,
-      t.trialIdx,
-      t.frameIdx,
-      t.ts,
-      t.x_px===undefined?'':t.x_px,
-      t.y_px===undefined?'':t.y_px,
+      `${sessionId}_T${t.trialIdx+1}`,
+      participant, sessionLabel, dateLabel, handLabel,
+      t.trialIdx, t.frameIdx, t.ts,
+      t.x_px===undefined?'':t.x_px, t.y_px===undefined?'':t.y_px,
       t.inside?1:0
-    ].join(','));
+    ]);
   }
-  downloadBlob(touchesLines.join('\n'), `RT_touches_${fileSuffix}.csv`);
 
-  // targets summary csv
-  const targHeader = ['target_id','session_id','participant_id','session','date','hand','trial_global_index','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','time_to_target_s','percent_time_inside','frames_recorded','missed','valid','sara_score','enhanced_score'];
-  const targLines = [targHeader.join(',')];
+  // 2. Prepare Targets Summary Data
+  const targetsData = [];
+  targetsData.push(['target_id','session_id','participant_id','session','date','hand','trial_global_index','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','time_to_target_s','percent_time_inside','frames_recorded','missed','valid','sara_score','enhanced_score']);
   for(const s of allTargetSummaries){
-    const targetId = `${sessionId}_T${s.trial}`;
-    const valid = s.missed ? 0 : 1;
-    targLines.push([
-      targetId,
-      sessionId,
-      participant,
-      sessionLabel,
-      dateLabel,
-      handLabel,
-      s.trial,
-      s.tx,
-      s.ty,
-      s.radius_cm,
-      s.radius_px,
+    targetsData.push([
+      `${sessionId}_T${s.trial}`, sessionId, participant, sessionLabel, dateLabel, handLabel,
+      s.trial, s.tx, s.ty, s.radius_cm, s.radius_px,
       s.final_dist_cm!==null ? s.final_dist_cm.toFixed(3):'',
       s.reaction_time!==null ? s.reaction_time.toFixed(3):'',
-      s.percent_time_inside.toFixed(2),
-      s.frames_recorded,
-      s.missed?1:0,
-      valid,
+      s.percent_time_inside.toFixed(2), s.frames_recorded,
+      s.missed?1:0, s.missed?0:1,
       s.trial_score!==null ? s.trial_score.toFixed(3) : '',
       s.enhanced_score!==null ? s.enhanced_score.toFixed(3) : ''
-    ].join(','));
+    ]);
   }
-  downloadBlob(targLines.join('\n'), `RT_targets_summary_${fileSuffix}.csv`);
 
-  // final summary
-  const finalHeader = ['session_id','participant_id','session','trial','date','hand','mode','num_targets','sara_score','enhanced_score','distance_to_target_cm','time_to_target_s','percent_time_inside','notes'];
-  const finalLines = [finalHeader.join(',')];
+  // 3. Prepare Final Summary Data
+  const finalData = [];
+  finalData.push(['session_id','participant_id','session','trial','date','hand','mode','num_targets','sara_score','enhanced_score','distance_to_target_cm','time_to_target_s','percent_time_inside','notes']);
   for(const f of allFinalSummaries){
     for(const s of f.targets){
-      finalLines.push([
-        f.session_id,
-        f.participant_id,
-        f.session,
-        s.trial,
-        f.date,
-        f.hand,
-        f.mode,
-        f.num_targets,
+      finalData.push([
+        f.session_id, f.participant_id, f.session, s.trial, f.date, f.hand, f.mode, f.num_targets,
         s.trial_score !== null ? s.trial_score.toFixed(3) : '',
         s.enhanced_score !== null ? s.enhanced_score.toFixed(3) : '',
         s.final_dist_cm !== null ? s.final_dist_cm.toFixed(3) : '',
         s.reaction_time !== null ? s.reaction_time.toFixed(3) : '',
-        s.percent_time_inside.toFixed(2),
-        f.notes || ''
-      ].join(','));
+        s.percent_time_inside.toFixed(2), f.notes || ''
+      ]);
     }
   }
-  downloadBlob(finalLines.join('\n'), `RT_final_summary_${fileSuffix}.csv`);
-  appendLog(`<div class="small-muted">Exported CSVs</div>`);
+
+  const payload = {
+    touches: touchesData,
+    targets: targetsData,
+    final: finalData
+  };
+
+  try {
+    const res = await fetch(GOOGLE_SHEET_WEB_APP_URL, {
+      method: "POST",
+      // Using text/plain bypasses strict CORS preflight checks in browsers
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) throw new Error("Network response was not ok.");
+    
+    const responseData = await res.json();
+    if (responseData.status === "success") {
+      appendLog(`<div class="small-muted" style="color: #10b981;">✅ Data successfully saved to Google Sheets!</div>`);
+      // Optional: Clear arrays here if you don't want to re-upload the same data on next click
+    } else {
+      throw new Error(responseData.message || "Unknown error from server.");
+    }
+  } catch (err) {
+    console.error("Export Error:", err);
+    appendLog(`<div style="color:#f88">❌ Upload failed: ${err.message}. Check console for details.</div>`);
+  } finally {
+    exportBtn.disabled = false;
+    exportBtn.textContent = "Export Data";
+  }
 });
 
 /* helper download */
