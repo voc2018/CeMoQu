@@ -1,4 +1,4 @@
-
+<!-- 
 <!doctype html>
 <html lang="en">
 
@@ -11,11 +11,11 @@
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
-
-<link rel="stylesheet" href="../shared/common.css">
 <link rel="stylesheet" href="../shared/header.css">
-<link rel="stylesheet" href="./styleContainer.css">
+<link rel="stylesheet" href="../shared/styleContainer.css">
+
 <script src="../shared/header.js" defer></script>
+
 </head>
 
 <body>
@@ -531,6 +531,1394 @@ a.download="ataxia_data.json";
 a.click();
 
 }
+
+changeTest();
+
+</script>
+
+</body>
+</html> -->
+
+<!doctype html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>LD + SARA Calibration Module</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+*{
+box-sizing:border-box;
+}
+
+body{
+margin:0;
+font-family:"Inter",sans-serif;
+background:#0f172a;
+color:#e2e8f0;
+}
+
+.shell{
+width:min(1400px,95%);
+margin:auto;
+padding:20px;
+}
+
+.card{
+background:#111827;
+border-radius:14px;
+padding:18px;
+margin-bottom:18px;
+box-shadow:0 0 0 1px rgba(255,255,255,0.05);
+}
+
+header h1{
+margin:0;
+font-size:2rem;
+}
+
+#canvas-container{
+width:100%;
+display:flex;
+justify-content:center;
+align-items:center;
+overflow:auto;
+background:#020617;
+border-radius:12px;
+position:relative;
+}
+
+canvas{
+display:block;
+width:1000px;
+height:700px;
+flex-shrink:0;
+background:#020617;
+touch-action:none;
+}
+
+.bottom-controls{
+display:flex;
+gap:12px;
+flex-wrap:wrap;
+margin-top:15px;
+}
+
+button,
+select,
+input{
+padding:10px 14px;
+border-radius:8px;
+border:none;
+font-size:14px;
+}
+
+button{
+cursor:pointer;
+background:#2563eb;
+color:white;
+font-weight:600;
+}
+
+button:hover{
+background:#1d4ed8;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:15px;
+}
+
+th,td{
+padding:10px;
+border-bottom:1px solid rgba(255,255,255,0.08);
+text-align:left;
+}
+
+.notice{
+font-size:13px;
+color:#cbd5e1;
+margin-top:10px;
+line-height:1.5;
+}
+
+.status-good{
+color:#22c55e;
+font-weight:700;
+}
+
+.status-bad{
+color:#ef4444;
+font-weight:700;
+}
+
+#measurementOverlay{
+position:absolute;
+top:0;
+left:0;
+width:100%;
+height:100%;
+pointer-events:none;
+}
+
+@media(max-width:768px){
+
+button,
+select,
+input{
+width:100%;
+}
+
+.bottom-controls{
+flex-direction:column;
+}
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="shell">
+
+<header class="card">
+<h1>Responsive LD + SARA Module</h1>
+</header>
+
+<section class="card">
+
+<h2>Calibration</h2>
+
+<div class="notice">
+
+Place a physical ruler against the orange bar shown at the top of the canvas below.
+Measure its length and enter it in centimeters. Testing is disabled until calibration is verified.
+
+</div>
+
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:15px;">
+
+<label>
+Measured Bar Length (cm)
+<br>
+<input
+type="number"
+id="measuredDistance"
+step="0.01"
+placeholder="Example: 13.2">
+</label>
+
+<label>
+Tolerance (cm)
+<br>
+<input
+type="number"
+id="toleranceInput"
+step="0.01"
+value="0.00"
+placeholder="0.00">
+</label>
+
+<button onclick="verifyCalibration()">
+Verify Calibration
+</button>
+
+</div>
+
+<div id="calibrationStatus" class="status-bad" style="margin-top:15px;">
+Not Verified
+</div>
+
+</section>
+
+<section class="card">
+
+<div id="canvas-container">
+
+<canvas id="testCanvas"></canvas>
+
+</div>
+
+</section>
+
+<section class="card">
+
+<h2>Results</h2>
+
+<div>
+Time:
+<span id="timer">0.00</span> s
+</div>
+
+<table>
+
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+
+<tbody>
+
+<tr>
+<td>Calibration Used</td>
+<td id="calibrationUsed">0 canvas px/cm</td>
+</tr>
+
+<tr>
+<td>cmPerPixel</td>
+<td id="cmPerPixelValue">0</td>
+</tr>
+
+<tr>
+<td>Status</td>
+<td id="calibrationResult">Not Verified</td>
+</tr>
+
+<tr>
+<td>Discontinuities</td>
+<td id="discontValue">0</td>
+</tr>
+
+<tr>
+<td>Vertical Turns</td>
+<td id="verticalTurnValue">0</td>
+</tr>
+
+<tr>
+<td>Horizontal Reverses</td>
+<td id="horizontalTurnValue">0</td>
+</tr>
+
+<tr>
+<td>Out-of-Bounds</td>
+<td id="outOfBoundsValue">0</td>
+</tr>
+
+<tr>
+<td>Start Fails</td>
+<td id="startFailsValue">0</td>
+</tr>
+
+<tr>
+<td>Max Deviation</td>
+<td id="maxDeviationValue">0 px / 0 cm</td>
+</tr>
+
+<tr>
+<td>P95 Deviation</td>
+<td id="p95DeviationValue">0 px / 0 cm</td>
+</tr>
+
+<tr>
+<td>Mean Deviation</td>
+<td id="meanDeviationValue">0 px / 0 cm</td>
+</tr>
+
+<tr>
+<td>Deviation Area</td>
+<td id="deviationAreaValue">0 px² / 0 cm²</td>
+</tr>
+
+<tr>
+<td>SARA Score</td>
+<td id="saraScoreValue">4</td>
+</tr>
+
+</tbody>
+
+</table>
+
+</section>
+
+<div class="bottom-controls">
+
+<select id="testSelector" onchange="changeTest()">
+
+<option value="horizontal">
+Horizontal Test
+</option>
+
+<option value="vertical">
+Vertical Test
+</option>
+
+<option value="diagonal1">
+Diagonal Test 1
+</option>
+
+<option value="diagonal2">
+Diagonal Test 2
+</option>
+
+</select>
+
+<button onclick="stopTest()">
+Stop Test
+</button>
+
+<button onclick="resetTest()">
+Reset Test
+</button>
+
+<button onclick="exportData()">
+Export Trial
+</button>
+
+<button onclick="exportSyntheticDataset()">
+Export Dataset
+</button>
+
+</div>
+
+</div>
+
+<script>
+
+/* =========================
+   CANVAS SETUP
+========================= */
+
+const canvas=document.getElementById("testCanvas");
+const ctx=canvas.getContext("2d");
+
+const INTERNAL_WIDTH=1000;
+const INTERNAL_HEIGHT=700;
+
+canvas.width=INTERNAL_WIDTH;
+canvas.height=INTERNAL_HEIGHT;
+
+const WIDTH=INTERNAL_WIDTH;
+const HEIGHT=INTERNAL_HEIGHT;
+
+const BOX=45;
+const CAL_BAR_PX=500;
+
+/* =========================
+   CALIBRATION
+========================= */
+
+let pixelsPerCm=0;
+let cmPerPixel=0;
+
+let calibrationVerified=false;
+
+/* Load saved calibration */
+(function loadSavedCalibration(){
+
+const saved=localStorage.getItem("ld_cal");
+
+if(!saved) return;
+
+try{
+
+const{ppc,cpp,measuredCm}=JSON.parse(saved);
+
+if(ppc>0&&cpp>0){
+
+pixelsPerCm=ppc;
+cmPerPixel=cpp;
+calibrationVerified=true;
+
+document.getElementById("measuredDistance").value=measuredCm;
+
+document.getElementById("calibrationStatus")
+.innerHTML=
+'<span class="status-good">Verified (saved)</span>';
+
+}
+
+}catch(e){}
+
+})();
+
+/* =========================
+   STATE
+========================= */
+
+let currentTest=null;
+
+let startBox,finishBox;
+
+let active=false;
+let drawing=false;
+let success=false;
+
+let startHit=false;
+let finishHit=false;
+
+let touches=[];
+
+let deviationSamples=[];
+
+let statistics={
+discontinuities:0,
+verticalTurns:0,
+horizontalTurns:0,
+deviationAreaPx2:0,
+outOfBounds:0,
+startFails:0
+};
+
+let dx=0;
+let dy=0;
+
+let timerId=0;
+
+/* =========================
+   TEST DEFINITIONS
+========================= */
+
+const tests={
+
+horizontal:{
+position:()=>[
+[30,HEIGHT/2-BOX/2],
+[WIDTH-30-BOX,HEIGHT/2-BOX/2]
+]
+},
+
+vertical:{
+position:()=>[
+[WIDTH/2-BOX/2,40],
+[WIDTH/2-BOX/2,HEIGHT-30-BOX]
+]
+},
+
+diagonal1:{
+position:()=>[
+[30,40],
+[WIDTH-30-BOX,HEIGHT-30-BOX]
+]
+},
+
+diagonal2:{
+position:()=>[
+[30,HEIGHT-30-BOX],
+[WIDTH-30-BOX,40]
+]
+}
+
+};
+
+/* =========================
+   DRAWING
+========================= */
+
+function drawBox(x,y,label,activeColor){
+
+ctx.fillStyle=
+activeColor?"#16a34a":"#dc2626";
+
+ctx.fillRect(x,y,BOX,BOX);
+
+ctx.fillStyle="#fff";
+
+ctx.font="bold 20px Inter";
+
+ctx.textAlign="center";
+ctx.textBaseline="middle";
+
+ctx.fillText(
+label,
+x+BOX/2,
+y+BOX/2
+);
+
+}
+
+function drawReference(){
+
+/* Reference line S → F */
+
+ctx.strokeStyle="#475569";
+ctx.lineWidth=3;
+
+ctx.beginPath();
+
+ctx.moveTo(
+startBox[0]+BOX/2,
+startBox[1]+BOX/2
+);
+
+ctx.lineTo(
+finishBox[0]+BOX/2,
+finishBox[1]+BOX/2
+);
+
+ctx.stroke();
+
+/* CALIBRATION BAR */
+
+const barX=(WIDTH-CAL_BAR_PX)/2;
+const barY=8;
+const barH=14;
+
+/* Filled bar */
+ctx.fillStyle="#f97316";
+ctx.fillRect(barX,barY,CAL_BAR_PX,barH);
+
+/* End caps */
+ctx.strokeStyle="#f97316";
+ctx.lineWidth=2;
+
+[barX,barX+CAL_BAR_PX].forEach(bx=>{
+ctx.beginPath();
+ctx.moveTo(bx,barY-5);
+ctx.lineTo(bx,barY+barH+5);
+ctx.stroke();
+});
+
+/* Label inside bar */
+ctx.fillStyle="#020617";
+ctx.font="bold 10px Inter";
+ctx.textAlign="center";
+ctx.textBaseline="middle";
+ctx.fillText(
+"← Calibration Bar →",
+WIDTH/2,
+barY+barH/2
+);
+
+/* CM readout below bar (when calibrated) */
+if(calibrationVerified){
+
+ctx.fillStyle="#facc15";
+ctx.font="bold 11px Inter";
+ctx.textBaseline="top";
+
+ctx.fillText(
+`${(CAL_BAR_PX*cmPerPixel).toFixed(2)} cm`,
+WIDTH/2,
+barY+barH+4
+);
+
+}
+
+}
+
+function redraw(clear=true){
+
+if(clear){
+
+ctx.clearRect(
+0,
+0,
+WIDTH,
+HEIGHT
+);
+
+}
+
+drawReference();
+
+drawBox(
+startBox[0],
+startBox[1],
+"S",
+startHit
+);
+
+drawBox(
+finishBox[0],
+finishBox[1],
+"F",
+finishHit
+);
+
+}
+
+/* =========================
+   HELPERS
+========================= */
+
+function getCoords(e){
+
+const r=canvas.getBoundingClientRect();
+
+const scaleX=
+canvas.width/r.width;
+
+const scaleY=
+canvas.height/r.height;
+
+return[
+(e.clientX-r.left)*scaleX,
+(e.clientY-r.top)*scaleY
+];
+
+}
+
+function isInside(x,y,box){
+
+return(
+x>=box[0] &&
+x<=box[0]+BOX &&
+y>=box[1] &&
+y<=box[1]+BOX
+);
+
+}
+
+function normalize(v){
+
+return(
+v>0?1:
+v<0?-1:
+0
+);
+
+}
+
+function calcDeviation([x,y]){
+
+const sx=startBox[0]+BOX/2;
+const sy=startBox[1]+BOX/2;
+
+const ex=finishBox[0]+BOX/2;
+const ey=finishBox[1]+BOX/2;
+
+if(sx!==ex){
+
+const m=(ey-sy)/(ex-sx);
+
+const a=-m;
+const b=1;
+const c=-sy+m*sx;
+
+return Math.abs(a*x+b*y+c)/
+Math.sqrt(a*a+b*b);
+
+}
+
+return Math.abs(x-sx);
+
+}
+
+function percentile(arr,p){
+
+if(arr.length===0)
+return 0;
+
+const sorted=
+[...arr].sort((a,b)=>a-b);
+
+const index=
+Math.floor(sorted.length*p);
+
+return sorted[
+Math.min(index,sorted.length-1)
+];
+
+}
+
+/* =========================
+   CALIBRATION VERIFY
+========================= */
+
+function verifyCalibration(){
+
+const measuredCm=parseFloat(
+document.getElementById("measuredDistance").value
+);
+
+if(!measuredCm || measuredCm<=0){
+
+alert(
+"Enter the measured length of the orange calibration bar."
+);
+
+return;
+
+}
+
+const pixelDistance=CAL_BAR_PX;
+
+pixelsPerCm=
+pixelDistance/measuredCm;
+
+cmPerPixel=
+1/pixelsPerCm;
+
+calibrationVerified=true;
+
+localStorage.setItem(
+"ld_cal",
+JSON.stringify({
+ppc:pixelsPerCm,
+cpp:cmPerPixel,
+measuredCm
+})
+);
+
+document.getElementById("calibrationStatus")
+.innerHTML=
+'<span class="status-good">Verified</span>';
+
+redraw();
+
+updateStats();
+
+}
+
+/* =========================
+   TIMER
+========================= */
+
+function startTimer(){
+
+const start=Date.now();
+
+clearInterval(timerId);
+
+timerId=setInterval(()=>{
+
+document.getElementById("timer")
+.innerText=
+((Date.now()-start)/1000)
+.toFixed(2);
+
+},10);
+
+}
+
+function stopTimer(){
+
+clearInterval(timerId);
+
+}
+
+/* =========================
+   RESET
+========================= */
+
+function resetStats(){
+
+statistics={
+discontinuities:0,
+verticalTurns:0,
+horizontalTurns:0,
+deviationAreaPx2:0,
+outOfBounds:0,
+startFails:0
+};
+
+deviationSamples=[];
+
+dx=0;
+dy=0;
+
+}
+
+function resetTest(){
+
+if(!currentTest) return;
+
+[startBox,finishBox]=
+currentTest.position();
+
+active=false;
+drawing=false;
+success=false;
+
+startHit=false;
+finishHit=false;
+
+touches=[];
+
+resetStats();
+
+redraw();
+
+updateStats();
+
+stopTimer();
+
+document.getElementById("timer")
+.innerText="0.00";
+
+}
+
+/* =========================
+   POINTER EVENTS
+========================= */
+
+canvas.addEventListener(
+"pointerdown",
+e=>{
+
+if(!calibrationVerified){
+
+alert(
+"Calibration required before testing."
+);
+
+return;
+
+}
+
+const[x,y]=getCoords(e);
+
+drawing=true;
+
+if(success) return;
+
+if(
+isInside(x,y,startBox)
+&& !active
+){
+
+active=true;
+
+startHit=true;
+
+startTimer();
+
+redraw();
+
+touches.push({
+points:[[x,y]]
+});
+
+}
+
+else if(!active){
+
+statistics.startFails++;
+
+updateStats();
+
+}
+
+else{
+
+statistics.discontinuities++;
+
+touches.push({
+points:[[x,y]]
+});
+
+updateStats();
+
+}
+
+});
+
+canvas.addEventListener(
+"pointermove",
+e=>{
+
+if(
+!drawing ||
+!active ||
+success
+) return;
+
+const[x,y]=getCoords(e);
+
+const last=
+touches.at(-1).points.at(-1);
+
+ctx.beginPath();
+
+ctx.moveTo(
+last[0],
+last[1]
+);
+
+ctx.lineTo(x,y);
+
+ctx.strokeStyle="#60a5fa";
+ctx.lineWidth=2;
+
+ctx.stroke();
+
+const deviation=
+calcDeviation([x,y]);
+
+deviationSamples.push(
+deviation
+);
+
+const segLength=Math.hypot(
+x-last[0],
+y-last[1]
+);
+
+statistics.deviationAreaPx2+=
+deviation*segLength;
+
+const dxNow=
+normalize(x-last[0]);
+
+const dyNow=
+normalize(y-last[1]);
+
+if(dx!==dxNow)
+statistics.horizontalTurns++;
+
+if(dy!==dyNow)
+statistics.verticalTurns++;
+
+dx=dxNow;
+dy=dyNow;
+
+touches.at(-1).points.push([x,y]);
+
+if(
+isInside(x,y,finishBox)
+&& !finishHit
+){
+
+finishHit=true;
+success=true;
+
+stopTimer();
+
+redraw(false);
+
+}
+
+updateStats();
+
+});
+
+canvas.addEventListener(
+"pointerup",
+()=>{
+
+drawing=false;
+
+});
+
+canvas.addEventListener(
+"pointerleave",
+()=>{
+
+if(active && !success){
+
+statistics.outOfBounds++;
+
+updateStats();
+
+}
+
+});
+
+/* =========================
+   SARA
+========================= */
+
+/*
+ SARA scoring algorithm (P95 deviation in cm):
+   < 0.5 cm  → 0  Normal
+   0.5–2 cm  → 1  Mild
+   2–5 cm    → 2  Moderate
+   > 5 cm    → 3  Severe
+   not completed or not calibrated → 4  Unable to perform
+
+ Only P95 deviation is used for scoring.
+ P95 is chosen over max deviation because it reflects
+ sustained error rather than isolated outliers.
+ All other captured metrics (turns, reverses,
+ discontinuities, area, time) are exported but do
+ not contribute to the SARA score.
+*/
+
+const SARA_LABELS=[
+"0 — Normal",
+"1 — Mild",
+"2 — Moderate",
+"3 — Severe",
+"4 — Unable to perform"
+];
+
+function calculateSara(p95Cm){
+
+if(!success||!calibrationVerified)
+return 4;
+
+if(p95Cm<0.5)  return 0;  // < 0.5 cm
+if(p95Cm<2)    return 1;  // 0.5–2 cm
+if(p95Cm<=5)   return 2;  // 2–5 cm  (boundary 5 cm = score 2)
+return 3;                 // > 5 cm
+
+}
+
+/* =========================
+   UPDATE STATS
+========================= */
+
+function updateStats(){
+
+/* Apply tolerance: treat deviations below threshold as 0 */
+const toleranceCm=
+parseFloat(document.getElementById("toleranceInput").value)||0;
+
+const tolerancePx=
+calibrationVerified&&toleranceCm>0?
+toleranceCm*pixelsPerCm:
+0;
+
+const effective=
+deviationSamples.map(d=>
+Math.max(0,d-tolerancePx)
+);
+
+const maxPx=
+effective.length?
+Math.max(...effective):
+0;
+
+const meanPx=
+effective.length?
+effective.reduce((a,b)=>a+b,0)/
+effective.length:
+0;
+
+const p95Px=
+percentile(
+effective,
+0.95
+);
+
+const maxCm=
+maxPx*cmPerPixel;
+
+const meanCm=
+meanPx*cmPerPixel;
+
+const p95Cm=
+p95Px*cmPerPixel;
+
+const areaCm2=
+statistics.deviationAreaPx2*
+(cmPerPixel*cmPerPixel);
+
+const sara=
+calculateSara(p95Cm);
+
+document.getElementById("calibrationUsed")
+.innerText=
+pixelsPerCm.toFixed(2)+
+" canvas px/cm";
+
+document.getElementById("cmPerPixelValue")
+.innerText=
+cmPerPixel.toFixed(4);
+
+document.getElementById("calibrationResult")
+.innerText=
+calibrationVerified?
+"Verified":
+"Not Verified";
+
+document.getElementById("discontValue")
+.innerText=
+statistics.discontinuities;
+
+document.getElementById("verticalTurnValue")
+.innerText=
+statistics.verticalTurns;
+
+document.getElementById("horizontalTurnValue")
+.innerText=
+statistics.horizontalTurns;
+
+document.getElementById("outOfBoundsValue")
+.innerText=
+statistics.outOfBounds;
+
+document.getElementById("startFailsValue")
+.innerText=
+statistics.startFails;
+
+document.getElementById("maxDeviationValue")
+.innerText=
+`${maxPx.toFixed(2)} px / ${maxCm.toFixed(2)} cm`;
+
+document.getElementById("p95DeviationValue")
+.innerText=
+`${p95Px.toFixed(2)} px / ${p95Cm.toFixed(2)} cm`;
+
+document.getElementById("meanDeviationValue")
+.innerText=
+`${meanPx.toFixed(2)} px / ${meanCm.toFixed(2)} cm`;
+
+document.getElementById("deviationAreaValue")
+.innerText=
+`${statistics.deviationAreaPx2.toFixed(2)} px² / ${areaCm2.toFixed(2)} cm²`;
+
+document.getElementById("saraScoreValue")
+.innerText=
+SARA_LABELS[sara]??sara;
+
+}
+
+/* =========================
+   CONTROLS
+========================= */
+
+function changeTest(){
+
+currentTest=
+tests[
+document.getElementById("testSelector").value
+];
+
+resetTest();
+
+}
+
+function stopTest(){
+
+active=false;
+
+stopTimer();
+
+}
+
+/* =========================
+   EXPORT TRIAL
+========================= */
+
+function exportData(){
+
+const toleranceCm=
+parseFloat(document.getElementById("toleranceInput").value)||0;
+
+const tolerancePx=
+calibrationVerified&&toleranceCm>0?
+toleranceCm*pixelsPerCm:
+0;
+
+const effective=
+deviationSamples.map(d=>Math.max(0,d-tolerancePx));
+
+const maxPx=
+effective.length?
+Math.max(...effective):
+0;
+
+const meanPx=
+effective.length?
+effective.reduce((a,b)=>a+b,0)/
+effective.length:
+0;
+
+const p95Px=
+percentile(effective,0.95);
+
+const exportObj={
+
+timestamp:
+new Date().toISOString(),
+
+calibration:{
+pixelsPerCm,
+cmPerPixel,
+pixelType:"canvas pixels",
+verified:calibrationVerified
+},
+
+statistics,
+
+deviation:{
+maxPx,
+maxCm:maxPx*cmPerPixel,
+meanPx,
+meanCm:meanPx*cmPerPixel,
+p95Px,
+p95Cm:p95Px*cmPerPixel,
+deviationAreaPx2:
+statistics.deviationAreaPx2,
+deviationAreaCm2:
+statistics.deviationAreaPx2*
+(cmPerPixel*cmPerPixel)
+},
+
+saraScore:
+calculateSara(p95Px*cmPerPixel),
+
+saraLabel:
+SARA_LABELS[calculateSara(p95Px*cmPerPixel)],
+
+scoringBasis:"P95 deviation (cm)",
+
+success
+
+};
+
+const blob=new Blob(
+[
+JSON.stringify(exportObj,null,2)
+],
+{
+type:"application/json"
+}
+);
+
+const a=document.createElement("a");
+
+a.href=
+URL.createObjectURL(blob);
+
+a.download=
+"ld_trial.json";
+
+a.click();
+
+}
+
+/* =========================
+   SYNTHETIC DATASET
+========================= */
+
+function generateTrial(score,index){
+
+const ranges={
+0:[0.1,0.49],
+1:[0.5,1.99],
+2:[2.0,4.99],
+3:[5.0,8.0]
+};
+
+let success=true;
+
+let p95Cm;
+let maxCm;
+let meanCm;
+
+if(score===4){
+
+success=false;
+
+p95Cm=0;
+maxCm=0;
+meanCm=0;
+
+}
+else{
+
+const[rmin,rmax]=ranges[score];
+
+p95Cm=
+rmin+
+Math.random()*(rmax-rmin);
+
+maxCm=
+p95Cm*
+(1.2+Math.random()*0.7);
+
+meanCm=
+p95Cm*
+(0.4+Math.random()*0.25);
+
+}
+
+return{
+
+trialId:`S${score}_T${index+1}`,
+
+targetSara:score,
+
+p95DeviationCm:
++p95Cm.toFixed(2),
+
+maxDeviationCm:
++maxCm.toFixed(2),
+
+meanDeviationCm:
++meanCm.toFixed(2),
+
+deviationAreaCm2:
++(
+meanCm*
+(20+score*10)+
+Math.random()*10
+).toFixed(2),
+
+turns:
+Math.floor(
+5+score*10+
+Math.random()*8
+),
+
+reverses:
+Math.floor(
+4+score*9+
+Math.random()*8
+),
+
+discontinuities:
+score===0?0:
+Math.floor(
+Math.random()*(score+1)
+),
+
+durationSec:
++(
+2+
+score*2+
+Math.random()*2
+).toFixed(2),
+
+success
+
+};
+
+}
+
+function exportSyntheticDataset(){
+
+const dataset=[];
+
+for(let sara=0;sara<=4;sara++){
+
+for(let i=0;i<6;i++){
+
+dataset.push(
+generateTrial(sara,i)
+);
+
+}
+
+}
+
+const blob=new Blob(
+[
+JSON.stringify(dataset,null,2)
+],
+{
+type:"application/json"
+}
+);
+
+const a=document.createElement("a");
+
+a.href=
+URL.createObjectURL(blob);
+
+a.download=
+"sara_dataset.json";
+
+a.click();
+
+}
+
+/* =========================
+   INIT
+========================= */
 
 changeTest();
 
