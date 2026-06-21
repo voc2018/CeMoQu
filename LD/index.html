@@ -714,7 +714,8 @@ document.addEventListener('DOMContentLoaded',function(){
     </select>
     <button onclick="stopTest()">Stop Test</button>
     <button onclick="resetTest()">Reset Test</button>
-    <button onclick="exportData()">Export Trial</button>
+    <button id="exportTrialBtn" onclick="exportData()">Export Trial</button>
+    <span id="exportStatus" class="small-muted"></span>
   </div>
 
   <!-- Results -->
@@ -1551,10 +1552,21 @@ stopTimer();
 }
 
 /* =========================
-   EXPORT TRIAL
+   EXPORT TRIAL (GOOGLE SHEETS)
 ========================= */
 
-function exportData(){
+/* Paste your Google Apps Script Web App URL here — see setup guide. */
+const LD_GOOGLE_SHEET_WEB_APP_URL="https://script.google.com/macros/s/AKfycbzneQXEM3ElSdXBlhjCxaIlNSRJgV2iUAbYWh6uLllD7U90o6pqtL9EC3TBpjRLRFeP/exec";
+
+async function exportData(){
+
+const statusEl=document.getElementById("exportStatus");
+const btn=document.getElementById("exportTrialBtn");
+
+if(!LD_GOOGLE_SHEET_WEB_APP_URL||LD_GOOGLE_SHEET_WEB_APP_URL==="INSERT_YOUR_GOOGLE_WEB_APP_URL_HERE"){
+if(statusEl){statusEl.textContent="⚠ Google Sheet URL not configured — see setup guide.";statusEl.style.color="#f59e0b";}
+return;
+}
 
 const toleranceCm=
 parseFloat(document.getElementById("toleranceInput").value)||0;
@@ -1581,64 +1593,81 @@ effective.length:
 const p95Px=
 percentile(effective,0.95);
 
-const exportObj={
+const p95Cm=p95Px*cmPerPixel;
 
-timestamp:
-new Date().toISOString(),
+const sara=calculateSara(p95Cm);
 
-calibration:{
-pixelsPerCm,
-cmPerPixel,
-pixelType:"canvas pixels",
-verified:calibrationVerified
-},
+/* Patient / session metadata from the global header bar */
+const fieldVal=id=>{const el=document.getElementById(id);return el?el.value.trim():"";};
+const participant=fieldVal("glob-id")||"UNKNOWN";
+const patientName=fieldVal("glob-name");
+const age=fieldVal("glob-age");
+const sex=fieldVal("glob-sex");
+const dob=fieldVal("glob-dob");
+const sessionLabel=fieldVal("glob-sess")||"S1";
+const operator=fieldVal("glob-op");
+const dateLabel=fieldVal("glob-date")||new Date().toISOString().split("T")[0];
+const testMode=document.getElementById("testSelector").value;
 
-statistics,
+const sanitize=v=>String(v||"").replace(/[^A-Za-z0-9_-]/g,"");
+const sessionId=`${sanitize(participant)}_${dateLabel}_${sanitize(sessionLabel)}`;
 
-deviation:{
-maxPx,
-maxCm:maxPx*cmPerPixel,
-meanPx,
-meanCm:meanPx*cmPerPixel,
-p95Px,
-p95Cm:p95Px*cmPerPixel,
-deviationAreaPx2:
-statistics.deviationAreaPx2,
-deviationAreaCm2:
-statistics.deviationAreaPx2*
-(cmPerPixel*cmPerPixel)
-},
+const headerRow=[
+'session_id','participant_id','name','age','sex','dob','session','operator','date',
+'test_mode','timestamp','pixels_per_cm','cm_per_pixel','calibration_verified',
+'discontinuities','vertical_turns','horizontal_reverses','out_of_bounds','start_fails',
+'max_deviation_px','max_deviation_cm','mean_deviation_px','mean_deviation_cm',
+'p95_deviation_px','p95_deviation_cm','deviation_area_px2','deviation_area_cm2',
+'sara_score','sara_label','scoring_basis','success'
+];
 
-saraScore:
-calculateSara(p95Px*cmPerPixel),
+const dataRow=[
+sessionId,participant,patientName,age,sex,dob,sessionLabel,operator,dateLabel,
+testMode,new Date().toISOString(),
+pixelsPerCm.toFixed(4),cmPerPixel.toFixed(6),calibrationVerified?1:0,
+statistics.discontinuities,statistics.verticalTurns,statistics.horizontalTurns,
+statistics.outOfBounds,statistics.startFails,
+maxPx.toFixed(3),(maxPx*cmPerPixel).toFixed(3),
+meanPx.toFixed(3),(meanPx*cmPerPixel).toFixed(3),
+p95Px.toFixed(3),p95Cm.toFixed(3),
+statistics.deviationAreaPx2.toFixed(3),
+(statistics.deviationAreaPx2*cmPerPixel*cmPerPixel).toFixed(3),
+sara,SARA_LABELS[sara]??sara,"P95 deviation (cm)",success?1:0
+];
 
-saraLabel:
-SARA_LABELS[calculateSara(p95Px*cmPerPixel)],
+const payload={trials:[headerRow,dataRow]};
 
-scoringBasis:"P95 deviation (cm)",
+if(statusEl){statusEl.textContent="Uploading…";statusEl.style.color="";}
+if(btn)btn.disabled=true;
 
-success
+try{
 
-};
+const res=await fetch(LD_GOOGLE_SHEET_WEB_APP_URL,{
+method:"POST",
+headers:{"Content-Type":"text/plain;charset=utf-8"},
+body:JSON.stringify(payload)
+});
 
-const blob=new Blob(
-[
-JSON.stringify(exportObj,null,2)
-],
-{
-type:"application/json"
+if(!res.ok) throw new Error("Network response was not ok.");
+
+const responseData=await res.json();
+
+if(responseData.status==="success"){
+if(statusEl){statusEl.textContent="✅ Saved to Google Sheet.";statusEl.style.color="#22c55e";}
+}else{
+throw new Error(responseData.message||"Unknown error from server.");
 }
-);
 
-const a=document.createElement("a");
+}catch(err){
 
-a.href=
-URL.createObjectURL(blob);
+console.error("Export Error:",err);
+if(statusEl){statusEl.textContent="❌ Upload failed: "+err.message;statusEl.style.color="#ef4444";}
 
-a.download=
-"ld_trial.json";
+}finally{
 
-a.click();
+if(btn)btn.disabled=false;
+
+}
 
 }
 
