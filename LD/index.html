@@ -593,6 +593,80 @@ color:var(--danger);
 font-weight:700;
 }
 
+/* ── metric definition popup ── */
+
+.metric-label{
+cursor:pointer;
+border-bottom:1px dotted rgba(148,163,184,0.5);
+}
+
+.metric-label:hover{
+color:#60a5fa;
+}
+
+.def-overlay{
+position:fixed;
+inset:0;
+background:rgba(2,6,23,0.75);
+display:none;
+align-items:center;
+justify-content:center;
+z-index:10000;
+padding:20px;
+}
+
+.def-overlay.open{
+display:flex;
+}
+
+.def-modal{
+position:relative;
+max-width:420px;
+width:100%;
+border-radius:18px;
+padding:20px 20px 18px;
+background:radial-gradient(circle at top left, rgba(15,23,42,0.98), var(--panel-soft));
+border:1px solid rgba(30,64,175,0.45);
+box-shadow:0 24px 60px rgba(0,0,0,0.7);
+}
+
+.def-modal h3{
+margin:0 0 10px;
+font-size:16px;
+color:#fff;
+padding-right:24px;
+}
+
+.def-modal p{
+margin:0;
+font-size:13px;
+color:var(--muted);
+line-height:1.55;
+}
+
+.def-close{
+position:absolute;
+top:14px;
+right:14px;
+width:26px;
+height:26px;
+border-radius:999px;
+background:rgba(15,23,42,0.9);
+border:1px solid rgba(148,163,184,0.35);
+color:var(--text);
+font-size:13px;
+line-height:1;
+cursor:pointer;
+display:flex;
+align-items:center;
+justify-content:center;
+padding:0;
+}
+
+.def-close:hover{
+filter:brightness(1.2);
+}
+
 </style>
 
 </head>
@@ -726,24 +800,33 @@ document.addEventListener('DOMContentLoaded',function(){
         <tr><th>Metric</th><th>Value</th></tr>
       </thead>
       <tbody>
-        <tr><td>SARA Score</td><td id="saraScoreValue" style="font-weight:700;">—</td></tr>
-        <tr><td>P95 Deviation</td><td id="p95DeviationValue">0 px / 0 cm</td></tr>
-        <tr><td>Max Deviation</td><td id="maxDeviationValue">0 px / 0 cm</td></tr>
-        <tr><td>Mean Deviation</td><td id="meanDeviationValue">0 px / 0 cm</td></tr>
-        <tr><td>Deviation Area</td><td id="deviationAreaValue">0 px² / 0 cm²</td></tr>
-        <tr><td>Discontinuities</td><td id="discontValue">0</td></tr>
-        <tr><td>Vertical Turns</td><td id="verticalTurnValue">0</td></tr>
-        <tr><td>Horizontal Reverses</td><td id="horizontalTurnValue">0</td></tr>
-        <tr><td>Out-of-Bounds</td><td id="outOfBoundsValue">0</td></tr>
-        <tr><td>Start Fails</td><td id="startFailsValue">0</td></tr>
-        <tr><td>Calibration</td><td id="calibrationUsed">0 canvas px/cm</td></tr>
-        <tr><td>cm/px</td><td id="cmPerPixelValue">0</td></tr>
-        <tr><td>Cal. Status</td><td id="calibrationResult">Not Verified</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('sara')">SARA Score</span></td><td id="saraScoreValue" style="font-weight:700;">—</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('p95')">P95 Deviation</span></td><td id="p95DeviationValue">0 px / 0 cm</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('max')">Max Deviation</span></td><td id="maxDeviationValue">0 px / 0 cm</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('mean')">Mean Deviation</span></td><td id="meanDeviationValue">0 px / 0 cm</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('area')">Deviation Area</span></td><td id="deviationAreaValue">0 px² / 0 cm²</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('discont')">Discontinuities</span></td><td id="discontValue">0</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('vturns')">Vertical Turns</span></td><td id="verticalTurnValue">0</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('hturns')">Horizontal Reverses</span></td><td id="horizontalTurnValue">0</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('oob')">Out-of-Bounds</span></td><td id="outOfBoundsValue">0</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('startfails')">Start Fails</span></td><td id="startFailsValue">0</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('calibration')">Calibration</span></td><td id="calibrationUsed">0 canvas px/cm</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('cmpx')">cm/px</span></td><td id="cmPerPixelValue">0</td></tr>
+        <tr><td><span class="metric-label" onclick="showDefinition('calstatus')">Cal. Status</span></td><td id="calibrationResult">Not Verified</td></tr>
       </tbody>
     </table>
   </div>
 
 </div>
+</div>
+
+<!-- Metric definition popup -->
+<div id="defOverlay" class="def-overlay" onclick="if(event.target===this)closeDefinition()">
+  <div class="def-modal">
+    <button class="def-close" onclick="closeDefinition()">✕</button>
+    <h3 id="defTitle">Title</h3>
+    <p id="defText">Definition.</p>
+  </div>
 </div>
 
 <script>
@@ -1527,6 +1610,105 @@ document.getElementById("saraScoreValue")
 SARA_LABELS[sara]??sara;
 
 }
+
+/* =========================
+   METRIC DEFINITIONS POPUP
+========================= */
+
+const METRIC_DEFINITIONS={
+
+sara:{
+title:"SARA Score",
+text:"A 0–4 ataxia severity score modeled on the SARA finger-chase item, derived from the P95 deviation: less than 0.5 cm scores 0 (Normal), 0.5–2 cm scores 1 (Mild), 2–5 cm scores 2 (Moderate), and over 5 cm scores 3 (Severe). An incomplete trial or unverified calibration is automatically scored 4 (Unable to Perform)."
+},
+
+p95:{
+title:"P95 Deviation",
+text:"The 95th-percentile distance between the cursor and the ideal guide line, in pixels and centimeters, after the tolerance setting is applied. This is the only metric used to calculate the SARA score, since it reflects sustained tracing error rather than one extreme outlier."
+},
+
+max:{
+title:"Max Deviation",
+text:"The single largest distance recorded between the cursor and the guide line during the trial, in pixels and centimeters. Captured for reference — it does not factor into the SARA score."
+},
+
+mean:{
+title:"Mean Deviation",
+text:"The average distance between the cursor and the guide line across every recorded sample in the trial, in pixels and centimeters."
+},
+
+area:{
+title:"Deviation Area",
+text:"The cumulative area swept out between the cursor's path and the ideal guide line, in px² and cm². Each movement segment's deviation is multiplied by its length and summed, so a larger area reflects more sustained drift from the line."
+},
+
+discont:{
+title:"Discontinuities",
+text:"The number of times the user released the mouse button and pressed again before completing the trial. Each re-press after the first counts as one discontinuity."
+},
+
+vturns:{
+title:"Vertical Turns",
+text:"The number of times the cursor's vertical direction (up vs. down) reversed during the trial — a proxy for vertical tremor or overcorrection."
+},
+
+hturns:{
+title:"Horizontal Reverses",
+text:"The number of times the cursor's horizontal direction (left vs. right) reversed during the trial — a proxy for horizontal tremor or overcorrection."
+},
+
+oob:{
+title:"Out-of-Bounds",
+text:"The number of times the cursor left the canvas area entirely while the trial was active and not yet completed."
+},
+
+startfails:{
+title:"Start Fails",
+text:"The number of times the user pressed the mouse button outside the green S (start) block before successfully beginning the trial."
+},
+
+calibration:{
+title:"Calibration (px/cm)",
+text:"The number of canvas pixels that correspond to one real-world centimeter, derived from the measured length of the 500-pixel-wide orange calibration bar. Used to convert every pixel-based metric into centimeters."
+},
+
+cmpx:{
+title:"cm/px",
+text:"The inverse of the calibration value — how many real-world centimeters one canvas pixel represents. Used internally to convert pixel measurements to centimeters."
+},
+
+calstatus:{
+title:"Calibration Status",
+text:"Whether the calibration has been verified for this session. Testing and scoring are not considered valid until calibration is verified."
+}
+
+};
+
+function showDefinition(key){
+
+const def=METRIC_DEFINITIONS[key];
+
+if(!def) return;
+
+document.getElementById("defTitle").innerText=def.title;
+document.getElementById("defText").innerText=def.text;
+
+document.getElementById("defOverlay").classList.add("open");
+
+}
+
+function closeDefinition(){
+
+document.getElementById("defOverlay").classList.remove("open");
+
+}
+
+document.addEventListener("keydown",e=>{
+
+if(e.key==="Escape")
+closeDefinition();
+
+});
 
 /* =========================
    CONTROLS
