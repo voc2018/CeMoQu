@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About · CeMoQu</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../shared/header.css">
+    <script src="../shared/header.js" defer></script>
+
+    <style>
+        :root {
+            --bg: #020617;
+            --panel: #02091b;
+            --panel-soft: #020b21;
+            --accent: #203fdb;
+            --accent-soft: rgba(16, 185, 129, 0.16);
+            --muted: #94a3b8;
+            --muted-soft: #1f2937;
+            --text: #e5e7eb;
+            --danger: #ef4444;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height:100%; margin:0; font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: radial-gradient(circle at top, #020b21 0, #020617 45%, #000 100%); color:var(--text); }
+        body { display:flex; justify-content:center; padding:16px; align-items:flex-start; min-height:100vh; overflow-y:auto; padding-top:130px; }
+
+        .shell { width:100%; max-width:1024px; border-radius:24px; background:linear-gradient(145deg, rgba(15,23,42,0.96), rgba(15,23,42,0.92)); border:1px solid #111827; padding:20px 20px 22px; box-shadow:0 24px 80px rgba(0,0,0,0.7); }
+
+        header { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:20px; }
+        .title-block h1{ margin:0; font-size:22px; }
+        .small-muted{ font-size:13px; color:var(--muted); margin-top:4px; }
+
+        main { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:16px; }
+        @media(max-width:900px){ main { grid-template-columns: 1fr; } }
+
+        .card { position:relative; border-radius:18px; padding:16px 14px 14px; background: radial-gradient(circle at top left, rgba(15,23,42,0.95), var(--panel-soft)); border:1px solid rgba(30,64,175,0.18); box-shadow:0 18px 45px rgba(15,23,42,0.9); display:flex; flex-direction:column; gap:10px; min-height:120px; }
+        .card h2{ margin:0; font-size:16px; }
+        .card p{ margin:0; font-size:13px; color:var(--muted); line-height:1.4; }
+
+        footer { margin-top:16px; display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:11px; color:var(--muted); }
+    </style>
+</head>
+
+<body>
+    <div id="header-container"></div>
+
+    <div class="shell">
+        <header>
+            <div class="title-block">
+                <h1>About CeMoQu · Cerebellar Motor Quantification</h1>
+                <p class="small-muted">Objective, web-based assessment of motor and speech function.</p>
+            </div>
+            <div class="tag-pill">
+                <span class="led"></span>
+                About
+            </div>
+        </header>
+
+        <main>
+            <section class="card">
+                <h2>Purpose</h2>
+                <p>CeMoQu is a lightweight, browser-based platform that objectively measures motor and speech features related to cerebellar disorders using a camera and microphone. It preserves established clinical scoring while adding rich, quantitative data for tracking and research.</p>
+            </section>
+
+            <section class="card">
+                <h2>The Problem</h2>
+                <p>Ataxia causes impaired coordination and speech. It is rare, often diagnosed late, and lacks sensitive, objective outcome measures—making clinical trials and longitudinal tracking difficult.</p>
+            </section>
+
+            <section class="card">
+                <h2>Approach</h2>
+                <p>Watch • Measure • Track — CeMoQu records video and audio, extracts numerical features (reaction time, tremor, speech intelligibility, sway, etc.), and presents them for longitudinal comparison while retaining clinical meaning.</p>
+            </section>
+
+            <section class="card">
+                <h2>Key Tests</h2>
+                <p>
+                    Speech Disturbance: reads five sentences to assess intelligibility, rate, pitch and loudness stability.
+                    Random Target Touch: captures accuracy, reaction time, tremor and smoothness during quick target touches.
+                    Line Drawing: measures deviation and drift when tracing a path.
+                    Sitting Test: quantifies sway magnitude and frequency while sitting with arms extended.
+                </p>
+            </section>
+
+            <section class="card">
+                <h2>Results & Validation</h2>
+                <p>Technical consistency checks (simulated conditions) show reliable mapping of recorded behavior to expected classifications across trials. Clinical validation with clinicians and larger cohorts is the next step.</p>
+            </section>
+
+            <section class="card">
+                <h2>Future Directions</h2>
+                <p>Expand to more SARA domains (gait, stance, fast alternating movements), calibrate with experts, and build longitudinal datasets for AI-driven biomarkers and synthetic data support.</p>
+            </section>
+
+        </main>
+
+        <footer>
+            <div class="left">CeMoQu · Cerebellar Motor Quantification</div>
+            <div>Thank you — Mincheol Song, Ethan Lee, Jung-Jae Yoon, Aidan Han, Joey Kim, Seoyoon Hong, Chuyeon Lee</div>
+        </footer>
+    </div>
+
+    <script> (function(){})(); </script>
+</body>
+
+</html>
