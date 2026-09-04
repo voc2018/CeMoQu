@@ -1,0 +1,6 @@
+﻿participant_id,session,age,sex,hand,date,test_mode,test_name,trial_number,timestamp,duration_seconds,pixels_per_cm,cm_per_pixel,tolerance_cm,discontinuities,vertical_turns,horizontal_reverses,out_of_bounds,start_fails,max_deviation_px,max_deviation_cm,mean_deviation_px,mean_deviation_cm,p95_deviation_px,p95_deviation_cm,deviation_area_px2,deviation_area_cm2,sara_score,sara_label,success
+UNKNOWN,S1,,,,2026-09-04,horizontal,Horizontal Test,1,2026-09-04T11:34:20.011Z,10.92,35.9712,0.027800,0.00,0,7,2,0,2,125.229,3.481,47.049,1.308,124.159,3.452,54749.529,42.313,2,2 — Moderate,1
+UNKNOWN,S1,,,,2026-09-04,horizontal,Horizontal Test,2,2026-09-04T11:34:42.696Z,13.83,35.9712,0.027800,0.00,3,5,0,1,4,348.930,9.700,106.057,2.948,314.679,8.748,149611.340,115.626,3,3 — Severe,1
+UNKNOWN,S1,,,,2026-09-04,horizontal,Horizontal Test,3,2026-09-04T11:34:57.364Z,5.61,35.9712,0.027800,0.00,1,5,0,0,0,37.462,1.041,14.050,0.391,35.321,0.982,14074.268,10.877,1,1 — Mild,1
+UNKNOWN,S1,,,,2026-09-04,horizontal,Horizontal Test,4,2026-09-04T11:35:15.166Z,8.69,35.9712,0.027800,0.00,0,6,4,0,2,65.291,1.815,30.526,0.849,61.009,1.696,37024.339,28.614,1,1 — Mild,1
+UNKNOWN,S1,,,,2026-09-04,horizontal,Horizontal Test,5,2026-09-04T11:35:33.318Z,9.20,35.9712,0.027800,0.00,2,6,3,1,4,48.165,1.339,16.853,0.469,43.884,1.220,19892.271,15.374,1,1 — Mild,1
