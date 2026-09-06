@@ -1,148 +1,89 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Speech Disturbance Test (SARA-4 compatible) — CeMoQu</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Speech Disturbance Test — CeMoQu</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../shared/common.css">
   <link rel="stylesheet" href="../shared/header.css">
+  <link rel="stylesheet" href="./styles.css">
   <script src="../shared/header.js" defer></script>
-
-  <style>
-    #meter{
-      background:#02091b; border:1px solid #1e293b;
-      border-radius:10px; margin-top:6px; width:100%; height:40px; display:block;
-    }
-
-    #score-summary { display:none; }
-    .score-badge { text-align:center; padding:18px 0 10px; }
-    .score-big { font-size:56px; font-weight:700; line-height:1; }
-    .score-interp { font-size:13px; color:#64748b; margin-top:6px; }
-    .stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin:12px 0; }
-    .stat-box { background:rgba(2,9,27,0.7); border:1px solid #1e293b; border-radius:10px; padding:10px 12px; }
-    .stat-box-lbl { font-size:10px; color:#64748b; text-transform:uppercase; letter-spacing:.06em; }
-    .stat-box-val { font-size:19px; font-weight:700; margin-top:2px; }
-    .bk-tbl { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; }
-    .bk-tbl th,.bk-tbl td { border-bottom:1px solid #1f2937; padding:5px 8px; text-align:left; }
-    .bk-tbl thead th { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:#64748b; background:rgba(15,23,42,.7); }
-  </style>
+  <script src="./app.js" defer></script>
 </head>
 <body>
   <div id="header-container"></div>
-
-  <div class="app">
-    <div class="page-body">
-
-      <div class="topbar">
-        <a href="../index.html" class="btn-pill" style="font-size:12px;padding:6px 12px;">← Back</a>
-        <div class="title-block">
-          <h1>Speech Disturbance Test · Reading (5 Sentences)</h1>
-          <div class="small-muted">Guided reading with automatic loudness &amp; pitch stability scoring (0–6).</div>
+  <div class="app sd-shell"><div class="page-body">
+    <header class="topbar sd-topbar">
+      <a href="../index.html" class="btn-pill sd-back">← Back</a>
+      <div class="title-block"><h1>Speech Disturbance Test</h1><div class="small-muted">Three guided speech tasks for cerebellar ataxia research</div></div>
+      <div class="top-status" id="topStatus"><span class="status-dot"></span><span>Not started</span></div>
+      <div class="top-actions" id="topActions">
+        <button id="micTestBtn" class="toolbar-btn">Mic Test</button>
+        <button id="startTestBtn" class="toolbar-btn primary" disabled>Start Test</button>
+        <button id="stopTestBtn" class="toolbar-btn danger" disabled>Stop Test</button>
+        <button id="submitDataBtn" class="toolbar-btn" disabled>Submit Data</button>
+        <button id="exportCsvTopBtn" class="toolbar-btn" disabled>Export CSV</button>
+        <span id="toolbarMessage" class="toolbar-message" aria-live="polite"></span>
+      </div>
+    </header>
+    <div class="sd-workspace">
+      <main class="experiment" aria-live="polite">
+        <div class="progress-track" aria-label="Assessment progress"><span class="progress-fill" id="progressFill"></span></div>
+        <div class="experiment-head"><span class="eyebrow" id="stepLabel">PRE-TEST SETUP</span><span class="time-chip" id="timeChip" hidden><span class="record-dot"></span><span id="timeText">00:00</span></span></div>
+        <section class="stage active" id="setupStage">
+          <div class="stage-copy"><h2>Prepare for a clear recording</h2><p>Sit comfortably in a quiet room. Place the microphone about 15–20 cm from your mouth and keep its position steady.</p></div>
+          <div class="setup-illustration" aria-hidden="true"><div class="mic-ring"><span>🎙</span></div><div class="sound-waves"><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="quality-strip" id="qualityStrip"><div><span>Microphone</span><strong id="micState">Not checked</strong></div><div><span>Input level</span><strong id="levelState">—</strong></div><div><span>Room noise</span><strong id="noiseState">—</strong></div></div>
+          <div class="stage-actions"><button id="checkMicBtn" class="primary-action">Check Microphone</button></div>
+        </section>
+        <section class="stage" id="taskStage">
+          <div class="task-copy"><h2 id="taskName">Sustained vowel</h2><p id="taskInstruction"></p></div>
+          <div class="stimulus" id="stimulus"></div><div class="countdown" id="countdown" hidden></div>
+          <div class="live-visual" id="liveVisual"><canvas id="waveCanvas" width="900" height="76" aria-label="Live microphone waveform"></canvas><div class="level-track"><span id="levelFill"></span><i class="quiet-mark"></i><i class="clip-mark"></i></div><div class="level-labels"><span>Quiet</span><span>Good level</span><span>Clipping</span></div></div>
+          <div class="stage-actions task-actions"><button id="recordBtn" class="primary-action">Start Recording</button><button id="finishBtn" class="secondary" hidden>Finish Reading</button></div>
+        </section>
+        <section class="stage" id="processingStage"><div class="processing-ring" aria-hidden="true"></div><h2>Processing recording</h2><p id="processingText">Checking audio quality and calculating measurements…</p></section>
+        <section class="stage" id="reviewStage">
+          <div class="review-mark">✓</div><div class="stage-copy"><h2 id="reviewTitle">Recording complete</h2><p id="reviewMessage">Listen to the recording, then accept it or record again.</p></div><audio id="playback" controls></audio><div class="quality-banner" id="reviewQuality"></div>
+          <div class="stage-actions split-actions"><button id="rerecordBtn" class="secondary">Re-record</button><button id="acceptBtn" class="primary-action">Accept and Continue</button></div>
+        </section>
+        <section class="stage" id="taskResultStage">
+          <div class="stage-copy"><h2 id="taskResultName">Task complete</h2></div>
+          <div class="result-hero task-score"><span>Score</span><strong id="taskResultScore">—</strong><small>/ 6</small></div>
+          <ul class="explain-list" id="taskResultExplain"></ul>
+          <p class="small-muted" id="taskResultHint">Pick a task from the panel on the right to continue, or record this one again.</p>
+          <div class="stage-actions"><button id="viewFinalResultsBtn" class="primary-action" hidden>View Final Results</button></div>
+        </section>
+        <section class="stage" id="resultsStage">
+          <div class="result-hero"><span>Estimated SARA Speech Score</span><strong id="estimatedScore">—</strong><p>Provisional research estimate — not clinically validated</p></div><div class="component-grid" id="componentGrid"></div><div class="calculation-line" id="calculationLine"></div><div class="quality-banner" id="overallWarning"></div>
+          <div class="stage-actions"><button id="restartBtn" class="secondary">Start New Assessment</button></div>
+        </section>
+      </main>
+      <aside class="side-panel">
+        <div class="tab-bar" role="tablist"><button class="side-tab active" data-tab="test" role="tab" aria-selected="true">TEST</button><button class="side-tab" data-tab="research" role="tab" aria-selected="false">RESEARCH</button></div>
+        <div class="tab-panel active" id="testPanel">
+          <section class="side-section" id="testSection"><h3>Test</h3><div class="task-list" id="taskList"></div></section>
+          <section class="side-section" id="summaryPanel" hidden><h3>Result Summary</h3><div class="side-score"><span>Estimated score</span><strong id="sideScore">—</strong><small>0–6</small></div><div class="summary-list" id="summaryList"></div><p class="caution">This standardized browser protocol is not the official conversational SARA examination.</p></section>
+          <section class="side-section" id="setupPanel"><h3>Settings</h3><label for="micSelect">Microphone</label><select id="micSelect"><option value="">Default microphone</option></select><div class="meter"><span id="sideMeter"></span></div><p id="micGuidance">Check your microphone before beginning.</p><div class="form-grid"><label>Sound cue<select id="soundCue"><option value="on">On</option><option value="off">Off</option></select></label><label>Test language<select id="language"><option value="en-US">English (US)</option></select></label><label>Mic distance (cm)<input id="micDistance" type="number" min="1" step="1" value="18"></label></div></section>
         </div>
-      </div>
-
-      <div class="row">
-        <span class="pill" id="status"><span class="pill-dot"></span>Idle</span>
-        <button id="btn-permission" class="secondary">🎙️ Mic Permission</button>
-      </div>
-
-      <!-- Session + controls -->
-      <div class="card">
-        <div class="row" style="justify-content:space-between;align-items:flex-end;position:relative;z-index:1;">
-          <div>
-            <div class="row" style="flex-wrap:wrap;gap:10px;">
-              <div class="row" style="gap:6px;">
-                <label>Participant ID</label>
-                <input id="pid" type="text" placeholder="e.g., P001" style="width:120px" />
-              </div>
-              <div class="row" style="gap:6px;">
-                <label>Session</label>
-                <input id="sid" type="text" placeholder="S1" style="width:80px" />
-              </div>
-              <div class="row" style="gap:6px;">
-                <label>Mic distance (cm)</label>
-                <input id="micdist" type="number" value="12" style="width:80px"/>
-              </div>
+        <div class="tab-panel" id="researchPanel">
+          <section class="side-section"><h3>Clinical Reference</h3><label for="clinicianScore">Clinician-rated SARA Speech score (0–6)</label><select id="clinicianScore"><option value="">Not entered</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select><label for="researchNotes">Clinician / researcher notes</label><textarea id="researchNotes" rows="4" placeholder="Optional same-day reference notes"></textarea></section>
+          <section class="side-section"><h3>Scoring</h3>
+            <div class="weight-bar" id="weightBar">
+              <div class="weight-handle" id="wHandle1" tabindex="0" role="slider" aria-label="Reading / Pa-ta-ka boundary"></div>
+              <div class="weight-handle" id="wHandle2" tabindex="0" role="slider" aria-label="Pa-ta-ka / Vowel boundary"></div>
             </div>
-            <div class="small" style="margin-top:6px">
-              Environment: quiet room (≤45 dB) recommended · noiseSuppression / echoCancellation ON
-            </div>
-          </div>
-          <div class="controls">
-            <button id="btn-start">▶ Start Test</button>
-            <button id="btn-stop" class="danger" disabled>■ Stop</button>
-          </div>
+            <div class="weight-labels"><span id="wLabelReading"></span><span id="wLabelPataka"></span><span id="wLabelVowel"></span></div>
+            <p>Engineering placeholder thresholds pending clinical calibration. Drag the bar to try alternative weightings (snaps to 10%).</p>
+            <button id="showScoringBtn" class="text-button">View calculation details</button><div id="scoringDetails" class="details-box" hidden></div>
+          </section>
+          <section class="side-section"><h3>Audio Download</h3><div id="audioDownloads" class="audio-download-row"></div></section>
+          <section class="side-section"><h3>Detailed Measurements</h3><div id="metricDetails" class="metric-details"><p>Complete the assessment to view task-level measurements.</p></div></section>
+          <section class="side-section limitation"><h3>Research Limitation</h3><p>Browser ASR and acoustic measurements vary by browser, device, microphone, network, accent, and language. Analysis failure is never interpreted as severe impairment.</p></section>
         </div>
-      </div>
-
-      <!-- Instructions + Monitor -->
-      <div class="grid">
-        <div class="card">
-          <div style="position:relative;z-index:1;">
-            <h3>Instructions</h3>
-            <div id="task-instructions" class="mono small" style="margin-top:4px;min-height:32px;"></div>
-            <div class="controls" style="margin-top:10px">
-              <button id="btn-record" disabled>● Start Recording</button>
-              <button id="btn-done" class="secondary" disabled>Next →</button>
-            </div>
-            <div style="margin-top:10px"><audio id="playback" controls></audio></div>
-          </div>
-        </div>
-        <div class="card">
-          <div style="position:relative;z-index:1;">
-            <h3>Live Monitor</h3>
-            <div class="small" style="margin-top:4px">Input: <span id="caps">—</span> · SR: <span id="sr">—</span></div>
-            <div class="small">Level (RMS): <span id="rms">0.000</span></div>
-            <div class="small">Estimated F0 (Hz): <span id="f0">—</span></div>
-            <canvas id="meter" width="320" height="40"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Results -->
-      <div class="card">
-        <div style="position:relative;z-index:1;">
-          <h3>Results</h3>
-          <div class="controls" style="margin-top:6px">
-            <button id="btn-export-csv" class="secondary" disabled>Export CSV</button>
-            <button id="btn-export-json" class="secondary" disabled>Export JSON</button>
-            <button id="btn-clear" class="secondary" disabled>Clear</button>
-          </div>
-          <div class="small" style="margin-top:8px">
-            Each segment is saved with its features. Audio is captured by the browser's MediaRecorder (webm/opus or similar).
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th><th>Test</th><th>Duration (s)</th>
-                <th>Mean RMS</th><th>RMS CV</th>
-                <th>Mean F0 (Hz)</th><th>F0 CV</th>
-                <th>WER</th><th>Correct</th>
-                <th>Score (0–6)</th><th>DL</th>
-              </tr>
-            </thead>
-            <tbody id="rows"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Score Summary -->
-      <div class="card" id="score-summary">
-        <div style="position:relative;z-index:1;">
-          <h3>Session Score Summary</h3>
-          <div id="score-content"></div>
-        </div>
-      </div>
-
-      <footer>
-        <span>Protocol: Read the 5 sentences below, one per test. Speak clearly and at a natural pace.</span>
-        <a href="../index.html">← Back to CeMoQu Home</a>
-      </footer>
-
+      </aside>
     </div>
-  </div>
-
-  <script src="app.js" defer></script>
+  </div></div>
 </body>
 </html>
