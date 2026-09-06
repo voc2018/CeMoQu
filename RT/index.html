@@ -8,219 +8,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../shared/common.css">
   <link rel="stylesheet" href="../shared/header.css">
+  <link rel="stylesheet" href="styles.css">
   <script src="../shared/header.js" defer></script>
 
-  <style>
-    /* ── RT overrides / additions (common.css handles base) ── */
-
-    a { color: inherit; text-decoration: none; }
-
-    /* Shell: RT fills the available viewport width */
-    .shell {
-      width: calc(100vw - 32px);
-      max-width: none;
-    }
-
-    /* Topbar: RT uses space-between */
-    .topbar {
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 4px;
-    }
-
-    /* Card: RT uses smaller min-height */
-    .card {
-      min-height: 100px;
-    }
-
-    /* ── RT-specific layout ── */
-    .content-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 320px;
-      gap: 16px;
-      width: 100%;
-    }
-    @media (max-width: 900px) {
-      .content-grid { grid-template-columns: 1fr; }
-    }
-
-    .bottom-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 16px;
-    }
-    @media (min-width: 900px) {
-      .bottom-grid { grid-template-columns: 1fr 1fr 320px; }
-    }
-
-    /* ── Button overrides for RT ── */
-    button {
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: transparent;
-      border: 1px solid rgba(148,163,184,0.18);
-      color: var(--text);
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 13px;
-    }
-    button:hover { filter: brightness(1.06); }
-    button[disabled] { opacity: 0.6; cursor: not-allowed; }
-
-    .btn-pill:focus-visible,
-    .test-link:focus-visible,
-    button:focus-visible {
-      outline: none;
-      box-shadow: 0 0 0 4px var(--accent-soft);
-    }
-
-    .active-mode {
-      background: linear-gradient(135deg, var(--accent), #21c1fb) !important;
-      color: #052012 !important;
-      border: 0 !important;
-    }
-    .inactive-mode {
-      background: transparent !important;
-      color: var(--text) !important;
-      border: 1px solid rgba(148,163,184,0.3) !important;
-    }
-
-    .viewer-toolbar {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .viewer-toolbar .primary {
-      background: linear-gradient(135deg, var(--accent), #21c1fb);
-      color: #052012;
-      border: 0;
-    }
-
-    /* ── Canvas / viewer ── */
-    .viewer-area {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-width: 0;
-    }
-
-    .canvas-wrap {
-      position: relative;
-      border-radius: 12px;
-      padding: 8px;
-      aspect-ratio: 2 / 1;
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(180deg, rgba(0,0,0,0.15), transparent);
-      overflow: hidden;
-    }
-    #canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-      background: transparent;
-      border-radius: 8px;
-    }
-    video { max-width: 100%; border-radius: 8px; }
-
-    .top-right-info {
-      position: absolute;
-      right: 12px; top: 12px;
-      font-size: 12px;
-      color: var(--muted);
-      background: rgba(15,23,42,0.6);
-      padding: 6px 8px;
-      border-radius: 8px;
-      border: 1px solid rgba(148,163,184,0.1);
-    }
-
-    .overlay-countdown,
-    .overlay-success {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 48px;
-      font-weight: 700;
-      text-shadow: 0 6px 20px rgba(0,0,0,0.7);
-    }
-
-    .calib-ui {
-      position: absolute;
-      left: 12px; bottom: 12px;
-      background: rgba(2,6,23,0.75);
-      padding: 10px;
-      border-radius: 12px;
-      border: 1px solid rgba(148,163,184,0.26);
-    }
-    .calib-bar {
-      height: 12px;
-      background: linear-gradient(90deg, rgba(16,185,174,0.9), rgba(32,63,219,0.9));
-      border-radius: 6px;
-    }
-
-    /* ── Panel ── */
-    .panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-      margin-bottom: 6px;
-      position: relative;
-      z-index: 1;
-    }
-    .panel-header h2 { font-size: 14px; margin: 0; }
-    .header-actions button {
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.22);
-      background: transparent;
-      color: var(--text);
-      cursor: pointer;
-      font-size: 12px;
-    }
-    .panel-body { position: relative; z-index: 1; }
-
-    /* ── Misc ── */
-    .col { display: flex; flex-direction: column; gap: 8px; }
-
-    .monitor-row { display: flex; gap: 8px; align-items: center; }
-    #monitorCustom {
-      padding: 8px;
-      border-radius: 8px;
-      border: 1px solid rgba(148,163,184,0.26);
-      background: transparent;
-      color: var(--text);
-    }
-
-    .log {
-      padding: 10px;
-      max-height: 260px;
-      overflow: auto;
-      font-size: 13px;
-      color: var(--muted);
-      background: transparent;
-    }
-
-    .footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-top: 6px;
-      font-size: 11px;
-      color: var(--muted);
-      flex-wrap: wrap;
-    }
-    .dot {
-      width: 4px; height: 4px;
-      border-radius: 999px;
-      background: rgba(148,163,184,0.7);
-    }
-  </style>
 </head>
 <body>
   <div id="header-container"></div>
@@ -264,10 +54,8 @@
           <div class="viewer-toolbar">
             <button id="startBtn" class="primary">Start Test</button>
             <button id="stopBtn">Stop</button>
-            <button id="runAgainBtn">Run Again</button>
             <button id="exportBtn">Export CSV</button>
-            <button id="uploadBtn">Upload De-identified Data</button>
-            <button id="resetSettingsBtn">Reset Settings</button>
+            <button id="uploadBtn">Submit Data</button>
           </div>
         </div>
 
@@ -279,18 +67,8 @@
 
           <div id="countdownOverlay" class="overlay-countdown" style="display:none;"></div>
           <div id="calibSuccessOverlay" class="overlay-success" style="display:none;"></div>
+          <div id="calibPromptOverlay" class="overlay-success" style="display:none;">Show your finger to the camera</div>
 
-          <div id="calibUI" class="calib-ui" style="display:none;">
-            <div id="calibInstr" class="small-muted" style="font-size:12px;">
-              Place a ruler or a known 8.5&nbsp;cm object along the green bar to verify length.
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-start;margin-top:8px;">
-              <div id="calibBar" class="calib-bar" style="width:120px;"></div>
-              <div style="margin-top:6px;font-size:11px;color:var(--muted);">
-                Adjust pixels/cm until the bar measures ~8.5&nbsp;cm on your screen.
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="meta-row" style="margin-top:12px;">
@@ -303,8 +81,7 @@
 
       <!-- Side panels -->
       <aside style="display:flex;flex-direction:column;gap:12px;">
-        <section class="card panel" style="width:100%;min-height:120px;">
-          <div class="panel-header"><h2>Info</h2></div>
+        <section class="card panel info-without-heading" style="width:100%;min-height:120px;">
           <div class="panel-body">
             <div class="small-muted">
               Random target touch test for ataxia and upper-limb control. Targets appear at random positions; the system logs time-to-target, time in target, final error, tremor, and smoothness.
@@ -313,83 +90,62 @@
           </div>
         </section>
 
-        <section class="card panel" style="width:100%;min-height:80px;">
-          <div class="panel-header"><h2>Status</h2></div>
+        <section class="card panel cursor-calibration-panel" style="width:100%;min-height:0;">
+          <div class="panel-header">
+            <h2>Calibration</h2>
+            <div class="header-actions">
+              <button id="calibrateBtn" class="verify-calibration-btn">Verify Calibration</button>
+            </div>
+          </div>
           <div class="panel-body">
-            <div id="statusLineTop">Idle</div>
-            <div id="trialLine" class="small-muted" style="margin-top:6px;">Trial: —</div>
+            <div id="calibUI" class="calib-ui" style="display:flex;">
+              <div id="calibInstr" class="small-muted">
+                Measure the orange bar with a physical ruler and enter its length in centimeters.
+              </div>
+              <div id="calibBar" class="calib-bar" style="width:120px;">
+                <span>CALIBRATION BAR</span>
+              </div>
+            </div>
+            <div class="row" style="margin-top:14px;">
+              <div style="flex:1;">
+                <label for="measuredDistance">Bar Length (cm)</label>
+                <input id="measuredDistance" type="number" step="0.01" min="0.01" placeholder="e.g. 13.2" />
+              </div>
+              <div style="flex:1;">
+                <label>Index finger length (cm)</label>
+                <input id="cfg_finger_cm" type="number" step="0.1" value="7.5" />
+              </div>
+            </div>
           </div>
         </section>
+
+        <div hidden aria-hidden="true">
+          <span id="statusLineTop">Idle</span>
+          <span id="trialLine">Trial: —</span>
+        </div>
 
         <section class="card panel" id="settingsPanel" style="min-height:260px;">
           <div class="panel-header">
             <div>
               <h2>Settings</h2>
-              <div class="small-muted" style="margin-top:4px;">Core test parameters (targets, timing, calibration).</div>
             </div>
             <div class="header-actions">
+              <button id="resetSettingsBtn">Reset Settings</button>
               <button id="saveSettingsBtn">Save Settings</button>
             </div>
           </div>
 
           <div class="panel-body">
             <div class="col">
-              <div class="row">
-                <div style="flex:1;"><label>Targets</label><input id="cfg_targets" type="number" value="5" min="1" /></div>
-                <div style="width:120px;"><label>Target interval (s)</label><input id="cfg_interval" type="number" value="2.0" step="0.1" min="0.1" /></div>
+              <div class="settings-primary-grid">
+                <div><label>Targets</label><input id="cfg_targets" type="number" value="5" min="1" /></div>
+                <div><label>Target interval (s)</label><input id="cfg_interval" type="number" value="2.0" step="0.1" min="0.1" /></div>
+                <div><label>Target radius (cm)</label><input id="cfg_radius_cm" type="number" value="2.0" step="0.1" /></div>
+                <div><label>Edge width (px)</label><input id="cfg_edge_px" type="number" value="5" /></div>
+                <div><label>Target spacing (cm)</label><input id="cfg_min_distance_cm" type="number" value="5.0" step="0.1" /></div>
+                <div><label>Hand</label><select id="meta_hand"><option value="">Unknown</option><option value="R">Right</option><option value="L">Left</option></select></div>
               </div>
-              <div class="row">
-                <div style="flex:1;"><label>Target radius (cm)</label><input id="cfg_radius_cm" type="number" value="2.0" step="0.1" /></div>
-                <div style="width:120px;"><label>Edge width (px)</label><input id="cfg_edge_px" type="number" value="5" /></div>
-              </div>
-              <div class="row">
-                <div style="flex:1;"><label>Min distance between targets (cm)</label><input id="cfg_min_distance_cm" type="number" value="5.0" step="0.1" /></div>
-                <div style="width:120px;"><label>Center dot (1 cm)</label><select id="cfg_center_dot"><option value="1">Yes</option><option value="0">No</option></select></div>
-              </div>
-              <div class="row" style="margin-top:8px;">
-                <div style="flex:1;"><label>Participant ID</label><input id="meta_participant" type="text" placeholder="P001" /></div>
-                <div style="width:120px;"><label>Session</label><input id="meta_session" type="text" placeholder="S1" /></div>
-              </div>
-              <div class="row" style="margin-top:8px;">
-                <div style="flex:1;"><label>Date</label><input id="meta_date" type="date" /></div>
-                <div style="width:120px;"><label>Hand</label><select id="meta_hand"><option value="">Unknown</option><option value="R">Right</option><option value="L">Left</option></select></div>
-              </div>
-              <div class="row" style="margin-top:8px;">
-                <div style="flex:1;"><label>Notes</label><input id="meta_notes" type="text" placeholder="Optional notes" /></div>
-              </div>
-              <div class="row" style="margin-top:6px;">
-                <div style="flex:1;"><label>Trail animation between targets</label><select id="cfg_trail"><option value="1">Yes</option><option value="0">No</option></select></div>
-                <div style="width:140px;"><label>Countdown / sound cue</label><select id="cfg_countdown"><option value="0">Off</option><option value="1">On</option></select></div>
-              </div>
-              <div class="row" style="margin-top:10px;align-items:center;">
-                <div style="flex:1;">
-                  <label>Pixels / cm (default)</label>
-                  <input id="cfg_ppc" type="number" step="0.1" value="30.0" />
-                  <div class="small-muted" style="margin-top:6px;">Set a default pixels-per-cm or use calibration to estimate from camera/monitor.</div>
-                </div>
-                <div style="width:140px;"><label>&nbsp;</label><button id="calibrateBtn" style="width:100%;">Calibrate</button></div>
-              </div>
-              <div class="row" style="margin-top:8px;">
-                <div style="flex:1;">
-                  <label>Finger length for calibration (cm)</label>
-                  <input id="cfg_finger_cm" type="number" step="0.1" value="7.5" />
-                  <div class="small-muted" style="margin-top:6px;">Used to compute pixels/cm during camera-based calibration.</div>
-                </div>
-              </div>
-              <div style="margin-top:10px;">
-                <label>Monitor size (diagonal)</label>
-                <div class="monitor-row">
-                  <select id="monitorSize"><option value="15.6">15.6"</option><option value="24">24"</option><option value="27">27"</option><option value="custom">Custom</option></select>
-                  <input id="monitorCustom" type="number" step="0.1" placeholder="Inches (custom)" style="display:none;" />
-                  <button id="estimatePpcBtn">Estimate ppc</button>
-                </div>
-                <div class="small-muted" style="margin-top:8px;">Estimates pixels/cm from monitor diagonal and CSS width. Verify with the green bar in Cursor mode.</div>
-              </div>
-              <div style="margin-top:12px;display:flex;gap:8px;">
-                <button id="applySettingsBtnLite" class="btn-pill">Apply (temporary)</button>
-                <button id="resetSettingsBtnLocal">Reset</button>
-              </div>
-              <div class="small-muted" style="margin-top:8px;">Settings are stored in local storage and restored next time.</div>
+              <input id="cfg_ppc" type="hidden" value="30.0" />
             </div>
           </div>
         </section>
@@ -507,6 +263,49 @@
         });
       }
     })();
+  </script>
+
+  <script>
+    /* ST-style two-panel layout. Existing test elements and IDs are preserved. */
+    document.addEventListener('DOMContentLoaded', () => {
+      const grid = document.querySelector('.content-grid');
+      const viewerCard = document.querySelector('.viewer-area');
+      const aside = grid?.querySelector('aside');
+      const logPanel = document.getElementById('logPanel');
+      if (!grid || !viewerCard || !aside || !logPanel) return;
+
+      document.querySelector('.shell')?.classList.add('rt-st-shell');
+      viewerCard.classList.add('rt-st-viewer');
+      aside.classList.add('rt-st-side');
+
+      const viewerHeader = viewerCard.firstElementChild;
+      const moduleTopbar = document.querySelector('.rt-st-shell > .topbar');
+      const versionBadge = moduleTopbar?.querySelector('.tag-pill')?.parentElement;
+      versionBadge?.classList.add('rt-version-badge');
+      const tabBar = document.createElement('div');
+      tabBar.className = 'rt-tab-bar';
+      tabBar.innerHTML = '<button class="rt-tab active" data-panel="test">TEST</button><button class="rt-tab" data-panel="research">RESEARCH</button>';
+
+      const testPanel = document.createElement('div');
+      testPanel.className = 'rt-side-panel active';
+      testPanel.dataset.panel = 'test';
+      const researchPanel = document.createElement('div');
+      researchPanel.className = 'rt-side-panel';
+      researchPanel.dataset.panel = 'research';
+
+      if (viewerHeader && moduleTopbar) {
+        viewerHeader.classList.add('rt-toolbar-top');
+        moduleTopbar.appendChild(viewerHeader);
+      }
+      [...aside.children].forEach(el => testPanel.appendChild(el));
+      researchPanel.appendChild(logPanel);
+
+      aside.replaceChildren(tabBar, testPanel, researchPanel);
+      tabBar.querySelectorAll('.rt-tab').forEach(btn => btn.addEventListener('click', () => {
+        tabBar.querySelectorAll('.rt-tab').forEach(b => b.classList.toggle('active', b === btn));
+        aside.querySelectorAll('.rt-side-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === btn.dataset.panel));
+      }));
+    });
   </script>
 </body>
 </html>

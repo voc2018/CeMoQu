@@ -15,7 +15,6 @@ const modeBadge = document.getElementById('modeBadgeText');
 
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
-const runAgainBtn = document.getElementById('runAgainBtn');
 const exportBtn = document.getElementById('exportBtn');
 const resetSettingsBtn = document.getElementById('resetSettingsBtn');
 
@@ -24,25 +23,20 @@ const cfg_interval = document.getElementById('cfg_interval');
 const cfg_radius_cm = document.getElementById('cfg_radius_cm');
 const cfg_edge_px = document.getElementById('cfg_edge_px');
 const cfg_min_distance_cm = document.getElementById('cfg_min_distance_cm');
-const cfg_center_dot = document.getElementById('cfg_center_dot');
-const cfg_trail = document.getElementById('cfg_trail');
-const cfg_countdown = document.getElementById('cfg_countdown');
 const cfg_finger_cm = document.getElementById('cfg_finger_cm');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-const applySettingsBtnLite = document.getElementById('applySettingsBtnLite');
-const resetSettingsBtnLocal = document.getElementById('resetSettingsBtnLocal');
 const calibrateBtn = document.getElementById('calibrateBtn');
 const cfg_ppc = document.getElementById('cfg_ppc');
 
-const meta_participant = document.getElementById('meta_participant');
-const meta_session = document.getElementById('meta_session');
-const meta_date = document.getElementById('meta_date');
 const meta_hand = document.getElementById('meta_hand');
-const meta_notes = document.getElementById('meta_notes');
 
-const monitorSize = document.getElementById('monitorSize');
-const monitorCustom = document.getElementById('monitorCustom');
-const estimatePpcBtn = document.getElementById('estimatePpcBtn');
+/* Live read of global header fields (participant/session/date). Not cached —
+   header.html is injected asynchronously by shared/header.js, so this must
+   be looked up at the moment it's needed, same pattern as LD's fieldVal(). */
+function headerFieldVal(id){
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
 
 const statusLine = document.getElementById('statusLine');
 const trialLine = document.getElementById('trialLine');
@@ -55,6 +49,7 @@ const countdownOverlay = document.getElementById('countdownOverlay');
 const calibUI = document.getElementById('calibUI');
 const calibBar = document.getElementById('calibBar');
 const calibInstr = document.getElementById('calibInstr');
+const measuredDistance = document.getElementById('measuredDistance');
 
 let camera = null;
 let hands = null;
@@ -66,21 +61,11 @@ let mode = 'cursor'; // 'cursor' or 'camera'
 let VIDEO_W = 640, VIDEO_H = 480;
 
 /* Backing buffer scaling */
-function getViewerContentSize(){
-  const viewerStyle = getComputedStyle(viewer);
-  const paddingX = parseFloat(viewerStyle.paddingLeft) + parseFloat(viewerStyle.paddingRight);
-  const paddingY = parseFloat(viewerStyle.paddingTop) + parseFloat(viewerStyle.paddingBottom);
-  return {
-    width: Math.max(1, Math.floor(viewer.clientWidth - paddingX)),
-    height: Math.max(1, Math.floor(viewer.clientHeight - paddingY))
-  };
-}
-
 function resizeCanvasBacking(){
-  const viewerSize = getViewerContentSize();
+  const viewerRect = viewer.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  const cssW = viewerSize.width;
-  const cssH = viewerSize.height;
+  const cssW = Math.max(1, Math.floor(viewerRect.width));
+  const cssH = Math.max(1, Math.floor(viewerRect.height));
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
   canvas.width = Math.round(cssW * dpr);
@@ -105,7 +90,7 @@ const DEFAULTS = {
   min_distance_cm: 5.0,
   center_dot: true,
   trail: true,
-  countdown: false,
+  countdown: true,
   ppc: 30.0,
   finger_cm: 7.5
 };
@@ -174,16 +159,16 @@ function saveSettingsToLocal(){
     radius_cm: parseFloat(cfg_radius_cm.value)||DEFAULTS.radius_cm,
     edge_px: parseInt(cfg_edge_px.value)||DEFAULTS.edge_px,
     min_distance_cm: parseFloat(cfg_min_distance_cm.value)||DEFAULTS.min_distance_cm,
-    center_dot: (cfg_center_dot.value === '1'),
-    trail: (cfg_trail.value === '1'),
-    countdown: (cfg_countdown.value === '1'),
+    center_dot: true,
+    trail: true,
+    countdown: true,
     ppc: parseFloat(cfg_ppc.value) || DEFAULTS.ppc,
     finger_cm: parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm,
-    participant: meta_participant.value.trim() || DEFAULT_META.participant,
-    session: meta_session.value.trim() || DEFAULT_META.session,
-    date: meta_date.value || DEFAULT_META.date,
+    participant: headerFieldVal('glob-id') || DEFAULT_META.participant,
+    session: headerFieldVal('glob-sess') || DEFAULT_META.session,
+    date: headerFieldVal('glob-date') || DEFAULT_META.date,
     hand: meta_hand.value || DEFAULT_META.hand,
-    notes: meta_notes.value.trim() || DEFAULT_META.notes
+    notes: DEFAULT_META.notes
   };
   localStorage.setItem(LS_SETTINGS, JSON.stringify(s));
   loadSettingsIntoRuntime();
@@ -199,32 +184,18 @@ function loadSettingsFromLocal(){
       cfg_radius_cm.value = s.radius_cm || DEFAULTS.radius_cm;
       cfg_edge_px.value = s.edge_px || DEFAULTS.edge_px;
       cfg_min_distance_cm.value = s.min_distance_cm || DEFAULTS.min_distance_cm;
-      cfg_center_dot.value = s.center_dot ? '1':'0';
-      cfg_trail.value = s.trail ? '1':'0';
-      cfg_countdown.value = s.countdown ? '1':'0';
       cfg_ppc.value = (typeof s.ppc === 'number') ? s.ppc : DEFAULTS.ppc;
       cfg_finger_cm.value = (typeof s.finger_cm === 'number') ? s.finger_cm : DEFAULTS.finger_cm;
-      meta_participant.value = s.participant || DEFAULT_META.participant;
-      meta_session.value = s.session || DEFAULT_META.session;
-      meta_date.value = s.date || DEFAULT_META.date;
       meta_hand.value = s.hand || DEFAULT_META.hand;
-      meta_notes.value = s.notes || DEFAULT_META.notes;
     } else {
       cfg_targets.value = DEFAULTS.targets;
       cfg_interval.value = DEFAULTS.interval_s;
       cfg_radius_cm.value = DEFAULTS.radius_cm;
       cfg_edge_px.value = DEFAULTS.edge_px;
       cfg_min_distance_cm.value = DEFAULTS.min_distance_cm;
-      cfg_center_dot.value = DEFAULTS.center_dot ? '1':'0';
-      cfg_trail.value = DEFAULTS.trail ? '1':'0';
-      cfg_countdown.value = DEFAULTS.countdown ? '1':'0';
       cfg_ppc.value = DEFAULTS.ppc;
       cfg_finger_cm.value = DEFAULTS.finger_cm;
-      meta_participant.value = DEFAULT_META.participant;
-      meta_session.value = DEFAULT_META.session;
-      meta_date.value = DEFAULT_META.date;
       meta_hand.value = DEFAULT_META.hand;
-      meta_notes.value = DEFAULT_META.notes;
     }
     loadSettingsIntoRuntime();
   }catch(e){ console.warn('load settings fail',e); }
@@ -235,18 +206,18 @@ function loadSettingsIntoRuntime(){
   cfg.radius_cm = parseFloat(cfg_radius_cm.value)||DEFAULTS.radius_cm;
   cfg.edge_px = parseInt(cfg_edge_px.value)||DEFAULTS.edge_px;
   cfg.min_distance_cm = parseFloat(cfg_min_distance_cm.value)||DEFAULTS.min_distance_cm;
-  cfg.center_dot = (cfg_center_dot.value === '1');
-  cfg.trail = (cfg_trail.value === '1');
-  cfg.countdown = (cfg_countdown.value === '1');
+  cfg.center_dot = true;
+  cfg.trail = true;
+  cfg.countdown = true;
   cfg.finger_cm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
   pixels_per_cm = parseFloat(cfg_ppc.value) || DEFAULTS.ppc;
   ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
   metaData = {
-    participant: meta_participant.value.trim() || DEFAULT_META.participant,
-    session: meta_session.value.trim() || DEFAULT_META.session,
-    date: meta_date.value || DEFAULT_META.date,
+    participant: headerFieldVal('glob-id') || DEFAULT_META.participant,
+    session: headerFieldVal('glob-sess') || DEFAULT_META.session,
+    date: headerFieldVal('glob-date') || DEFAULT_META.date,
     hand: meta_hand.value || DEFAULT_META.hand,
-    notes: meta_notes.value.trim() || DEFAULT_META.notes
+    notes: DEFAULT_META.notes
   };
   appendLog(`<div class="small-muted">Settings applied: ${cfg.targets} targets • ${cfg.radius_cm} cm • ${cfg.interval_s}s</div>`);
   updateCalibBar();
@@ -333,11 +304,14 @@ function startCalibrationPromise(){
     calibStartMs = performance.now();
     calibSamples = [];
     appendLog('<div class="small-muted">Calibration started — hold index finger out for 3 seconds</div>');
+    const calibPromptOverlay = document.getElementById('calibPromptOverlay');
+    if(calibPromptOverlay) calibPromptOverlay.style.display = 'flex';
     const check = setInterval(()=> {
       const elapsed = performance.now() - calibStartMs;
       if(elapsed >= CALIB_DURATION_MS){
         calibRunning = false;
         clearInterval(check);
+        if(calibPromptOverlay) calibPromptOverlay.style.display = 'none';
         if(calibSamples.length > 0){
           const avgPx = calibSamples.reduce((a,b)=>a+b,0)/calibSamples.length;
           const userCm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
@@ -848,7 +822,7 @@ async function runCountdownAndCue(){
   for(let i=0;i<seq.length;i++){
     countdownOverlay.textContent = String(seq[i]);
     beep(700 - i*100, 180, 0.06);
-    await new Promise(r=>setTimeout(r, 600));
+    await new Promise(r=>setTimeout(r, 1000));
   }
   countdownOverlay.style.display = 'none';
 }
@@ -863,11 +837,21 @@ startBtn.addEventListener('click', async ()=>{
     if(!hands) await initHands();
     if(!camera) await startCamera();
     resizeCanvasBacking();
+
+    // Calibration is patient-specific in Camera mode (finger length, camera
+    // distance) — always re-run it fresh right before every test/run,
+    // regardless of any earlier "Verify Calibration" click.
+    appendLog('<div class="small-muted">Running calibration before test start…</div>');
+    const calibOk = await startCalibrationPromise();
+    if(!calibOk){
+      alert('Calibration failed — no hand detected. Hold your index finger steady in view of the camera, then press Start Test again.');
+      return;
+    }
   } else {
     // cursor mode: set VIDEO_W/VIDEO_H to working canvas virtual pixel space (CSS pixels)
-    const viewerSize = getViewerContentSize();
-    VIDEO_W = viewerSize.width;
-    VIDEO_H = viewerSize.height;
+    const viewerRect = viewer.getBoundingClientRect();
+    VIDEO_W = Math.max(1, Math.floor(viewerRect.width));
+    VIDEO_H = Math.max(1, Math.floor(viewerRect.height));
     resizeCanvasBacking();
     // show calibration UI overlay
     calibUI.style.display = 'flex';
@@ -902,15 +886,6 @@ startBtn.addEventListener('click', async ()=>{
   startTrialInternal();
 });
 
-/* Run Again */
-runAgainBtn.addEventListener('click', async ()=>{
-  if(running){
-    appendLog('<div class="small-muted">Already running — stop first to run again.</div>');
-    return;
-  }
-  startBtn.click();
-});
-
 /* stop */
 stopBtn.addEventListener('click', ()=>{
   running = false;
@@ -936,110 +911,110 @@ calibrateBtn.addEventListener('click', async ()=>{
       ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
     }
   } else {
-    // In cursor mode, we can re-compute ppc estimate from monitor controls
-    estimatePpcFromMonitor();
-    appendLog('<div class="small-muted">Pixels/cm estimated for Cursor Mode — verify with the green bar.</div>');
+    const measuredCm = parseFloat(measuredDistance.value);
+    if(!measuredCm || measuredCm <= 0){
+      alert('Enter the measured length of the orange calibration bar.');
+      return;
+    }
+    const barWidthPx = calibBar.getBoundingClientRect().width;
+    pixels_per_cm = barWidthPx / measuredCm;
+    cfg_ppc.value = pixels_per_cm.toFixed(2);
+    ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+    updateCalibBar();
+    saveSettingsToLocal();
+    appendLog(`<div class="small-muted">Calibration verified — ${pixels_per_cm.toFixed(2)} px/cm</div>`);
   }
 });
 
-/* --- CLOUD EXPORT LOGIC --- */
-// INSERT YOUR GOOGLE APPS SCRIPT WEB APP URL HERE:
-const GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycby5fnkhhk58RLH_jt-NAjKi-e0D0t-yVtIhX4h3Nqkq_665JClprgwdIY3SOfH7Pp-Cdg/exec";
-
-exportBtn.addEventListener('click', async () => {
-  if (!GOOGLE_SHEET_WEB_APP_URL || GOOGLE_SHEET_WEB_APP_URL === "INSERT_YOUR_GOOGLE_WEB_APP_URL_HERE") {
-    alert("Please configure the Google Sheet Web App URL in the code first.");
-    return;
-  }
-
-  appendLog(`<div class="small-muted">Preparing data for cloud export...</div>`);
-  exportBtn.disabled = true;
-  exportBtn.textContent = "Uploading...";
-
+/* export CSV (3 files) - include mode in final summary export */
+exportBtn.addEventListener('click', ()=>{
   const sanitize = (value) => String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
   const participant = sanitize(metaData.participant || DEFAULT_META.participant) || 'P000';
   const sessionLabel = sanitize(metaData.session || DEFAULT_META.session) || 'S1';
   const dateLabel = (metaData.date || DEFAULT_META.date).slice(0,10);
   const handLabel = (metaData.hand && metaData.hand.trim()) ? sanitize(metaData.hand) : 'Unknown';
   const sessionId = `${participant}_${dateLabel}_${sessionLabel}`;
+  const fileSuffix = `${participant}${dateLabel}${sessionLabel}`;
 
-  // 1. Prepare Touches Data (Arrays of values for Google Sheets)
-  const touchesData = [];
-  touchesData.push(['touch_id','session_id','target_id','participant_id','session','date','hand','trial_idx','frame_idx','timestamp','x_px','y_px','inside']);
+  // touches csv
+  const touchesHeader = ['touch_id','session_id','target_id','participant_id','session','date','hand','trial_idx','frame_idx','timestamp','x_px','y_px','inside'];
+  const touchesLines = [touchesHeader.join(',')];
   for(const t of allTouches){
-    touchesData.push([
-      `${sessionId}_T${t.trialIdx+1}_F${t.frameIdx}`,
+    const targetId = `${sessionId}_T${t.trialIdx+1}`;
+    const touchId = `${sessionId}_T${t.trialIdx+1}_F${t.frameIdx}`;
+    touchesLines.push([
+      touchId,
       sessionId,
-      `${sessionId}_T${t.trialIdx+1}`,
-      participant, sessionLabel, dateLabel, handLabel,
-      t.trialIdx, t.frameIdx, t.ts,
-      t.x_px===undefined?'':t.x_px, t.y_px===undefined?'':t.y_px,
+      targetId,
+      participant,
+      sessionLabel,
+      dateLabel,
+      handLabel,
+      t.trialIdx,
+      t.frameIdx,
+      t.ts,
+      t.x_px===undefined?'':t.x_px,
+      t.y_px===undefined?'':t.y_px,
       t.inside?1:0
-    ]);
+    ].join(','));
   }
+  downloadBlob(touchesLines.join('\n'), `RT_touches_${fileSuffix}.csv`);
 
-  // 2. Prepare Targets Summary Data
-  const targetsData = [];
-  targetsData.push(['target_id','session_id','participant_id','session','date','hand','trial_global_index','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','time_to_target_s','percent_time_inside','frames_recorded','missed','valid','sara_score','enhanced_score']);
+  // targets summary csv
+  const targHeader = ['target_id','session_id','participant_id','session','date','hand','trial_global_index','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','time_to_target_s','percent_time_inside','frames_recorded','missed','valid','sara_score','enhanced_score'];
+  const targLines = [targHeader.join(',')];
   for(const s of allTargetSummaries){
-    targetsData.push([
-      `${sessionId}_T${s.trial}`, sessionId, participant, sessionLabel, dateLabel, handLabel,
-      s.trial, s.tx, s.ty, s.radius_cm, s.radius_px,
+    const targetId = `${sessionId}_T${s.trial}`;
+    const valid = s.missed ? 0 : 1;
+    targLines.push([
+      targetId,
+      sessionId,
+      participant,
+      sessionLabel,
+      dateLabel,
+      handLabel,
+      s.trial,
+      s.tx,
+      s.ty,
+      s.radius_cm,
+      s.radius_px,
       s.final_dist_cm!==null ? s.final_dist_cm.toFixed(3):'',
       s.reaction_time!==null ? s.reaction_time.toFixed(3):'',
-      s.percent_time_inside.toFixed(2), s.frames_recorded,
-      s.missed?1:0, s.missed?0:1,
+      s.percent_time_inside.toFixed(2),
+      s.frames_recorded,
+      s.missed?1:0,
+      valid,
       s.trial_score!==null ? s.trial_score.toFixed(3) : '',
       s.enhanced_score!==null ? s.enhanced_score.toFixed(3) : ''
-    ]);
+    ].join(','));
   }
+  downloadBlob(targLines.join('\n'), `RT_targets_summary_${fileSuffix}.csv`);
 
-  // 3. Prepare Final Summary Data
-  const finalData = [];
-  finalData.push(['session_id','participant_id','session','trial','date','hand','mode','num_targets','sara_score','enhanced_score','distance_to_target_cm','time_to_target_s','percent_time_inside','notes']);
+  // final summary
+  const finalHeader = ['session_id','participant_id','session','trial','date','hand','mode','num_targets','sara_score','enhanced_score','distance_to_target_cm','time_to_target_s','percent_time_inside','notes'];
+  const finalLines = [finalHeader.join(',')];
   for(const f of allFinalSummaries){
     for(const s of f.targets){
-      finalData.push([
-        f.session_id, f.participant_id, f.session, s.trial, f.date, f.hand, f.mode, f.num_targets,
+      finalLines.push([
+        f.session_id,
+        f.participant_id,
+        f.session,
+        s.trial,
+        f.date,
+        f.hand,
+        f.mode,
+        f.num_targets,
         s.trial_score !== null ? s.trial_score.toFixed(3) : '',
         s.enhanced_score !== null ? s.enhanced_score.toFixed(3) : '',
         s.final_dist_cm !== null ? s.final_dist_cm.toFixed(3) : '',
         s.reaction_time !== null ? s.reaction_time.toFixed(3) : '',
-        s.percent_time_inside.toFixed(2), f.notes || ''
-      ]);
+        s.percent_time_inside.toFixed(2),
+        f.notes || ''
+      ].join(','));
     }
   }
-
-  const payload = {
-    touches: touchesData,
-    targets: targetsData,
-    final: finalData
-  };
-
-  try {
-    const res = await fetch(GOOGLE_SHEET_WEB_APP_URL, {
-      method: "POST",
-      // Using text/plain bypasses strict CORS preflight checks in browsers
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload)
-    });
-    
-    if (!res.ok) throw new Error("Network response was not ok.");
-    
-    const responseData = await res.json();
-    if (responseData.status === "success") {
-      appendLog(`<div class="small-muted" style="color: #10b981;">✅ Data successfully saved to Google Sheets!</div>`);
-      // Optional: Clear arrays here if you don't want to re-upload the same data on next click
-    } else {
-      throw new Error(responseData.message || "Unknown error from server.");
-    }
-  } catch (err) {
-    console.error("Export Error:", err);
-    appendLog(`<div style="color:#f88">❌ Upload failed: ${err.message}. Check console for details.</div>`);
-  } finally {
-    exportBtn.disabled = false;
-    exportBtn.textContent = "Export Data";
-  }
+  downloadBlob(finalLines.join('\n'), `RT_final_summary_${fileSuffix}.csv`);
+  appendLog(`<div class="small-muted">Exported CSVs</div>`);
 });
 
 /* helper download */
@@ -1056,8 +1031,7 @@ clearLogBtn.addEventListener('click', ()=>{ clearLog(); });
 
 /* save/apply settings */
 saveSettingsBtn.addEventListener('click', ()=>{ saveSettingsToLocal(); });
-applySettingsBtnLite.addEventListener('click', ()=>{ loadSettingsIntoRuntime(); appendLog('<div class="small-muted">Settings applied (temporary)</div>'); });
-resetSettingsBtnLocal.addEventListener('click', ()=>{ resetSettings(); });
+resetSettingsBtn.addEventListener('click', ()=>{ resetSettings(); });
 
 /* attach/detach cursor listeners */
 function attachCursorListeners(){
@@ -1092,37 +1066,6 @@ function onCanvasMouseUp(e){
 function onCanvasMouseLeave(e){
   lastMousePos = null;
 }
-
-/* monitor estimate -> pixels/cm */
-function estimatePpcFromMonitor(){
-  let diagIn = monitorSize.value === 'custom' ? parseFloat(monitorCustom.value) : parseFloat(monitorSize.value);
-  if(!diagIn || diagIn <= 0) diagIn = parseFloat(monitorSize.value) || 24;
-  const diagonal_mm = diagIn * 25.4;
-  const aspectW = 16, aspectH = 9;
-  const ratio = Math.sqrt(aspectW*aspectW + aspectH*aspectH);
-  const width_mm = diagonal_mm * (aspectW / ratio);
-  const width_cm = width_mm / 10.0;
-  const cssScreenPx = window.screen.width;
-  const est_ppc = cssScreenPx / width_cm;
-  pixels_per_cm = est_ppc;
-  cfg_ppc.value = pixels_per_cm.toFixed(2);
-  ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
-  updateCalibBar();
-  return pixels_per_cm;
-}
-
-estimatePpcBtn.addEventListener('click', ()=>{
-  const p = estimatePpcFromMonitor();
-  appendLog(`<div class="small-muted">Estimated ${p.toFixed(2)} px/cm from monitor selection. Verify with green bar.</div>`);
-});
-
-monitorSize.addEventListener('change', ()=>{
-  if(monitorSize.value === 'custom'){
-    monitorCustom.style.display = 'inline-block';
-  } else {
-    monitorCustom.style.display = 'none';
-  }
-});
 
 /* update calibration bar width according to pixels_per_cm and current canvas scale
    ensure bar doesn't overflow viewer area — cap to viewer width - margins
