@@ -44,8 +44,7 @@
       </select>
       <button id="startSequenceBtn" onclick="startTestSequence()">Start Test</button>
       <button onclick="stopTest()">Stop Test</button>
-      <button onclick="resetTest()">Reset Test</button>
-      <button id="exportTrialBtn" onclick="exportData()">Export Trial</button>
+      <button id="exportTrialBtn" onclick="exportData()">Submit Data</button>
       <button id="exportCsvBtn" onclick="exportCsv()">Export CSV</button>
       <span id="exportStatus" class="small-muted"></span>
     </div>
@@ -64,8 +63,14 @@
     <aside class="side-column">
       <!-- Calibration -->
       <section class="card calibration-panel">
-        <h2>Calibration</h2>
-        <p class="notice">Measure the orange bar with a physical ruler and enter its length in centimeters.</p>
+        <div class="panel-header">
+          <h2>Calibration</h2>
+          <div class="header-actions">
+            <div id="calibrationStatus" class="status-bad">Not Verified</div>
+            <button class="verify-button" onclick="verifyCalibration()">Verify Calibration</button>
+          </div>
+        </div>
+        <p class="notice">Measure the orange bar with a ruler and enter its length in cm.</p>
         <div id="calBarSidebar" class="cal-bar">
           <span class="cal-bar-label">CALIBRATION BAR</span>
         </div>
@@ -76,11 +81,9 @@
           </div>
           <div class="form-row">
             <label>Tolerance (cm)</label>
-            <input type="number" id="toleranceInput" step="0.01" value="0.00">
+            <input type="number" id="toleranceInput" step="0.01" value="0.25">
           </div>
         </div>
-        <button class="verify-button" onclick="verifyCalibration()">Verify Calibration</button>
-        <div id="calibrationStatus" class="status-bad">Not Verified</div>
       </section>
 
       <!-- Results -->

@@ -83,8 +83,8 @@ outOfBounds:0,
 startFails:0
 };
 
-/* Ignore tiny pointer jitter when counting turns and reverses. */
-const TURN_TOLERANCE_CM=0.25;
+/* Turn/reverse sensitivity is now driven by the on-screen "Tolerance (cm)" field
+   (see updateDirectionChange), not a fixed constant. */
 let xDirection=0;
 let yDirection=0;
 let xDirectionDistance=0;
@@ -502,7 +502,8 @@ function updateDirectionChange(delta,axis){
 if(delta===0||!calibrationVerified)
 return;
 
-const thresholdPx=TURN_TOLERANCE_CM*pixelsPerCm;
+const toleranceCm=parseFloat(document.getElementById("toleranceInput").value)||0;
+const thresholdPx=toleranceCm*pixelsPerCm;
 const movementDirection=normalize(delta);
 
 let direction=axis==="x"?xDirection:yDirection;
@@ -966,19 +967,12 @@ return 3;                 // > 5 cm
 
 function updateStats(){
 
-/* Apply tolerance: treat deviations below threshold as 0 */
+/* Tolerance now controls turn-detection sensitivity (see updateDirectionChange),
+   not deviation scoring — deviation is reported raw and unfiltered. */
 const toleranceCm=
 parseFloat(document.getElementById("toleranceInput").value)||0;
 
-const tolerancePx=
-calibrationVerified&&toleranceCm>0?
-toleranceCm*pixelsPerCm:
-0;
-
-const effective=
-deviationSamples.map(d=>
-Math.max(0,d-tolerancePx)
-);
+const effective=deviationSamples;
 
 const maxPx=
 effective.length?
@@ -1085,7 +1079,7 @@ text:"A 0–4 ataxia severity score modeled on the SARA finger-chase item, deriv
 
 p95:{
 title:"P95 Deviation",
-text:"The 95th-percentile distance between the cursor and the ideal guide line, in pixels and centimeters, after the tolerance setting is applied. This is the only metric used to calculate the SARA score, since it reflects sustained tracing error rather than one extreme outlier."
+text:"The 95th-percentile distance between the cursor and the ideal guide line, in pixels and centimeters, using the raw (unadjusted) deviation. This is the only metric used to calculate the SARA score, since it reflects sustained tracing error rather than one extreme outlier."
 },
 
 max:{
@@ -1210,8 +1204,7 @@ setGuidance("Test stopped. Select Start Test to begin again.",false);
 
 function getTrialMetrics(){
 const toleranceCm=parseFloat(document.getElementById("toleranceInput").value)||0;
-const tolerancePx=calibrationVerified&&toleranceCm>0?toleranceCm*pixelsPerCm:0;
-const effective=deviationSamples.map(d=>Math.max(0,d-tolerancePx));
+const effective=deviationSamples;
 const maxPx=effective.length?Math.max(...effective):0;
 const meanPx=effective.length?effective.reduce((a,b)=>a+b,0)/effective.length:0;
 const p95Px=percentile(effective,0.95);
@@ -1299,7 +1292,7 @@ date:fieldVal("glob-date")||new Date().toISOString().split("T")[0]
 
 const headers=[
 "participant_id","session","age","sex","hand","date","test_mode","test_name","trial_number","timestamp","duration_seconds",
-"pixels_per_cm","cm_per_pixel","tolerance_cm","discontinuities","vertical_turns","horizontal_reverses","out_of_bounds","start_fails",
+"pixels_per_cm","cm_per_pixel","turn_tolerance_cm","discontinuities","vertical_turns","horizontal_reverses","out_of_bounds","start_fails",
 "max_deviation_px","max_deviation_cm","mean_deviation_px","mean_deviation_cm","p95_deviation_px","p95_deviation_cm",
 "deviation_area_px2","deviation_area_cm2","sara_score","sara_label","success"
 ];
@@ -1348,13 +1341,7 @@ return;
 const toleranceCm=
 parseFloat(document.getElementById("toleranceInput").value)||0;
 
-const tolerancePx=
-calibrationVerified&&toleranceCm>0?
-toleranceCm*pixelsPerCm:
-0;
-
-const effective=
-deviationSamples.map(d=>Math.max(0,d-tolerancePx));
+const effective=deviationSamples;
 
 const maxPx=
 effective.length?
