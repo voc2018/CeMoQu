@@ -893,7 +893,6 @@ stopBtn.addEventListener('click', ()=>{
   trialState = null;
   detachCursorListeners();
   stopCamera();
-  calibUI.style.display = 'none';
   appendLog('<div class="small-muted">Test stopped by user.</div>');
   statusLine.textContent = 'Stopped';
 });

@@ -17,8 +17,9 @@ html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helve
 .controls {display:flex;gap:8px;align-items:center}
 .controls > *{padding:10px 12px;border-radius:8px;border:0;background:var(--panel);color:var(--text);font-weight:600}
 .shell button.primary{background:linear-gradient(90deg,#0ea5a4,#10b981);color:#02111a;font-weight:700}
+#stopBtn{border-color:#9f3340;color:#e85b6b;}
 /* Mode toggle (two-sided big button) */
-.mode-toggle {display:flex;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.04);background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.06));}
+.mode-toggle {display:flex;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.04);background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.06));}
 .mode-btn {flex:1;padding:12px 18px;text-align:center;cursor:pointer;font-weight:700;border:0;background:transparent;color:var(--muted);font-size:15px}
 .mode-btn.active{background:linear-gradient(90deg,#08353a,#0ea5a4);color:#02111a}
 /* Canvas area — bigger and responsive */

@@ -36,15 +36,7 @@
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
           <div>
             <div style="display:flex;flex-direction:column;gap:6px;">
-              <div style="display:flex;gap:8px;align-items:center;">
-                <div class="badge">
-                  <span class="badge-dot"></span>
-                  Mode
-                  <strong id="modeBadgeText" style="margin-left:6px;color:var(--text)">Cursor</strong>
-                </div>
-                <div class="small-muted" style="font-size:12px;">Switch to Camera mode for hand tracking.</div>
-              </div>
-              <div class="mode-toggle" role="tablist" aria-label="Choose test mode" style="display:flex;gap:8px;margin-top:6px;">
+              <div class="mode-toggle" role="tablist" aria-label="Choose test mode" style="display:flex;gap:8px;">
                 <button id="modeCursor" class="btn-pill active-mode" role="tab" aria-selected="true">Cursor Mode</button>
                 <button id="modeCamera" class="btn-pill inactive-mode" role="tab" aria-selected="false">Camera Mode</button>
               </div>
@@ -53,9 +45,9 @@
 
           <div class="viewer-toolbar">
             <button id="startBtn" class="primary">Start Test</button>
-            <button id="stopBtn">Stop</button>
-            <button id="exportBtn">Export CSV</button>
+            <button id="stopBtn">Stop Test</button>
             <button id="uploadBtn">Submit Data</button>
+            <button id="exportBtn">Export CSV</button>
           </div>
         </div>
 
