@@ -1,5 +1,10 @@
 # CeMoQu Design Observations for SD
 
+> **Note:** per-module design-observation docs like this one are being phased out in favor of one
+> shared CeMoQu design-system document. This file's content is a candidate to be merged into that
+> shared doc once it exists; it is kept here for now but is no longer part of SD's standard
+> documentation set (README / METHODOLOGY / TASK-DESIGN-RATIONALE).
+
 Working observations from the supplied LD (September 4, 2026), RT (September 5, 2026), and read-only shared files. These are evidence-based implementation notes, not yet an official design system.
 
 - **Color roles:** very dark navy page background; slightly lighter navy work surfaces; blue-to-cyan primary gradient; cyan for active labels; green for success; amber for caution; red for recording/error; muted blue-gray secondary text.

@@ -63,7 +63,9 @@ always use identical text. All three were written to have an energizing, motivat
 checked against the CMU Pronouncing Dictionary to make sure that, between the three of them, every
 phoneme (individual speech sound) of General American English appears at least once. The full design
 rationale and the actual coverage numbers are in
-[`reading-passage-design-rationale.md`](./reading-passage-design-rationale.md).
+[`reading-passage-design-rationale.md`](./reading-passage-design-rationale.md) — part of the broader
+[`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md) covering why all three tasks and their
+weights were chosen.
 
 This task is the closest proxy to real intelligibility: it's scored on how accurately a
 speech-recognition engine can transcribe what was said, and how fast the person spoke.
@@ -111,7 +113,8 @@ an earlier default of 30% after Grobe-Einsler et al. (2023) found that pa-ta-ka-
 the single strongest predictor of SARA speech severity in their automated-scoring study (5 of the top
 10 most predictive features came from that task alone). **Anyone using the tool can drag the weight
 bar in the RESEARCH tab to try different splits** (it snaps to 10% steps and always adds up to 100%);
-the score recalculates immediately.
+the score recalculates immediately. *(Full rationale for all three tasks and this weighting:
+[`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md).)*
 
 ![The RESEARCH tab's Scoring section: a draggable weight bar plus the raw per-metric measurements for one task, each labeled scoring/quality_control/exploratory](docs/screenshots/research-weight-bar.png)
 
@@ -119,6 +122,9 @@ One additional rule protects against a specific failure mode: if the reading tas
 or 6, the final estimate can never come out lower than that — a person who is severely hard to
 understand doesn't get "averaged up" to a better score just because their pa-ta-ka or vowel task
 happened to go well.
+
+*(For the exact per-metric thresholds and step-by-step worked examples, see
+[`METHODOLOGY.md`](./METHODOLOGY.md).)*
 
 ### Data quality isn't a pass/fail gate
 
@@ -167,9 +173,17 @@ what went wrong from a threshold table.
 
 ## Where to look next
 
-- `reading-passage-design-rationale.md` — full evidence base for the three reading passages
-- `design-observations.md` — visual/design patterns shared with the other CeMoQu modules (RT, LD, ST)
+This module follows a standard three-document structure (README / methodology / design rationale)
+intended to apply across all CeMoQu modules, not just this one:
+
+- [`METHODOLOGY.md`](./METHODOLOGY.md) — every method used to go from raw audio to the final score:
+  voice-activity detection, pitch tracking, event detection, transcript alignment, and the scoring
+  formulas, with worked examples
+- [`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md) — why these three tasks, why their
+  durations, and why the scoring weights are split the way they are, with citations
+  - [`reading-passage-design-rationale.md`](./reading-passage-design-rationale.md) — deep-dive
+    appendix specifically on the three reading passage texts and their phoneme coverage
 - `verification-report.md` — what has and hasn't been checked in a real browser with a real
-  microphone
+  microphone (currently out of date — see the notice at the top of that file)
 
 **Current versions:** protocol `sd-protocol-v2`, scoring config `sd-provisional-v1.8`.
