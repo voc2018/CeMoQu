@@ -113,6 +113,35 @@ This replaced an earlier unordered "fuzzy" word-matching approach, which could n
 genuinely different word from a word spoken in the wrong order, and is not considered a valid WER
 method in ASR/speech literature.
 
+The two displayed rate measures use the browser-ASR transcript rather than a manually verified word
+count:
+
+```
+wordsPerMinute       = recognizedWordCount / totalRecordingSeconds × 60
+articulationRateWpm  = recognizedWordCount / activeSpeechSeconds × 60
+```
+
+Only `wordsPerMinute` contributes to the current reading component score. Because both WER and WPM
+depend on the same browser-ASR transcript, an ASR miss can increase WER while also reducing the
+recognized word count used for WPM. These are therefore not independent measures, and their combined
+contribution must be recalibrated against manually verified transcripts and clinician-rated speech
+before clinical use.
+
+### A5. Detection confidence and partial measurements
+
+The displayed `detectionConfidence` is a bounded engineering heuristic derived from detected active
+frames, signal peak, clipping status, and task-specific evidence such as voiced F0 frames or detected
+pa-ta-ka events. It is **not** a calibrated probability that the analysis is correct and must not be
+interpreted as clinical confidence.
+
+The current implementation returns `Unavailable` when a recording is marked `empty_or_invalid` or
+when all scoring metrics for a task are unavailable. If at least one scoring metric is numeric, the
+component is calculated; any missing metric receives severity 0 under the shared conversion
+functions. This matches the current code but remains a provisional design decision: treating a
+missing metric as severity 0 can bias a partially observed component toward the normal end of the
+scale. Before clinical calibration, the project must decide whether incomplete components should
+instead be unavailable or calculated with explicitly renormalized weights.
+
 ---
 
 ## Part B — from measurements to the 0–6 score

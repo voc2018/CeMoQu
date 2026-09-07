@@ -33,8 +33,9 @@ talk in normal conversation**:
 SD does **not** replicate that conversational exam. Instead, it asks the person to do three short,
 standardized tasks that a browser can record and measure automatically and consistently, and
 combines the results into an estimate on the same 0–6 scale. This trades the richness of a real
-conversation for something a clinician's ear can't easily give: exact, repeatable numbers that can be
-compared across visits, or across many patients in a study.
+conversation for standardized quantitative measurements designed for comparison across repeated
+assessments and research cohorts. Their test–retest reliability and comparability across devices,
+browsers, and visits still require validation.
 
 ## The three tasks
 
@@ -63,9 +64,8 @@ always use identical text. All three were written to have an energizing, motivat
 checked against the CMU Pronouncing Dictionary to make sure that, between the three of them, every
 phoneme (individual speech sound) of General American English appears at least once. The full design
 rationale and the actual coverage numbers are in
-[`reading-passage-design-rationale.md`](./reading-passage-design-rationale.md) — part of the broader
-[`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md) covering why all three tasks and their
-weights were chosen.
+[`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md), which also covers why all three tasks and
+their weights were chosen.
 
 This task is the closest proxy to real intelligibility: it's scored on how accurately a
 speech-recognition engine can transcribe what was said, and how fast the person spoke.
@@ -88,9 +88,12 @@ plain-language note about its limitations, right after each task is finished (no
 | Reading | Word error rate | How much the spoken words differed from the passage, per a standard alignment algorithm |
 | | Speaking rate | Words per minute |
 
-All of these are **derived measurements**, not the raw audio — the raw audio itself is never
-discarded and can be downloaded from the RESEARCH tab (AH / PA-TA-KA / READING buttons) for anyone
-who wants to listen to or re-analyze it directly.
+All of these are **derived measurements**. The original browser-recorded audio file for each
+accepted attempt is retained during the session and can be downloaded from the RESEARCH tab
+(AH / PA-TA-KA / READING buttons) for direct listening or later re-analysis. Depending on browser
+support, this file may be compressed WebM/Opus or another browser-selected format; it is not
+uncompressed acquisition-grade raw audio and is not persisted after the page is closed unless it is
+downloaded.
 
 ## How scoring works
 
@@ -173,17 +176,16 @@ what went wrong from a threshold table.
 
 ## Where to look next
 
-This module follows a standard three-document structure (README / methodology / design rationale)
-intended to apply across all CeMoQu modules, not just this one:
+This module follows the standard four-document structure intended to apply across all CeMoQu
+modules, not just this one:
 
 - [`METHODOLOGY.md`](./METHODOLOGY.md) — every method used to go from raw audio to the final score:
   voice-activity detection, pitch tracking, event detection, transcript alignment, and the scoring
   formulas, with worked examples
 - [`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md) — why these three tasks, why their
-  durations, and why the scoring weights are split the way they are, with citations
-  - [`reading-passage-design-rationale.md`](./reading-passage-design-rationale.md) — deep-dive
-    appendix specifically on the three reading passage texts and their phoneme coverage
-- `verification-report.md` — what has and hasn't been checked in a real browser with a real
-  microphone (currently out of date — see the notice at the top of that file)
+  durations and reading-passage content, and why the scoring weights are split the way they are,
+  with citations
+- [`VERIFICATION-REPORT.md`](./VERIFICATION-REPORT.md) — what has been checked automatically and
+  manually, what remains unverified, and the conditions required before clinical validation
 
 **Current versions:** protocol `sd-protocol-v2`, scoring config `sd-provisional-v1.8`.
