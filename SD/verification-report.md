@@ -1,5 +1,13 @@
 # SD Verification Report
 
+> **⚠️ Outdated — update pending.** This report reflects `sd-provisional-v1.1`. Since then the
+> module has changed significantly (any-order task selection, top toolbar with Mic Test/Start
+> Test/Stop Test, quality flags no longer gate scoring, pa-ta-ka scoring now accounts for pauses,
+> two-stage F0 octave-error correction, three rotating reading passages, per-task plain-language
+> score explanations, and more). None of that is covered below yet. A refreshed version against the
+> current build (`sd-provisional-v1.8`) is planned before this is relied on for anything beyond
+> historical reference.
+
 ## v1.1 fixes and how they were verified
 
 - **`[hidden]` CSS override bug** (countdown overlay permanently visible and click-blocking): confirmed by grep — no `[hidden]` rule existed anywhere in `styles.css` prior to the fix, while `.countdown{display:grid}` and `.time-chip{display:flex}` both unconditionally set `display`. Fixed with `.sd-shell [hidden]{display:none!important}`, scoped to SD only. Still needs confirmation in an actual browser (`getComputedStyle(#countdown).display === 'none'` while the `hidden` attribute is present).
