@@ -12,7 +12,7 @@ CeMoQu RT is a browser-based upper-limb coordination test designed to collect qu
 
 The two modes use separate calibration and measurement pipelines, then share the same analysis pipeline for reaction time, dysmetria, tremor/hold instability, scoring, result display, and CSV export.
 
-![Screenshot needed: RT main screen with Cursor Mode selected](./docs/screenshots/rt-main-cursor-mode.png)
+![Screenshot needed: RT main screen with Cursor Mode selected](./docs/screenshots/cursor-mode-calibration.png)
 
 ---
 
