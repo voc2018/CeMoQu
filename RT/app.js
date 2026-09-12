@@ -1,1130 +1,350 @@
-/* RT Finger Chase — Clinic edition (with Cursor Test)
-   UI rearranged: viewer & info at top; 3 columns at bottom (metadata, settings, log).
-   Calibration fix: sample index fingertip -> MCP pixel distance while calibRunning
-*/
+(() => {
+  'use strict';
 
-/* DOM */
-const viewer = document.getElementById('viewer');
-const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-
-const modeCursor = document.getElementById('modeCursor');
-const modeCamera = document.getElementById('modeCamera');
-const modeBadge = document.getElementById('modeBadgeText');
-
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const exportBtn = document.getElementById('exportBtn');
-const resetSettingsBtn = document.getElementById('resetSettingsBtn');
-
-const cfg_targets = document.getElementById('cfg_targets');
-const cfg_interval = document.getElementById('cfg_interval');
-const cfg_radius_cm = document.getElementById('cfg_radius_cm');
-const cfg_edge_px = document.getElementById('cfg_edge_px');
-const cfg_min_distance_cm = document.getElementById('cfg_min_distance_cm');
-const cfg_finger_cm = document.getElementById('cfg_finger_cm');
-const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-const calibrateBtn = document.getElementById('calibrateBtn');
-const cfg_ppc = document.getElementById('cfg_ppc');
-
-const meta_hand = document.getElementById('meta_hand');
-
-/* Live read of global header fields (participant/session/date). Not cached —
-   header.html is injected asynchronously by shared/header.js, so this must
-   be looked up at the moment it's needed, same pattern as LD's fieldVal(). */
-function headerFieldVal(id){
-  const el = document.getElementById(id);
-  return el ? el.value.trim() : '';
-}
-
-const statusLine = document.getElementById('statusLine');
-const trialLine = document.getElementById('trialLine');
-const ppcLabel = document.getElementById('ppcLabel');
-
-const logArea = document.getElementById('logArea');
-const clearLogBtn = document.getElementById('clearLogBtn');
-const countdownOverlay = document.getElementById('countdownOverlay');
-
-const calibUI = document.getElementById('calibUI');
-const calibBar = document.getElementById('calibBar');
-const calibInstr = document.getElementById('calibInstr');
-const measuredDistance = document.getElementById('measuredDistance');
-
-let camera = null;
-let hands = null;
-
-/* Modes */
-let mode = 'cursor'; // 'cursor' or 'camera'
-
-/* Video intrinsic */
-let VIDEO_W = 640, VIDEO_H = 480;
-
-/* Backing buffer scaling */
-function resizeCanvasBacking(){
-  const viewerRect = viewer.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  const cssW = Math.max(1, Math.floor(viewerRect.width));
-  const cssH = Math.max(1, Math.floor(viewerRect.height));
-  canvas.style.width = cssW + 'px';
-  canvas.style.height = cssH + 'px';
-  canvas.width = Math.round(cssW * dpr);
-  canvas.height = Math.round(cssH * dpr);
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  // update calibration bar immediate width
-  updateCalibBar();
-}
-window.addEventListener('resize', resizeCanvasBacking);
-
-/* localStorage keys */
-const LS_PREFIX = 'rt_fingerchase_v1_';
-const LS_SETTINGS = LS_PREFIX + 'settings';
-
-/* default settings */
-const DEFAULTS = {
-  targets: 5,
-  interval_s: 2.0,
-  radius_cm: 2.0,
-  edge_px: 20,
-  min_distance_cm: 5.0,
-  center_dot: true,
-  trail: true,
-  countdown: true,
-  ppc: 30.0,
-  finger_cm: 7.5
-};
-
-
-/* runtime config */
-let cfg = {...DEFAULTS};
-
-const DEFAULT_META = {
-  participant: 'P000',
-  session: 'S1',
-  date: new Date().toISOString().slice(0,10),
-  hand: '',
-  notes: ''
-};
-let metaData = {...DEFAULT_META};
-
-/* pixels per cm (set from settings / calibration) */
-let pixels_per_cm = DEFAULTS.ppc;
-ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
-
-/* calibration state */
-let calibRunning = false;
-let calibSamples = [];
-let calibStartMs = null;
-const CALIB_DURATION_MS = 3000;
-let calibDone = false;
-
-/* trial / data storage */
-let allTouches = [];
-let allTargetSummaries = [];
-let allFinalSummaries = [];
-
-/* per-run runtime */
-let running = false;
-let trialIndex = 0;
-let targets = [];
-let trialRunning = false;
-let trialState = null;
-let trailAnimation = null;
-let fpsUsed = 30;
-
-/* letterbox layout cache */
-let drawLayout = { destW:0, destH:0, offsetX:0, offsetY:0, scale:1 };
-
-/* cursor mode state */
-let cursorIsDown = false;
-let lastMousePos = null;
-
-/* utility logging */
-function appendLog(html){
-  const el = document.createElement('div');
-  el.innerHTML = html;
-  logArea.appendChild(el);
-  logArea.scrollTop = logArea.scrollHeight;
-}
-function clearLog(){
-  logArea.textContent = '';
-}
-
-/* save/load settings */
-function saveSettingsToLocal(){
-  const s = {
-    targets: parseInt(cfg_targets.value)||DEFAULTS.targets,
-    interval_s: parseFloat(cfg_interval.value)||DEFAULTS.interval_s,
-    radius_cm: parseFloat(cfg_radius_cm.value)||DEFAULTS.radius_cm,
-    edge_px: parseInt(cfg_edge_px.value)||DEFAULTS.edge_px,
-    min_distance_cm: parseFloat(cfg_min_distance_cm.value)||DEFAULTS.min_distance_cm,
-    center_dot: true,
-    trail: true,
-    countdown: true,
-    ppc: parseFloat(cfg_ppc.value) || DEFAULTS.ppc,
-    finger_cm: parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm,
-    participant: headerFieldVal('glob-id') || DEFAULT_META.participant,
-    session: headerFieldVal('glob-sess') || DEFAULT_META.session,
-    date: headerFieldVal('glob-date') || DEFAULT_META.date,
-    hand: meta_hand.value || DEFAULT_META.hand,
-    notes: DEFAULT_META.notes
+  const PROTOCOL_VERSION = 'sd-protocol-v2';
+  const PASSAGES = [
+    { id: 'cemq-climb-v1', version: '1.0', title: 'The Climb',
+      text: 'Every step up the steep trail tested her legs, but she kept a steady breath and pushed forward without slowing down. When her knees ached and the cold wind pushed against her chest, she remembered why she had started and pressed on anyway. At the top, the whole valley opened below her, bright and wide, and she finally understood that real strength grows exactly where doubt used to live.' },
+    { id: 'cemq-oneshot-v1', version: '1.0', title: 'One More Shot',
+      text: 'He missed the shot twice while the crowd fell quiet, and for a moment he thought about walking away for good. Instead, he picked up the ball, shook off the doubt, and took one more try with steady, patient hands. The ball spun through the evening air and dropped clean through the hoop, and the whole gym erupted with sound and joy.' },
+    { id: 'cemq-sunrise-v1', version: '1.0', title: 'Before Sunrise',
+      text: 'Every morning before sunrise, the young runner laced her shoes and stepped out into the cold, quiet street. Some mornings her legs felt heavy and her breath came in short, sharp bursts, but she never once turned back toward home. Months later, standing at the finish line with both arms raised high, she knew that every early morning had been a treasure.' }
+  ];
+  function pickPassage(){return PASSAGES[Math.floor(Math.random()*PASSAGES.length)]}
+  const METRIC_CAVEATS = {
+    wordsPerMinute: 'Recognized-word count comes from browser ASR, not a direct timing measurement — inherits ASR accuracy limits.',
+    articulationRateWpm: 'Recognized-word count comes from browser ASR, not a direct timing measurement — inherits ASR accuracy limits.',
+    wer: 'Alignment math is standard, but the transcript it runs on comes from browser ASR, which is tuned for fluent speech and may register unclear speech as errors it did not correctly interpret rather than errors the speaker made.',
+    meanF0Hz: 'Basic autocorrelation pitch estimate. Frames much quieter than the loudest part of the recording are excluded (unreliable pitch tracking at low SNR), and remaining outliers close to double/half the median are corrected; unresolved outliers are dropped. Still approximate — not a substitute for clinical pitch analysis.',
+    medianF0Hz: 'Basic autocorrelation pitch estimate, computed after excluding low-loudness frames and correcting likely octave errors; treat as approximate.',
+    f0Cv: 'Basic autocorrelation pitch estimate. Frames much quieter than the loudest part of the recording are excluded, and remaining outliers close to double/half the median are corrected rather than left to inflate this value; unresolved outliers are dropped. Still an approximate, browser-derived measure.',
+    syllablesPerSecond: 'Rate computed only over time judged "active" — excludes pauses entirely, so frequent or long pauses do not lower this number. Estimated from amplitude-envelope peaks, not verified syllable boundaries.',
+    overallSyllablesPerSecond: 'Rate computed over the full recording including pauses (classic DDK-rate method). Long or frequent pauses lower this number, unlike the active-only rate above — pausing/breakdown is itself a recognized feature of ataxic dysarthria ("scanning speech"), not just noise to exclude.',
+    interOnsetCv: 'Estimated from amplitude-envelope peaks, not verified syllable boundaries — background noise or weak articulation can shift the count.',
+    pauseRatio: 'Share of the recording with no detected speech. In this task, high values may reflect genuine speech-timing breakdown rather than a recording problem.'
   };
-  localStorage.setItem(LS_SETTINGS, JSON.stringify(s));
-  loadSettingsIntoRuntime();
-  appendLog('<div class="small-muted">Settings saved</div>');
-}
-function loadSettingsFromLocal(){
-  try{
-    const raw = localStorage.getItem(LS_SETTINGS);
-    if(raw){
-      const s = JSON.parse(raw);
-      cfg_targets.value = s.targets || DEFAULTS.targets;
-      cfg_interval.value = s.interval_s || DEFAULTS.interval_s;
-      cfg_radius_cm.value = s.radius_cm || DEFAULTS.radius_cm;
-      cfg_edge_px.value = s.edge_px || DEFAULTS.edge_px;
-      cfg_min_distance_cm.value = s.min_distance_cm || DEFAULTS.min_distance_cm;
-      cfg_ppc.value = (typeof s.ppc === 'number') ? s.ppc : DEFAULTS.ppc;
-      cfg_finger_cm.value = (typeof s.finger_cm === 'number') ? s.finger_cm : DEFAULTS.finger_cm;
-      meta_hand.value = s.hand || DEFAULT_META.hand;
-    } else {
-      cfg_targets.value = DEFAULTS.targets;
-      cfg_interval.value = DEFAULTS.interval_s;
-      cfg_radius_cm.value = DEFAULTS.radius_cm;
-      cfg_edge_px.value = DEFAULTS.edge_px;
-      cfg_min_distance_cm.value = DEFAULTS.min_distance_cm;
-      cfg_ppc.value = DEFAULTS.ppc;
-      cfg_finger_cm.value = DEFAULTS.finger_cm;
-      meta_hand.value = DEFAULT_META.hand;
+  const PROVISIONAL_SCORING_CONFIG = {
+    version: 'sd-provisional-v1.8', clinicallyValidated: false,
+    label: 'Engineering placeholder thresholds pending clinical calibration',
+    weights: { reading: 0.50, pataka: 0.40, vowel: 0.10 },
+    reading: {
+      metrics: { wer: { classification: 'scoring', contribution: 0.8 }, speechRateWpm: { classification: 'scoring', contribution: 0.2 }, pauses: { classification: 'exploratory' } },
+      thresholds: { wer: [0.05, 0.15, 0.28, 0.42, 0.60, 0.80], speechRateWpm: [150, 125, 100, 75, 50, 25] },
+      qualityRequirements: { asrRequired: true, minActiveSeconds: 5, minDetectionConfidence: 0.45 }
+    },
+    pataka: {
+      metrics: { overallSyllablesPerSecond: { classification: 'scoring', contribution: 0.40 }, interOnsetCv: { classification: 'scoring', contribution: 0.30 }, pauseRatio: { classification: 'scoring', contribution: 0.30 }, syllablesPerSecond: { classification: 'exploratory' }, detectedEvents: { classification: 'exploratory' } },
+      thresholds: { overallSyllablesPerSecond: [6.0, 5.2, 4.4, 3.6, 2.8, 2.0], interOnsetCv: [0.10, 0.16, 0.23, 0.32, 0.44, 0.60], pauseRatio: [0.15, 0.25, 0.35, 0.50, 0.65, 0.80] },
+      qualityRequirements: { minEvents: 6, minDetectionConfidence: 0.45 }
+    },
+    vowel: {
+      metrics: { validPhonationSeconds: { classification: 'scoring', contribution: 0.45 }, f0Cv: { classification: 'scoring', contribution: 0.35 }, phonationDropoutCount: { classification: 'scoring', contribution: 0.20 }, meanF0: { classification: 'exploratory' } },
+      thresholds: { validPhonationSeconds: [4.5, 4.0, 3.4, 2.8, 2.0, 1.0], f0Cv: [0.025, 0.045, 0.070, 0.105, 0.16, 0.24], phonationDropoutCount: [0, 1, 2, 3, 5, 8] },
+      qualityRequirements: { minVoicedFramePct: 25, minDetectionConfidence: 0.45 }
     }
-    loadSettingsIntoRuntime();
-  }catch(e){ console.warn('load settings fail',e); }
-}
-function loadSettingsIntoRuntime(){
-  cfg.targets = parseInt(cfg_targets.value)||DEFAULTS.targets;
-  cfg.interval_s = parseFloat(cfg_interval.value)||DEFAULTS.interval_s;
-  cfg.radius_cm = parseFloat(cfg_radius_cm.value)||DEFAULTS.radius_cm;
-  cfg.edge_px = parseInt(cfg_edge_px.value)||DEFAULTS.edge_px;
-  cfg.min_distance_cm = parseFloat(cfg_min_distance_cm.value)||DEFAULTS.min_distance_cm;
-  cfg.center_dot = true;
-  cfg.trail = true;
-  cfg.countdown = true;
-  cfg.finger_cm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
-  pixels_per_cm = parseFloat(cfg_ppc.value) || DEFAULTS.ppc;
-  ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
-  metaData = {
-    participant: headerFieldVal('glob-id') || DEFAULT_META.participant,
-    session: headerFieldVal('glob-sess') || DEFAULT_META.session,
-    date: headerFieldVal('glob-date') || DEFAULT_META.date,
-    hand: meta_hand.value || DEFAULT_META.hand,
-    notes: DEFAULT_META.notes
   };
-  appendLog(`<div class="small-muted">Settings applied: ${cfg.targets} targets • ${cfg.radius_cm} cm • ${cfg.interval_s}s</div>`);
-  updateCalibBar();
-}
+  window.PROVISIONAL_SCORING_CONFIG = PROVISIONAL_SCORING_CONFIG;
 
-/* reset settings */
-function resetSettings(){
-  localStorage.removeItem(LS_SETTINGS);
-  loadSettingsFromLocal();
-  appendLog(`<div class="small-muted">Settings reset to defaults</div>`);
-}
+  const TASKS = [
+    { key: 'vowel', name: 'Sustained vowel', short: 'AH', seconds: 5, instruction: 'Take a comfortable breath and sustain “ah” at your normal pitch and loudness until the recording stops.' },
+    { key: 'pataka', name: 'Pa-ta-ka repetition', short: 'PA · TA · KA', seconds: 10, instruction: 'Repeat “pa-ta-ka” as quickly and evenly as you can until the recording stops.' },
+    { key: 'reading', name: 'Standard reading passage', short: PASSAGES[0].text, seconds: 30, instruction: 'Read the passage aloud at your normal pace. Speak as naturally and clearly as you can.' }
+  ];
 
-/* WebAudio beep */
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function beep(freq=880, dur=120, vol=0.06){
-  try{
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.type = 'sine';
-    o.frequency.value = freq;
-    g.gain.value = vol;
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start();
-    setTimeout(()=>{ o.stop(); o.disconnect(); g.disconnect(); }, dur);
-  }catch(e){}
-}
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    topStatus: $('topStatus'), progressFill: $('progressFill'), stepLabel: $('stepLabel'), timeChip: $('timeChip'), timeText: $('timeText'),
+    micTestBtn: $('micTestBtn'), startTestBtn: $('startTestBtn'), stopTestBtn: $('stopTestBtn'), submitDataBtn: $('submitDataBtn'), exportCsvTopBtn: $('exportCsvTopBtn'), toolbarMessage: $('toolbarMessage'),
+    setupStage: $('setupStage'), taskStage: $('taskStage'), processingStage: $('processingStage'), reviewStage: $('reviewStage'), resultsStage: $('resultsStage'),
+    micState: $('micState'), levelState: $('levelState'), noiseState: $('noiseState'), checkMicBtn: $('checkMicBtn'), micSelect: $('micSelect'), sideMeter: $('sideMeter'), micGuidance: $('micGuidance'),
+    taskName: $('taskName'), taskInstruction: $('taskInstruction'), stimulus: $('stimulus'), countdown: $('countdown'), waveCanvas: $('waveCanvas'), levelFill: $('levelFill'), recordBtn: $('recordBtn'), finishBtn: $('finishBtn'),
+    playback: $('playback'), reviewTitle: $('reviewTitle'), reviewMessage: $('reviewMessage'), reviewQuality: $('reviewQuality'), rerecordBtn: $('rerecordBtn'), acceptBtn: $('acceptBtn'),
+    setupPanel: $('setupPanel'), summaryPanel: $('summaryPanel'), taskList: $('taskList'),
+    estimatedScore: $('estimatedScore'), componentGrid: $('componentGrid'), calculationLine: $('calculationLine'), overallWarning: $('overallWarning'), restartBtn: $('restartBtn'), sideScore: $('sideScore'), summaryList: $('summaryList'),
+    showScoringBtn: $('showScoringBtn'), scoringDetails: $('scoringDetails'), metricDetails: $('metricDetails'), audioDownloads: $('audioDownloads'),
+    taskResultStage: $('taskResultStage'), taskResultName: $('taskResultName'), taskResultScore: $('taskResultScore'), taskResultExplain: $('taskResultExplain'), taskResultHint: $('taskResultHint'), viewFinalResultsBtn: $('viewFinalResultsBtn'),
+    weightBar: $('weightBar'), wHandle1: $('wHandle1'), wHandle2: $('wHandle2'), wLabelReading: $('wLabelReading'), wLabelPataka: $('wLabelPataka'), wLabelVowel: $('wLabelVowel'),
+    clinicianScore: $('clinicianScore'), researchNotes: $('researchNotes'), soundCue: $('soundCue'), language: $('language'), micDistance: $('micDistance')
+  };
 
-/* MediaPipe hands (camera) */
-async function initHands(){
-  hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-  });
-  hands.setOptions({ modelComplexity:0, maxNumHands:1, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
-  hands.onResults(onHandsResults);
-}
+  const model = {
+    state: 'idle', taskIndex: 0, attemptNumber: { vowel: 0, pataka: 0, reading: 0 }, attempts: [], accepted: {}, result: null,
+    stream: null, audioContext: null, source: null, analyser: null, monitorFrame: null, recorder: null, chunks: [], stopTimer: null, clockTimer: null,
+    recordStartedAt: 0, currentUrl: null, recognition: null, transcript: '', asrStatus: 'not_started', actualSettings: {}, micCheck: null, cueOscillator: null
+  };
+  const transitions = {
+    idle: ['checking', 'ready', 'error'], checking: ['ready', 'idle', 'error'], ready: ['countdown', 'idle', 'error'], countdown: ['recording', 'ready', 'error'],
+    recording: ['processing', 'ready', 'error'], processing: ['review', 'ready', 'error'], review: ['ready', 'accepted', 'error'], accepted: ['ready', 'completed'], completed: ['idle'], error: ['idle', 'checking', 'ready']
+  };
 
-/* start camera */
-async function startCamera(){
-  const vw = 640, vh = 480;
-  try{
-    VIDEO_W = vw;
-    VIDEO_H = vh;
-    resizeCanvasBacking();
-    appendLog(`<div class="small-muted">Camera starting...</div>`);
+  function setState(next) {
+    if (model.state !== next && !(transitions[model.state] || []).includes(next)) throw new Error(`Invalid state transition: ${model.state} → ${next}`);
+    model.state = next;
+    const label = { idle: 'Not started', checking: 'Checking microphone', ready: 'Ready', countdown: 'Get ready', recording: 'Recording', processing: 'Processing', review: 'Review recording', accepted: 'Accepted', completed: 'Complete', error: 'Needs attention' }[next];
+    els.topStatus.lastElementChild.textContent = label;
+    els.topStatus.classList.toggle('recording', next === 'recording');
+    renderTaskList();
+    lockActions(['countdown', 'recording', 'processing'].includes(next));
+  }
+  function lockActions(locked) { document.querySelectorAll('.side-tab').forEach(b => { b.disabled = locked; }); }
+  function showStage(stage) { ['setupStage','taskStage','processingStage','reviewStage','taskResultStage','resultsStage'].forEach(k => els[k].classList.toggle('active', els[k] === stage)); }
+  function progress(percent) { els.progressFill.style.width = `${percent}%`; }
 
-    camera = new Camera(video, { 
-      onFrame: async () => { await hands.send({image:video}); }, 
-      width: vw, 
-      height: vh 
+  async function requestMicrophone() {
+    releaseMedia();
+    const deviceId = els.micSelect.value;
+    const requested = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1, sampleRate: { ideal: 48000 } };
+    if (deviceId) requested.deviceId = { exact: deviceId };
+    model.stream = await navigator.mediaDevices.getUserMedia({ audio: requested });
+    const track = model.stream.getAudioTracks()[0];
+    model.actualSettings = track.getSettings ? track.getSettings() : {};
+    model.requestedConstraints = requested;
+    model.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await model.audioContext.resume();
+    model.source = model.audioContext.createMediaStreamSource(model.stream);
+    model.analyser = model.audioContext.createAnalyser(); model.analyser.fftSize = 2048; model.analyser.smoothingTimeConstant = .72;
+    model.source.connect(model.analyser); startMonitor(); await populateDevices(); return model.stream;
+  }
+  async function populateDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const current = els.micSelect.value; const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+    els.micSelect.innerHTML = '<option value="">Default microphone</option>' + devices.map((d,i) => `<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label || `Microphone ${i+1}`)}</option>`).join('');
+    if ([...els.micSelect.options].some(o => o.value === current)) els.micSelect.value = current;
+  }
+  function startMonitor() {
+    cancelAnimationFrame(model.monitorFrame); const data = new Float32Array(model.analyser.fftSize); const ctx = els.waveCanvas.getContext('2d');
+    const loop = () => { if (!model.analyser) return; model.analyser.getFloatTimeDomainData(data); const rms = Math.sqrt(data.reduce((s,v) => s + v*v, 0) / data.length); const peak = data.reduce((m,v) => Math.max(m, Math.abs(v)), 0); const pct = Math.min(100, Math.sqrt(rms) * 150); els.levelFill.style.width = `${pct}%`; els.sideMeter.style.width = `${pct}%`; drawWave(ctx, data, peak); model.lastRms = rms; model.lastPeak = peak; model.monitorFrame = requestAnimationFrame(loop); }; loop();
+  }
+  function drawWave(ctx, data, peak) { const { width:w,height:h } = ctx.canvas; ctx.clearRect(0,0,w,h); ctx.strokeStyle = peak > .98 ? '#ef4444' : '#21c1fb'; ctx.lineWidth = 2; ctx.beginPath(); for(let i=0;i<data.length;i++){ const x=i/(data.length-1)*w,y=h/2+clamp(data[i]*1.6,-.48,.48)*h; i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); ctx.strokeStyle='#244050';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke(); }
+
+  async function checkMicrophone() {
+    if (model.state === 'checking') return; setState('checking'); els.checkMicBtn.disabled = true; els.micTestBtn.disabled = true; els.micGuidance.textContent = 'Stay quiet briefly, then say a few words at your normal level.';
+    try {
+      await requestMicrophone(); const noise=[]; const signal=[]; for(let i=0;i<30;i++){ await wait(100); (i<10?noise:signal).push(model.lastRms||0); }
+      const noiseRms = mean(noise), signalRms = Math.max(...signal), peak = model.lastPeak || 0;
+      const flags=[]; if(signalRms < .008) flags.push('too_quiet'); if(peak > .98) flags.push('clipping'); if(noiseRms > .035) flags.push('background_noise');
+      model.micCheck = { timestamp: new Date().toISOString(), noiseRms, maxSignalRms: signalRms, peak, flags, passed: signalRms >= .008 && peak <= .98 };
+      els.micState.textContent='Ready';els.micState.className='good';els.levelState.textContent=signalRms<.008?'Too quiet':peak>.98?'Clipping':'Good';els.levelState.className=flags.length?'warn':'good';els.noiseState.textContent=noiseRms>.035?'High':'Acceptable';els.noiseState.className=noiseRms>.035?'warn':'good';
+      els.micGuidance.textContent = flags.length ? `Check complete: ${flags.map(pretty).join(', ')}. You may retry or continue.` : 'Microphone level is suitable. You can begin.';
+      els.startTestBtn.disabled = false; setState('ready');
+    } catch (error) { setState('error'); els.micState.textContent='Unavailable';els.micState.className='warn';els.micGuidance.textContent=`Microphone access failed: ${error.message}`; els.startTestBtn.disabled=true; }
+    finally { els.checkMicBtn.disabled=false; els.checkMicBtn.textContent='Check Again'; els.micTestBtn.disabled=false; }
+  }
+
+  function startTask(key) {
+    if (!model.micCheck || model.state !== 'ready') return;
+    const idx = TASKS.findIndex(t => t.key === key);
+    if (idx < 0) return;
+    model.taskIndex = idx;
+    els.micTestBtn.disabled = true; els.stopTestBtn.disabled = false; els.toolbarMessage.textContent = '';
+    loadTask();
+  }
+  function startFirstIncompleteTask() {
+    if (Object.keys(model.accepted).length >= 3) { restart(); if (model.micCheck) startTask(TASKS[0].key); return; }
+    const next = TASKS.find(t => !model.accepted[t.key]);
+    if (next) startTask(next.key);
+  }
+  function loadTask() {
+    const task=TASKS[model.taskIndex]; showStage(els.taskStage); setState('ready'); els.stepLabel.textContent=`TASK ${model.taskIndex+1} OF 3 · ${task.name.toUpperCase()}`; els.taskName.textContent=task.name;els.taskInstruction.textContent=task.instruction;
+    if(task.key==='reading'){model.currentPassage=pickPassage();els.stimulus.textContent=model.currentPassage.text}else{els.stimulus.textContent=task.short}
+    els.stimulus.classList.toggle('passage',task.key==='reading');els.recordBtn.hidden=false;els.recordBtn.disabled=false;els.recordBtn.textContent='Start Recording';els.finishBtn.hidden=true;els.timeChip.hidden=true;progress(12+model.taskIndex*24);
+  }
+  async function countdownAndRecord() {
+    if(model.state==='error')setState('ready');if(model.state!=='ready')return;setState('countdown');els.recordBtn.disabled=true;els.countdown.hidden=false;
+    try{for(const token of ['3','2','1','Go']){els.countdown.textContent=token;if(els.soundCue.value==='on')beep(token==='Go'?760:520,token==='Go'?180:90);await wait(token==='Go'?350:1000)}els.countdown.hidden=true;await startRecording()}catch(error){els.countdown.hidden=true;fail(error)}
+  }
+  function beep(freq,duration){ stopCue(); try{const ctx=model.audioContext,osc=ctx.createOscillator(),gain=ctx.createGain();osc.frequency.value=freq;gain.gain.value=.05;osc.connect(gain);gain.connect(ctx.destination);osc.start();model.cueOscillator=osc;setTimeout(()=>{try{osc.stop();}catch{}if(model.cueOscillator===osc)model.cueOscillator=null;},duration);}catch{} }
+  function stopCue(){if(model.cueOscillator){try{model.cueOscillator.stop();}catch{}model.cueOscillator=null;}}
+  function chooseMime(){ return ['audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/webm'].find(t=>window.MediaRecorder?.isTypeSupported?.(t))||''; }
+  async function startRecording() {
+    if(!model.stream)await requestMicrophone(); const task=TASKS[model.taskIndex];model.chunks=[];model.transcript='';model.asrStatus=task.key==='reading'?'starting':'not_applicable';
+    const mime=chooseMime();model.recorder=new MediaRecorder(model.stream,mime?{mimeType:mime,audioBitsPerSecond:128000}:undefined);model.recorder.ondataavailable=e=>{if(e.data.size)model.chunks.push(e.data)};model.recorder.onerror=e=>fail(e.error||new Error('Recorder error'));model.recorder.onstop=processRecording;
+    if(task.key==='reading')startRecognition();model.recordStartedAt=performance.now();model.recorder.start(250);setState('recording');els.timeChip.hidden=false;els.finishBtn.hidden=task.key!=='reading';els.recordBtn.hidden=true;
+    updateClock(task.seconds);
+  }
+  function updateClock(maxSeconds){clearInterval(model.clockTimer);model.autoStopped=false;model.taskMaxSeconds=maxSeconds;const tick=()=>{const elapsed=(performance.now()-model.recordStartedAt)/1000,remaining=Math.max(0,maxSeconds-elapsed);els.timeText.textContent=`00:${String(Math.ceil(remaining)).padStart(2,'0')}`;if(elapsed>=maxSeconds&&!model.autoStopped&&model.state==='recording'){model.autoStopped=true;stopRecording()}};tick();model.clockTimer=setInterval(tick,100)}
+  function stopRecording(){if(model.state!=='recording')return;clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopRecognition();setState('processing');showStage(els.processingStage);els.stepLabel.textContent='PROCESSING';els.timeChip.hidden=true;els.finishBtn.hidden=true;try{if(model.recorder?.state!=='inactive')model.recorder.stop();else processRecording();}catch(error){fail(error)}}
+  function startRecognition(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){model.asrStatus='unavailable';return}try{const rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang=els.language.value;rec.onresult=e=>{let heard='';for(let i=0;i<e.results.length;i++)heard+=`${e.results[i][0].transcript} `;model.transcript=heard.trim()};rec.onerror=e=>{model.asrStatus=`error_${e.error}`};rec.onend=()=>{if(model.asrStatus==='listening')model.asrStatus=model.transcript?'complete':'no_result'};rec.start();model.recognition=rec;model.asrStatus='listening'}catch(e){model.asrStatus='error_start'}}
+  function stopRecognition(){if(model.recognition){try{model.recognition.stop()}catch{}model.recognition=null}if(model.asrStatus==='listening')model.asrStatus=model.transcript?'complete':'no_result'}
+
+  async function processRecording() {
+    try {
+      const task=TASKS[model.taskIndex], duration=(performance.now()-model.recordStartedAt)/1000, blob=new Blob(model.chunks,{type:model.recorder?.mimeType||model.chunks[0]?.type||'audio/webm'});
+      const decoded=await decodeBlob(blob);const base=analyzeSignal(decoded,duration,model.micCheck?.noiseRms);let specific={};if(task.key==='vowel')specific=analyzeVowel(base);if(task.key==='pataka')specific=analyzePataka(base);if(task.key==='reading')specific=analyzeReading(base,model.transcript,model.asrStatus,model.currentPassage);
+      const metrics={...base.summary,...specific.metrics};const quality={...base.quality,...specific.quality};const scoring=scoreTask(task.key,metrics,quality);
+      model.attemptNumber[task.key]++;const attempt={trialId:crypto.randomUUID?.()||`${Date.now()}-${task.key}`,task:task.key,taskName:task.name,attemptNumber:model.attemptNumber[task.key],accepted:false,timestamp:new Date().toISOString(),durationSeconds:duration,blob,mimeType:blob.type,codec:blob.type.includes('opus')?'Opus':'browser-selected',sampleRate:decoded.sampleRate,channelCount:decoded.numberOfChannels,requestedConstraints:model.requestedConstraints,actualSettings:model.actualSettings,browser:navigator.userAgent,microphoneDistanceCm:Number(els.micDistance.value)||null,testLanguage:els.language.value,metrics,quality,scoring,transcript:task.key==='reading'?model.transcript:null,asrStatus:task.key==='reading'?model.asrStatus:'not_applicable',passage:task.key==='reading'?model.currentPassage:null,detection:specific.detection||base.detection};
+      model.attempts.push(attempt);model.currentAttempt=attempt;showReview(attempt);setState('review');
+    } catch(error){fail(error)}
+  }
+  async function decodeBlob(blob){const buffer=await blob.arrayBuffer();const temp=new (window.AudioContext||window.webkitAudioContext)();try{return await temp.decodeAudioData(buffer.slice(0))}finally{await temp.close()}}
+  function analyzeSignal(audioBuffer,duration,ambientNoiseRms){const channel=audioBuffer.getChannelData(0),sr=audioBuffer.sampleRate,frame=Math.max(256,Math.round(sr*.02)),hop=Math.round(frame/2),rms=[],peaks=[];for(let i=0;i+frame<=channel.length;i+=hop){let sum=0,peak=0;for(let j=0;j<frame;j++){const v=channel[i+j];sum+=v*v;peak=Math.max(peak,Math.abs(v))}rms.push(Math.sqrt(sum/frame));peaks.push(peak)}const sorted=[...rms].sort((a,b)=>a-b),percentileNoise=percentile(sorted,.2),hasAmbient=Number.isFinite(ambientNoiseRms),noise=hasAmbient?Math.min(ambientNoiseRms,percentileNoise):percentileNoise,threshold=Math.max(.006,noise*3),active=rms.map(v=>v>threshold),activeFrames=active.filter(Boolean).length,frameSec=hop/sr,segments=segmentsFromMask(active,frameSec,.12),activeDuration=activeFrames*frameSec,silence=Math.max(0,duration-activeDuration),peak=Math.max(0,...peaks),flags=[];if(activeDuration<.4)flags.push('empty_or_invalid');if(mean(rms)<.008)flags.push('too_quiet');if(peak>.98)flags.push('clipping');if(noise>.035)flags.push('background_noise');const confidence=clamp((activeFrames/Math.max(1,rms.length))*1.4+(peak>.02?.25:0)-(flags.includes('clipping')?.15:0),0,1);return{frames:{channel,sr,rms,active,frameSec,threshold,segments},summary:{totalDurationSeconds:round(duration),activeDurationSeconds:round(activeDuration),silenceDurationSeconds:round(silence),detectionThreshold:round(threshold,5),intensityMean:round(mean(rms),5),intensityCv:round(cv(rms),4),peakAmplitude:round(peak,4),pauseCount:Math.max(0,segments.length-1),totalPauseDurationSeconds:round(internalGapDuration(segments)),meanPauseDurationSeconds:round(internalGapDuration(segments)/Math.max(1,segments.length-1)),pauseRatio:round(silence/Math.max(duration,.001),4),detectionConfidence:round(confidence,3)},quality:{flags,valid:!flags.includes('empty_or_invalid'),detectionConfidence:confidence},detection:{method:hasAmbient?'adaptive RMS threshold; noise floor = min(pre-task ambient noise, in-recording 20th-percentile RMS); 20 ms frames, 50% overlap':'adaptive RMS threshold; noise floor = in-recording 20th-percentile RMS (no pre-task ambient measurement available); 20 ms frames, 50% overlap',threshold:round(threshold,5),ambientNoiseRmsUsed:hasAmbient?round(ambientNoiseRms,5):null,segments}}}
+  function analyzeVowel(base){const cfg=PROVISIONAL_SCORING_CONFIG.vowel.qualityRequirements;const {channel,sr,active,frameSec}=base.frames;const frame=Math.round(sr*.04),hop=Math.round(sr*.02);const f0=[],f0Rms=[];
+    for(let i=0,k=0;i+frame<=channel.length;i+=hop,k++){
+      if(!active[Math.min(k,active.length-1)])continue;
+      const seg=channel.subarray(i,i+frame);let sum=0;for(let j=0;j<seg.length;j++)sum+=seg[j]*seg[j];const segRms=Math.sqrt(sum/seg.length);
+      const hz=estimateF0(seg,sr);if(hz>=60&&hz<=400){f0.push(hz);f0Rms.push(segRms)}
+    }
+    const voicedPct=f0.length/Math.max(1,Math.floor((channel.length-frame)/hop)+1)*100;
+    const loudRef=f0Rms.length?Math.max(...f0Rms):0;
+    const confidentF0=loudRef?f0.filter((v,idx)=>f0Rms[idx]>=loudRef*0.3):f0;
+    const med=confidentF0.length?percentile([...confidentF0].sort((a,b)=>a-b),.5):0;
+    const semitoneTol=Math.pow(2,4/12);
+    const octaveCorrected=[];
+    confidentF0.forEach(v=>{
+      if(!med){octaveCorrected.push(v);return}
+      const ratio=v/med;
+      if(ratio>1/semitoneTol&&ratio<semitoneTol)octaveCorrected.push(v);
+      else if(Math.abs(v*2-med)/med<.15)octaveCorrected.push(v*2);
+      else if(Math.abs(v/2-med)/med<.15)octaveCorrected.push(v/2);
     });
-    await camera.start();
+    const f0Stable=octaveCorrected.length?octaveCorrected:(confidentF0.length?confidentF0:f0);
+    const f0Sorted=[...f0Stable].sort((a,b)=>a-b);
+    const toleredSegments=segmentsFromMask(active,frameSec,.3),dropouts=Math.max(0,toleredSegments.length-1),confidence=clamp(base.quality.detectionConfidence*(Math.min(1,f0.length/30)),0,1),flags=[...base.quality.flags];
+    if(voicedPct<cfg.minVoicedFramePct)flags.push('low_voicing_confidence');if(confidence<cfg.minDetectionConfidence)flags.push('low_detection_confidence');
+    return{metrics:{validPhonationSeconds:base.summary.activeDurationSeconds,voicedFramePercentage:round(voicedPct,1),meanF0Hz:round(mean(f0Sorted),1),medianF0Hz:round(percentile(f0Sorted,.5),1),f0SdHz:round(sd(f0Sorted),1),f0Cv:round(cv(f0Sorted),4),phonationDropoutCount:dropouts},quality:{flags,valid:base.quality.valid&&voicedPct>=cfg.minVoicedFramePct&&confidence>=cfg.minDetectionConfidence,detectionConfidence:confidence},detection:{...base.detection,voicedFrames:f0.length,pitchMethod:'normalized autocorrelation; browser-derived exploratory F0. Frames quieter than 30% of this recording\'s loudest voiced frame are excluded (low-SNR frames are unreliable for pitch tracking); remaining outliers within 4 semitones of the median are kept as-is, values close to double/half the median are octave-corrected, and unresolved outliers are dropped.',dropoutMethod:'gaps under 300ms are bridged as continuous phonation, not counted as separate dropouts'}}}
+  function analyzePataka(base){const cfg=PROVISIONAL_SCORING_CONFIG.pataka.qualityRequirements;const env=base.frames.rms,dt=base.frames.frameSec,smooth=movingAverage(env,5),threshold=Math.max(base.frames.threshold*1.35,percentile([...smooth].sort((a,b)=>a-b),.58)),events=[];for(let i=2;i<smooth.length-2;i++){if(smooth[i]>threshold&&smooth[i]>=smooth[i-1]&&smooth[i]>smooth[i+1]&&(!events.length||(i-events.at(-1))*dt>.09))events.push(i)}const intervals=events.slice(1).map((v,i)=>(v-events[i])*dt),cycles=events.length/3,active=Math.max(base.summary.activeDurationSeconds,.001),total=Math.max(base.summary.totalDurationSeconds,.001),confidence=clamp(base.quality.detectionConfidence*Math.min(1,events.length/18),0,1),flags=[...base.quality.flags];if(events.length<cfg.minEvents||confidence<cfg.minDetectionConfidence)flags.push('low_event_detection_confidence');return{metrics:{estimatedSyllableNucleusCount:events.length,estimatedPatakaCycleCount:round(cycles,1),syllablesPerSecond:round(events.length/active,2),overallSyllablesPerSecond:round(events.length/total,2),cyclesPerSecond:round(cycles/active,2),meanInterOnsetIntervalSeconds:round(mean(intervals),3),interOnsetSdSeconds:round(sd(intervals),3),interOnsetCv:round(cv(intervals),3),rhythmIrregularity:round(cv(intervals),3),interruptionCount:base.summary.pauseCount},quality:{flags,valid:base.quality.valid&&events.length>=cfg.minEvents&&confidence>=cfg.minDetectionConfidence,detectionConfidence:confidence},detection:{...base.detection,eventMethod:'local maxima of smoothed amplitude envelope; events are estimates, not verified syllables',eventTimesSeconds:events.map(i=>round(i*dt,3)),eventThreshold:round(threshold,5)}}}
+  function analyzeReading(base,transcript,asrStatus,passage){const cfg=PROVISIONAL_SCORING_CONFIG.reading.qualityRequirements;const refWords=tokenize(passage.text);const alignment=(asrStatus==='complete'&&transcript)?alignWords(refWords,tokenize(transcript)):null,recognized=transcript?tokenize(transcript).length:0,active=Math.max(base.summary.activeDurationSeconds,.001),confidence=alignment?clamp(base.quality.detectionConfidence*(recognized/Math.max(1,refWords.length)),0,1):0,flags=[...base.quality.flags];if(!alignment)flags.push('asr_unavailable');if(confidence<cfg.minDetectionConfidence)flags.push('low_asr_confidence');if(base.summary.activeDurationSeconds<cfg.minActiveSeconds)flags.push('insufficient_active_speech');return{metrics:{referenceWordCount:refWords.length,recognizedWordCount:recognized,wer:alignment?round(alignment.wer,4):null,substitutions:alignment?.substitutions??null,deletions:alignment?.deletions??null,insertions:alignment?.insertions??null,wordAccuracyPercentage:alignment?round(Math.max(0,1-alignment.wer)*100,1):null,wordsPerMinute:alignment?round(recognized/(base.summary.totalDurationSeconds/60),1):null,articulationRateWpm:alignment?round(recognized/(active/60),1):null,pitchVariability:null},quality:{flags,valid:base.quality.valid&&!!alignment&&confidence>=cfg.minDetectionConfidence&&base.summary.activeDurationSeconds>=cfg.minActiveSeconds,detectionConfidence:confidence},detection:{...base.detection,alignmentMethod:'standard order-sensitive Levenshtein dynamic-programming WER',asrStatus,asrConfidenceAvailable:false}}}
 
-    if(video.videoWidth) VIDEO_W = video.videoWidth;
-    if(video.videoHeight) VIDEO_H = video.videoHeight;
-    resizeCanvasBacking();
-    appendLog(`<div class="small-muted">Camera ready: ${VIDEO_W}x${VIDEO_H}</div>`);
+  function scoreTask(key,m,q){const cfg=PROVISIONAL_SCORING_CONFIG[key];let parts=[];
+    if(key==='reading'){parts=[{metric:'wer',value:m.wer,severity:severityHigh(m.wer,cfg.thresholds.wer),weight:cfg.metrics.wer.contribution},{metric:'speechRateWpm',value:m.wordsPerMinute,severity:severityLow(m.wordsPerMinute,cfg.thresholds.speechRateWpm),weight:cfg.metrics.speechRateWpm.contribution}]}
+    if(key==='pataka'){parts=[{metric:'overallSyllablesPerSecond',value:m.overallSyllablesPerSecond,severity:severityLow(m.overallSyllablesPerSecond,cfg.thresholds.overallSyllablesPerSecond),weight:cfg.metrics.overallSyllablesPerSecond.contribution},{metric:'interOnsetCv',value:m.interOnsetCv,severity:severityHigh(m.interOnsetCv,cfg.thresholds.interOnsetCv),weight:cfg.metrics.interOnsetCv.contribution},{metric:'pauseRatio',value:m.pauseRatio,severity:severityHigh(m.pauseRatio,cfg.thresholds.pauseRatio),weight:cfg.metrics.pauseRatio.contribution}]}
+    if(key==='vowel'){parts=[{metric:'validPhonationSeconds',value:m.validPhonationSeconds,severity:severityLow(m.validPhonationSeconds,cfg.thresholds.validPhonationSeconds),weight:cfg.metrics.validPhonationSeconds.contribution},{metric:'f0Cv',value:m.f0Cv,severity:severityHigh(m.f0Cv,cfg.thresholds.f0Cv),weight:cfg.metrics.f0Cv.contribution},{metric:'phonationDropoutCount',value:m.phonationDropoutCount,severity:severityHigh(m.phonationDropoutCount,cfg.thresholds.phonationDropoutCount),weight:cfg.metrics.phonationDropoutCount.contribution}]}
+    const hasUsableData=!q.flags.includes('empty_or_invalid')&&parts.some(p=>p.value!=null&&Number.isFinite(p.value));
+    if(!hasUsableData)return{available:false,score:null,confidence:round(q.detectionConfidence,3),reason:`No usable data for this task (all scoring metrics unavailable: ${q.flags.join(', ')||'unknown'})`,metricsUsed:parts,thresholds:cfg.thresholds,configVersion:PROVISIONAL_SCORING_CONFIG.version};
+    const raw=parts.reduce((s,p)=>s+p.severity*p.weight,0),score=Math.round(raw);return{available:true,score,rawScore:round(raw,3),confidence:round(q.detectionConfidence,3),qualityPassed:q.valid,qualityFlags:q.flags,metricsUsed:parts,thresholds:cfg.thresholds,explanation:parts.map(p=>`${p.metric}: ${p.value} → severity ${p.severity} × ${p.weight}`).join('; ')+(q.valid?'':` (computed despite quality flags: ${q.flags.join(', ')})`),configVersion:PROVISIONAL_SCORING_CONFIG.version};}
+  function severityHigh(value,thresholds){if(value==null||!Number.isFinite(value))return 0;let s=0;thresholds.forEach((t,i)=>{if(value>t)s=i+1});return Math.min(6,s)}
+  function severityLow(value,thresholds){if(value==null||!Number.isFinite(value))return 0;let s=0;thresholds.forEach((t,i)=>{if(value<t)s=i+1});return Math.min(6,s)}
 
-  }catch(e){
-    appendLog(`<div style="color:#f88">Camera error: ${e.message}</div>`);
-    throw e;
-  }
-}
-
-/* stop camera safely */
-function stopCamera(){
-  try{
-    if(camera?.stop) camera.stop();
-    if(video?.srcObject){
-      const tracks = video.srcObject.getTracks();
-      tracks.forEach(t=>t.stop());
-      video.srcObject = null;
+  function showReview(a){showStage(els.reviewStage);els.stepLabel.textContent=`REVIEW · ${a.taskName.toUpperCase()}`;if(model.currentUrl)URL.revokeObjectURL(model.currentUrl);model.currentUrl=URL.createObjectURL(a.blob);els.playback.src=model.currentUrl;els.reviewTitle.textContent=`${a.taskName} complete`;const flags=a.quality.flags;els.reviewQuality.className=`quality-banner show ${a.quality.valid?'good':flags.includes('empty_or_invalid')?'bad':'warn'}`;els.reviewQuality.textContent=a.quality.valid?'Recording quality checks passed.':`Review recommended: ${flags.map(pretty).join(', ')}.`;els.acceptBtn.disabled=false;els.acceptBtn.textContent=model.taskIndex===2?'Accept and View Results':'Accept and Continue';progress(25+model.taskIndex*24)}
+  function rerecord(){if(model.state!=='review')return;els.playback.pause();setState('ready');loadTask()}
+  function taskSummaryDetail(t,a){const m=a.metrics;
+    if(t.key==='reading'){
+      const words=(m.recognizedWordCount!=null&&m.referenceWordCount!=null)?`${m.recognizedWordCount} / ${m.referenceWordCount} words in ${m.totalDurationSeconds}s (${formatValue(m.wordsPerMinute)} wpm)`:'Words: unavailable';
+      const errCount=(m.substitutions??0)+(m.deletions??0)+(m.insertions??0);
+      const acc=m.wordAccuracyPercentage!=null?`${formatValue(m.wordAccuracyPercentage)}% accuracy (${errCount} error${errCount===1?'':'s'}: ${m.substitutions??0} substituted, ${m.deletions??0} deleted, ${m.insertions??0} inserted)`:'Accuracy: unavailable (ASR unavailable)';
+      return `${words}<br>${acc}`;
     }
-  }catch(e){}
-  camera = null;
-  hands = null;
-}
+    if(t.key==='pataka'){
+      const overall=m.overallSyllablesPerSecond!=null?`${formatValue(m.overallSyllablesPerSecond)}/sec overall`:'overall rate unavailable';
+      const active=m.syllablesPerSecond!=null?`${formatValue(m.syllablesPerSecond)}/sec while speaking`:null;
+      const cycles=m.estimatedSyllableNucleusCount!=null?`~${formatValue(m.estimatedSyllableNucleusCount)} syllables detected in ${m.totalDurationSeconds}s (${overall}${active?'; '+active:''})`:'Syllable count: unavailable';
+      const rhythm=m.interOnsetCv!=null?`Rhythm variability: ${Math.round(m.interOnsetCv*100)}%`:'Rhythm variability: unavailable';
+      const pause=m.pauseRatio!=null?`Time spent paused: ${Math.round(m.pauseRatio*100)}%`:'';
+      return `${cycles}<br>${rhythm}${pause?' · '+pause:''} (lower = more regular / less paused)`;
+    }
+    if(t.key==='vowel'){
+      const pitch=m.meanF0Hz!=null?`Average pitch: ${formatValue(m.meanF0Hz)} Hz`:'Average pitch: unavailable';
+      const stability=m.f0Cv!=null?`Pitch variability: ${Math.round(m.f0Cv*100)}% (lower = more stable)`:'Pitch variability: unavailable';
+      return `${pitch}<br>${stability}`;
+    }
+    return '';
+  }
+  function renderTaskResultSummary(){
+    const acceptedList=TASKS.filter(t=>model.accepted[t.key]);
+    els.summaryPanel.hidden=acceptedList.length===0;
+    els.summaryList.innerHTML=acceptedList.slice().reverse().map(t=>{const a=model.accepted[t.key],scoreText=a.scoring?.available?`${a.scoring.score} / 6`:'Unavailable';return `<div class="summary-task"><div class="summary-task-head"><span>${escapeHtml(t.name)}</span><strong>${scoreText}</strong></div><div class="summary-task-detail">${taskSummaryDetail(t,a)}</div></div>`}).join('');
+  }
+  function acceptAttempt(){if(model.state!=='review')return;const key=model.currentAttempt.task;if(model.accepted[key])model.accepted[key].accepted=false;model.currentAttempt.accepted=true;model.accepted[key]=model.currentAttempt;renderTaskResultSummary();renderResearch();const allDone=Object.keys(model.accepted).length>=3;if(allDone)computeOverallResult();setState('accepted');setState('ready');els.micTestBtn.disabled=false;els.stopTestBtn.disabled=true;showTaskResult(model.currentAttempt,allDone)}
+  const EXPLANATIONS = {
+    vowel: {
+      validPhonationSeconds: s => s>=4 ? "The sustained sound didn't last as long as expected." : s>=2 ? 'The sustained sound was a little shorter than expected.' : null,
+      f0Cv: s => s>=4 ? 'Your pitch was noticeably unstable while holding the sound.' : s>=2 ? 'Your pitch wavered somewhat.' : null,
+      phonationDropoutCount: s => s>=4 ? 'There were noticeable interruptions during phonation.' : s>=2 ? 'There were a few brief interruptions.' : null
+    },
+    pataka: {
+      overallSyllablesPerSecond: s => s>=4 ? 'Your overall repetition rate, including pauses, was slow.' : s>=2 ? 'Your overall repetition rate was a bit slow.' : null,
+      interOnsetCv: s => s>=4 ? 'The rhythm between repetitions was quite irregular.' : s>=2 ? 'The rhythm between repetitions was somewhat uneven.' : null,
+      pauseRatio: s => s>=4 ? 'You paused frequently or for long stretches during the task.' : s>=2 ? 'There were some noticeable pauses.' : null
+    },
+    reading: {
+      wer: s => s>=4 ? 'Many words were not recognized correctly, suggesting reduced clarity.' : s>=2 ? 'Some words were not recognized clearly.' : null,
+      speechRateWpm: s => s>=4 ? 'Your reading speed was much slower than typical.' : s>=2 ? 'Your reading speed was somewhat slow.' : null
+    }
+  };
+  function explainScore(taskKey,attempt){
+    if(!attempt.scoring.available) return [attempt.scoring.reason||'This attempt could not be scored — not enough usable data was captured.'];
+    const lines=(attempt.scoring.metricsUsed||[]).map(p=>EXPLANATIONS[taskKey]?.[p.metric]?.(p.severity)).filter(Boolean);
+    if(!lines.length) lines.push('Performance was within the normal range for every measure in this task.');
+    if(!attempt.scoring.qualityPassed) lines.push('Note: this recording tripped a data-quality flag, so this score should be read with some caution.');
+    return lines;
+  }
+  function showTaskResult(attempt,allDone){
+    const task=TASKS.find(t=>t.key===attempt.task);
+    showStage(els.taskResultStage);
+    els.stepLabel.textContent='TASK RESULT';
+    els.taskResultName.textContent=task.name;
+    els.taskResultScore.textContent=attempt.scoring.available?attempt.scoring.score:'—';
+    els.taskResultExplain.innerHTML=explainScore(attempt.task,attempt).map(s=>`<li>${escapeHtml(s)}</li>`).join('');
+    els.viewFinalResultsBtn.hidden=!allDone;
+    progress(Math.round(Object.keys(model.accepted).length/3*100));
+  }
+  function computeOverallResult(){const r=model.accepted.reading,p=model.accepted.pataka,v=model.accepted.vowel,W=PROVISIONAL_SCORING_CONFIG.weights;if(!r?.scoring.available){model.result={available:false,reason:'Reading intelligibility could not be assessed.'}}else if(!p?.scoring.available||!v?.scoring.available){model.result={available:false,reason:'One or more task component scores are unavailable.'}}else{const raw=r.scoring.score*W.reading+p.scoring.score*W.pataka+v.scoring.score*W.vowel,rounded=Math.round(raw);let final=rounded,floor=false;if(r.scoring.score===6){final=6;floor=true}else if(r.scoring.score===5&&final<5){final=5;floor=true}else if(r.scoring.score===4&&final<4){final=4;floor=true}model.result={available:true,weightedScore:round(raw,2),roundedWeightedScore:rounded,estimatedScore:final,intelligibilityFloorApplied:floor,weights:{...PROVISIONAL_SCORING_CONFIG.weights},scoringVersion:PROVISIONAL_SCORING_CONFIG.version,clinicallyValidated:false}}}
+  function showResults(){showStage(els.resultsStage);els.stepLabel.textContent='ASSESSMENT COMPLETE';progress(100);const result=model.result;els.estimatedScore.textContent=result.available?result.estimatedScore:'Unavailable';els.sideScore.textContent=result.available?result.estimatedScore:'—';els.componentGrid.innerHTML=TASKS.slice().reverse().map(t=>componentCard(t)).join('');renderTaskResultSummary();els.calculationLine.textContent=result.available?`Weighted ${result.weightedScore} → rounded ${result.roundedWeightedScore} → final ${result.estimatedScore}${result.intelligibilityFloorApplied?' · intelligibility-priority rule applied':''}`:result.reason;const warnings=Object.values(model.accepted).flatMap(a=>a.quality.flags);els.overallWarning.className=`quality-banner show ${warnings.length?'warn':'good'}`;els.overallWarning.textContent=warnings.length?`Data-quality flags: ${[...new Set(warnings)].map(pretty).join(', ')}.`:'All accepted recordings passed configured quality checks.';enableExports();renderResearch();}
+  function componentCard(t){const s=model.accepted[t.key]?.scoring;return `<div class="component-card"><span>${escapeHtml(t.name)} <small>${Math.round(PROVISIONAL_SCORING_CONFIG.weights[t.key]*100)}%</small></span><strong>${s?.available?s.score:'—'}</strong> / 6</div>`}
+  function renderTaskList(){const canStart=!!model.micCheck&&model.state==='ready';const listLabels={pataka:'PA-TA-KA'};els.taskList.innerHTML=TASKS.map((t,i)=>{const a=model.accepted[t.key],done=!!a;const right=done?(a.scoring?.available?`<strong>${a.scoring.score} / 6</strong>`:`<strong>Unavailable</strong>`):`<small>${t.key==='reading'?'≤30':t.seconds}s</small>`;return `<button type="button" class="task-item-btn ${done?'done':''}" data-task="${t.key}" ${canStart?'':'disabled'}><span class="task-index">${done?'✓':i+1}</span><span class="task-item-label">${escapeHtml(listLabels[t.key]||t.name)}</span>${right}</button>`}).join('')}
+  function renderResearch(){els.scoringDetails.textContent=JSON.stringify(PROVISIONAL_SCORING_CONFIG,null,2);const audioLabels={vowel:'AH',pataka:'PA-TA-KA',reading:'READING'};els.audioDownloads.innerHTML=TASKS.map(t=>{const a=model.accepted[t.key];return `<button type="button" class="audio-dl-btn" data-audio="${t.key}" ${a?'':'disabled'}>${audioLabels[t.key]}</button>`}).join('');els.metricDetails.innerHTML=TASKS.map(t=>metricGroup(t,model.accepted[t.key])).join('')}
+  function metricDisplayValue(t,a,k,v){if((k==='wordsPerMinute'||k==='articulationRateWpm')&&t.key==='reading'&&a.metrics.referenceWordCount!=null&&a.metrics.recognizedWordCount!=null){return `${a.metrics.recognizedWordCount} / ${a.metrics.referenceWordCount} words (${formatValue(v)} wpm)`}return formatValue(v)}
+  function metricGroup(t,a){if(!a)return'';const classifications={...PROVISIONAL_SCORING_CONFIG[t.key].metrics};return `<div class="metric-group"><h4>${escapeHtml(t.name)} · confidence ${a.scoring.confidence}</h4>${detectionViz(t,a)}${Object.entries(a.metrics).map(([k,v])=>`<div class="metric-row"><span>${escapeHtml(pretty(k))}<i class="metric-class">${escapeHtml(classifications[k]?.classification||classificationFor(k))}</i></span><b>${escapeHtml(metricDisplayValue(t,a,k,v))}</b></div>${METRIC_CAVEATS[k]?`<div class="metric-caveat">${escapeHtml(METRIC_CAVEATS[k])}</div>`:''}`).join('')}</div>`}
+  function detectionViz(t,a){if(t.key!=='pataka')return'';const total=Math.max(.001,a.durationSeconds),events=a.detection?.eventTimesSeconds||[];return `<div class="detection-viz" title="Estimated amplitude-envelope events">${events.map(x=>`<i style="left:${clamp(x/total*100,0,100)}%"></i>`).join('')}<span>Estimated events · inspect for detection error</span></div>`}
+  function classificationFor(k){return /duration|threshold|confidence|peak|silence/i.test(k)?'quality_control':'exploratory'}
 
-/* calibration by camera or user: existing implementation measures fingertip->mcp for finger
-   FIX: collect samples from onHandsResults while calibRunning and mode==='camera'
-*/
-function startCalibrationPromise(){
-  return new Promise((resolve)=>{
-    calibRunning = true;
-    calibStartMs = performance.now();
-    calibSamples = [];
-    appendLog('<div class="small-muted">Calibration started — hold index finger out for 3 seconds</div>');
-    const calibPromptOverlay = document.getElementById('calibPromptOverlay');
-    if(calibPromptOverlay) calibPromptOverlay.style.display = 'flex';
-    const check = setInterval(()=> {
-      const elapsed = performance.now() - calibStartMs;
-      if(elapsed >= CALIB_DURATION_MS){
-        calibRunning = false;
-        clearInterval(check);
-        if(calibPromptOverlay) calibPromptOverlay.style.display = 'none';
-        if(calibSamples.length > 0){
-          const avgPx = calibSamples.reduce((a,b)=>a+b,0)/calibSamples.length;
-          const userCm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
-          pixels_per_cm = avgPx / userCm;
-          cfg_ppc.value = pixels_per_cm.toFixed(2);
-          ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
-          calibDone = true;
-          appendLog(`<div class="small-muted">Calibration success — ${avgPx.toFixed(1)} px → ${pixels_per_cm.toFixed(2)} px/cm</div>`);
-          updateCalibBar();
-          // Show calibration success overlay on camera feed
-          const overlay = document.getElementById('calibSuccessOverlay');
-          overlay.textContent = `Calibration Successful!  Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
-          overlay.style.display = 'flex';
-          setTimeout(() => { overlay.style.display = 'none'; }, 3000);
-          resolve(true);
-        } else {
-          appendLog('<div class="small-muted">Calibration failed — no hand seen</div>');
-          resolve(false);
-        }
+  function buildExport(){const headerValues={participantId:$('glob-id')?.value||'',participantName:$('glob-name')?.value||'',age:$('glob-age')?.value||'',sex:$('glob-sex')?.value||'',sessionId:$('glob-sess')?.value||'',operator:$('glob-op')?.value||'',date:$('glob-date')?.value||''};return{module:'CeMoQu Speech Disturbance',protocolVersion:PROTOCOL_VERSION,createdAt:new Date().toISOString(),identification:headerValues,testLanguage:els.language.value,microphoneDistanceCm:Number(els.micDistance.value)||null,microphoneCheck:model.micCheck,acceptedTrials:Object.values(model.accepted).map(withoutBlob),attemptHistory:model.attempts.map(withoutBlob),overallScoring:model.result,scoringConfiguration:PROVISIONAL_SCORING_CONFIG,clinicalReference:{clinicianRatedSaraSpeechScore:els.clinicianScore.value===''?null:Number(els.clinicianScore.value),notes:els.researchNotes.value},limitations:['Research prototype; not diagnostic or clinically validated.','Standardized reading is a proxy; official SARA Speech is assessed during normal conversation.','Browser ASR and compressed recording behavior vary by platform.']}}
+  function withoutBlob(a){const {blob,...rest}=a;return rest}
+  function filename(ext,task='session'){const p=safe($('glob-id')?.value||'unknown'),s=safe($('glob-sess')?.value||'session'),stamp=new Date().toISOString().replace(/[:.]/g,'-');return `${p}_${s}_SD_${task}_${stamp}.${ext}`}
+  function exportJson(){download(new Blob([JSON.stringify(buildExport(),null,2)],{type:'application/json;charset=utf-8'}),filename('json'))}
+  function exportTrial(){const latest=model.currentAttempt||Object.values(model.accepted).at(-1);if(!latest)return;download(new Blob([JSON.stringify({...withoutBlob(latest),protocolVersion:PROTOCOL_VERSION},null,2)],{type:'application/json;charset=utf-8'}),filename('json',latest.task))}
+  function exportCsv(){const data=buildExport(),rows=[];for(const a of data.acceptedTrials){const base={participant_id:data.identification.participantId,session_id:data.identification.sessionId,trial_id:a.trialId,attempt_number:a.attemptNumber,accepted_attempt:a.accepted,task:a.task,timestamp:a.timestamp,test_language:a.testLanguage,mic_distance_cm:a.microphoneDistanceCm,mime_type:a.mimeType,codec:a.codec,sample_rate:a.sampleRate,channel_count:a.channelCount,quality_flags:a.quality.flags.join('|'),detection_confidence:a.quality.detectionConfidence,component_score:a.scoring.score,scoring_version:a.scoring.configVersion,clinician_score:data.clinicalReference.clinicianRatedSaraSpeechScore,researcher_notes:data.clinicalReference.notes,estimated_sara_speech_score:data.overallScoring?.estimatedScore??'',weighted_score:data.overallScoring?.weightedScore??'',intelligibility_floor_applied:data.overallScoring?.intelligibilityFloorApplied??''};rows.push({...base,...flatten(a.metrics,'metric_'),transcript:a.transcript||'',reference_text:a.passage?.text||'',requested_constraints:JSON.stringify(a.requestedConstraints),actual_settings:JSON.stringify(a.actualSettings),browser:a.browser})}const headers=[...new Set(rows.flatMap(Object.keys))];const csv=[headers.map(csvCell).join(','),...rows.map(r=>headers.map(h=>csvCell(r[h]??'')).join(','))].join('\r\n');download(new Blob(['\ufeff',csv],{type:'text/csv;charset=utf-8'}),filename('csv'))}
+  function downloadAudio(key){const a=model.accepted[key];if(!a)return;const ext=a.mimeType.includes('ogg')?'ogg':a.mimeType.includes('wav')?'wav':'webm';download(a.blob,filename(ext,key))}
+  function enableExports(){els.exportCsvTopBtn.disabled=false;els.stopTestBtn.disabled=true;els.submitDataBtn.disabled=!model.result?.available;}
+  function stopTest(){if(!['countdown','recording','processing','review'].includes(model.state))return;clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopCue();stopRecognition();if(model.recorder&&model.recorder.state!=='inactive'){model.recorder.onstop=null;try{model.recorder.stop()}catch{}}cleanupAttemptUrls();els.countdown.hidden=true;els.timeChip.hidden=true;els.finishBtn.hidden=true;try{els.playback.pause()}catch{}setState('ready');loadTask()}
+  function submitData(){if(!model.result?.available){els.toolbarMessage.textContent='Complete the assessment before submitting.';return}
+    // TODO: wire to the real CeMoQu submission endpoint/shared upload function used by LD/RT/ST.
+    // That code was not available when this was built, so this only prepares the payload and
+    // does not actually transmit it anywhere yet.
+    const payload=buildExport();
+    console.warn('submitData(): no submission endpoint configured yet — payload prepared but not sent.',payload);
+    els.toolbarMessage.textContent='Submit endpoint not yet configured — see console for the prepared payload.';
+  }
+  function restart(){cleanupAttemptUrls();model.attempts=[];model.accepted={};model.result=null;model.taskIndex=0;model.attemptNumber={vowel:0,pataka:0,reading:0};renderTaskResultSummary();setState('idle');if(model.micCheck)setState('ready');showStage(els.setupStage);progress(0);els.stepLabel.textContent='PRE-TEST SETUP';els.startTestBtn.disabled=!model.micCheck;els.micTestBtn.disabled=false;els.stopTestBtn.disabled=true;els.submitDataBtn.disabled=true;els.exportCsvTopBtn.disabled=true;els.toolbarMessage.textContent='';}
+  function releaseMedia(){cancelAnimationFrame(model.monitorFrame);model.monitorFrame=null;if(model.stream)model.stream.getTracks().forEach(t=>t.stop());model.stream=null;model.source?.disconnect();model.analyser?.disconnect();model.source=null;model.analyser=null;if(model.audioContext&&model.audioContext.state!=='closed')model.audioContext.close();model.audioContext=null}
+  function cleanupAttemptUrls(){if(model.currentUrl)URL.revokeObjectURL(model.currentUrl);model.currentUrl=null}
+  function fail(error){console.error(error);clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopRecognition();try{if(model.state!=='error')setState('error')}catch{}showStage(els.taskStage);els.taskInstruction.textContent=`Error: ${error.message||error}`;els.recordBtn.hidden=false;els.recordBtn.disabled=false;els.recordBtn.textContent='Try Again'}
+
+  function estimateF0(x,sr){let meanX=mean(x),energy=0;const y=new Float32Array(x.length);for(let i=0;i<x.length;i++){y[i]=x[i]-meanX;energy+=y[i]*y[i]}if(energy/x.length<1e-5)return null;const min=Math.floor(sr/400),max=Math.min(Math.floor(sr/60),x.length-2);let best=0,bestLag=0;for(let lag=min;lag<=max;lag++){let sum=0,a=0,b=0;for(let i=0;i<x.length-lag;i++){sum+=y[i]*y[i+lag];a+=y[i]*y[i];b+=y[i+lag]*y[i+lag]}const corr=sum/Math.sqrt(a*b||1);if(corr>best){best=corr;bestLag=lag}}return best>.35?sr/bestLag:null}
+  function alignWords(ref,hyp){const m=ref.length,n=hyp.length,dp=Array.from({length:m+1},()=>Array(n+1));for(let i=0;i<=m;i++)dp[i][0]={cost:i,s:0,d:i,ins:0};for(let j=0;j<=n;j++)dp[0][j]={cost:j,s:0,d:0,ins:j};for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){if(ref[i-1]===hyp[j-1])dp[i][j]={...dp[i-1][j-1]};else{const opts=[{...dp[i-1][j-1],type:'s'},{...dp[i-1][j],type:'d'},{...dp[i][j-1],type:'ins'}].map(o=>({...o,cost:o.cost+1}));const best=opts.sort((a,b)=>a.cost-b.cost)[0];best[best.type]++;delete best.type;dp[i][j]=best}}const r=dp[m][n];return{wer:(r.s+r.d+r.ins)/Math.max(1,m),substitutions:r.s,deletions:r.d,insertions:r.ins}}
+  function segmentsFromMask(mask,dt,minGap){const seg=[];let start=null,last=null;for(let i=0;i<mask.length;i++){if(mask[i]){if(start===null)start=i;last=i}else if(start!==null&&(i-last)*dt>=minGap){seg.push({start:round(start*dt),end:round((last+1)*dt)});start=null;last=null}}if(start!==null)seg.push({start:round(start*dt),end:round((last+1)*dt)});return seg}
+  function internalGapDuration(seg){let s=0;for(let i=1;i<seg.length;i++)s+=Math.max(0,seg[i].start-seg[i-1].end);return s}
+  const mean=a=>a?.length?a.reduce((s,v)=>s+v,0)/a.length:0;const sd=a=>{if(!a?.length)return 0;const m=mean(a);return Math.sqrt(mean(a.map(v=>(v-m)**2)))};const cv=a=>{const m=mean(a);return m?sd(a)/m:0};const percentile=(a,p)=>a?.length?a[Math.min(a.length-1,Math.max(0,Math.floor((a.length-1)*p)))]:0;const round=(n,d=3)=>Number.isFinite(n)?Number(n.toFixed(d)):null;const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));const movingAverage=(a,w)=>a.map((_,i)=>mean(a.slice(Math.max(0,i-w+1),i+1)));const wait=ms=>new Promise(r=>setTimeout(r,ms));const tokenize=s=>(s.toLowerCase().match(/[a-z0-9']+/g)||[]);const pretty=s=>String(s).replace(/([a-z])([A-Z])/g,'$1 $2').replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());const safe=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,'_');const formatValue=v=>v==null?'Unavailable':Array.isArray(v)?v.join(', '):typeof v==='object'?JSON.stringify(v):String(v);const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const flatten=(o,p='')=>Object.fromEntries(Object.entries(o).map(([k,v])=>[`${p}${k}`,typeof v==='object'&&v!==null?JSON.stringify(v):v]));const csvCell=v=>`"${String(v).replace(/"/g,'""')}"`;function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+
+  els.checkMicBtn.addEventListener('click',checkMicrophone);els.recordBtn.addEventListener('click',countdownAndRecord);els.finishBtn.addEventListener('click',stopRecording);els.rerecordBtn.addEventListener('click',rerecord);els.acceptBtn.addEventListener('click',acceptAttempt);els.restartBtn.addEventListener('click',restart);els.viewFinalResultsBtn.addEventListener('click',showResults);els.micSelect.addEventListener('change',()=>{model.micCheck=null;els.startTestBtn.disabled=true;checkMicrophone()});
+  els.taskList.addEventListener('click',e=>{const btn=e.target.closest('[data-task]');if(btn&&!btn.disabled)startTask(btn.dataset.task)});
+  els.micTestBtn.addEventListener('click',checkMicrophone);els.startTestBtn.addEventListener('click',startFirstIncompleteTask);els.stopTestBtn.addEventListener('click',stopTest);els.submitDataBtn.addEventListener('click',submitData);els.exportCsvTopBtn.addEventListener('click',exportCsv);
+  document.querySelectorAll('.side-tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.side-tab').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-selected',b===btn)});$('testPanel').classList.toggle('active',btn.dataset.tab==='test');$('researchPanel').classList.toggle('active',btn.dataset.tab==='research')}));
+  els.showScoringBtn.addEventListener('click',()=>{els.scoringDetails.hidden=!els.scoringDetails.hidden;els.showScoringBtn.textContent=els.scoringDetails.hidden?'View calculation details':'Hide calculation details'});els.audioDownloads.addEventListener('click',e=>{const key=e.target.dataset.audio;if(key&&!e.target.disabled)downloadAudio(key)});window.addEventListener('beforeunload',()=>{clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopCue();stopRecognition();releaseMedia();cleanupAttemptUrls()});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&model.state==='recording'){const elapsed=(performance.now()-model.recordStartedAt)/1000;if(elapsed>=model.taskMaxSeconds&&!model.autoStopped){model.autoStopped=true;stopRecording()}}});
+  function renderWeightBar(){
+    const w=PROVISIONAL_SCORING_CONFIG.weights;
+    const rPct=Math.round(w.reading*100),pPct=Math.round(w.pataka*100),vPct=Math.round(w.vowel*100);
+    els.wHandle1.style.left=rPct+'%';els.wHandle2.style.left=(rPct+pPct)+'%';
+    els.wLabelReading.textContent=`Reading ${rPct}%`;els.wLabelPataka.textContent=`Pa-ta-ka ${pPct}%`;els.wLabelVowel.textContent=`Vowel ${vPct}%`;
+  }
+  function currentHandlePcts(){const w=PROVISIONAL_SCORING_CONFIG.weights;const h1=Math.round(w.reading*100);return [h1,h1+Math.round(w.pataka*100)]}
+  function applyHandlePcts(h1,h2){PROVISIONAL_SCORING_CONFIG.weights={reading:h1/100,pataka:(h2-h1)/100,vowel:(100-h2)/100};renderWeightBar();renderResearch();if(Object.keys(model.accepted).length>=3){computeOverallResult();if(els.resultsStage.classList.contains('active'))showResults()}}
+  function bindWeightHandle(handleEl,isFirst){
+    handleEl.addEventListener('pointerdown',e=>{
+      handleEl.setPointerCapture(e.pointerId);
+      const barRect=els.weightBar.getBoundingClientRect();
+      function move(ev){
+        let pct=((ev.clientX-barRect.left)/barRect.width)*100;
+        pct=Math.max(0,Math.min(100,Math.round(pct/10)*10));
+        let [h1,h2]=currentHandlePcts();
+        if(isFirst)h1=Math.max(0,Math.min(pct,h2));else h2=Math.max(h1,Math.min(pct,100));
+        applyHandlePcts(h1,h2);
       }
-    }, 120);
-  });
-}
-
-/* on hands results
-   also: sample fingertip->mcp distance when calibration is running (camera mode)
-*/
-let lastResults = null;
-let drawRequest = null;
-function onHandsResults(results){
-  lastResults = results;
-
-  // CALIBRATION SAMPLING FIX:
-  // While startCalibrationPromise() is active (calibRunning), sample index fingertip (landmark 8)
-  // to index MCP (landmark 5) pixel distance and push to calibSamples.
-  // This was missing before (calibSamples never filled).
-  if(calibRunning && mode === 'camera' && results?.multiHandLandmarks?.length > 0){
-    try{
-      const lm = results.multiHandLandmarks[0];
-      const tip = lm[8];
-      const mcp = lm[5];
-      const tipPxX = tip.x * VIDEO_W;
-      const tipPxY = tip.y * VIDEO_H;
-      const mcpPxX = mcp.x * VIDEO_W;
-      const mcpPxY = mcp.y * VIDEO_H;
-      const dist_px = Math.hypot(tipPxX - mcpPxX, tipPxY - mcpPxY);
-      // store only valid finite distances
-      if(Number.isFinite(dist_px) && dist_px > 0 && dist_px < Math.max(VIDEO_W, VIDEO_H)){
-        calibSamples.push(dist_px);
-      }
-    }catch(e){}
+      function up(){handleEl.releasePointerCapture(e.pointerId);handleEl.removeEventListener('pointermove',move);handleEl.removeEventListener('pointerup',up)}
+      handleEl.addEventListener('pointermove',move);handleEl.addEventListener('pointerup',up);
+    });
   }
-
-  if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
-}
-
-/* compute letterbox layout */
-function computeLetterboxLayout(cssW, cssH, vidW, vidH){
-  const scale = Math.min(cssW / vidW, cssH / vidH);
-  const destW = vidW * scale;
-  const destH = vidH * scale;
-  const offsetX = (cssW - destW) / 2;
-  const offsetY = (cssH - destH) / 2;
-  return { destW, destH, offsetX, offsetY, scale };
-}
-
-/* draw frame */
-function drawFrame(){
-  drawRequest = null;
-  // CSS dims of canvas
-  const cssW = parseFloat(canvas.style.width);
-  const cssH = parseFloat(canvas.style.height);
-
-  // For camera mode we letterbox the camera feed; for cursor mode we treat canvas as full working area.
-  let layout;
-  if(mode === 'camera'){
-    layout = computeLetterboxLayout(cssW, cssH, VIDEO_W, VIDEO_H);
-    drawLayout = layout;
-    // clear canvas
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0,0,cssW,cssH);
-    // draw mirrored video into letterbox region
-    if(video && video.readyState >= 2){
-      ctx.save();
-      ctx.translate(layout.offsetX + layout.destW, layout.offsetY);
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, 0, 0, VIDEO_W, VIDEO_H, 0, 0, layout.destW, layout.destH);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = "#000"; ctx.fillRect(layout.offsetX, layout.offsetY, layout.destW, layout.destH);
-    }
-  } else {
-    // cursor mode: canvas is blank working area (no camera). We'll treat VIDEO_W/VIDEO_H as logical working dims.
-    const vidW = cssW, vidH = cssH;
-    layout = { destW: vidW, destH: vidH, offsetX:0, offsetY:0, scale:1 };
-    drawLayout = layout;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0,0,cssW,cssH);
-    // draw a subtle background for cursor mode
-    ctx.fillStyle = '#04121a';
-    ctx.fillRect(0,0,cssW,cssH);
-  }
-
-  // draw fingertip marker from camera (mirrored mapping applied earlier) when available
-  if(mode === 'camera' && lastResults?.multiHandLandmarks?.length > 0){
-    const lm = lastResults.multiHandLandmarks[0];
-    const tip = lm[8];
-    const cx_px = tip.x * VIDEO_W;
-    const cy_px = tip.y * VIDEO_H;
-    // map to canvas (mirror horizontally)
-    const cx = layout.offsetX + layout.destW - (cx_px * (layout.destW / VIDEO_W));
-    const cy = layout.offsetY + (cy_px * (layout.destH / VIDEO_H));
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'rgba(255,0,0,0.95)';
-    ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI*2); ctx.fill();
-  }
-
-  // draw targets & trail & trial text (map coordinates depending on mode)
-  if(trialRunning && trialState){
-    // mapping function: world px coords (based on VIDEO_W/VIDEO_H) -> canvas coords
-    const mapX = (x) => (layout.offsetX + (mode === 'camera' ? (layout.destW - (x * (layout.destW/VIDEO_W))) : x * (layout.destW / VIDEO_W)));
-    const mapY = (y) => (layout.offsetY + (mode === 'camera' ? (y * (layout.destH/VIDEO_H)) : y * (layout.destH / VIDEO_H)));
-
-    const tx = trialState.target.x, ty = trialState.target.y, r_px = trialState.target.radius_px;
-    const txCanvas = mapX(tx);
-    const tyCanvas = mapY(ty);
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = 'rgba(0,200,120,0.95)';
-    ctx.lineWidth = Math.max(2, cfg.edge_px);
-    ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.round(r_px * (layout.destW / VIDEO_W)), 0, Math.PI*2); ctx.stroke();
-    if(cfg.center_dot){
-      const cpx = cm_to_px(cfg.radius_cm*0.2);
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.max(3, Math.round(cpx * (layout.destW/VIDEO_W))), 0, Math.PI*2); ctx.fill();
-    }
-    // info (text non-mirrored / drawn at top-left of working area)
-    ctx.fillStyle = "#fff"; ctx.font = '14px Inter';
-    ctx.fillText(`Trial ${trialIndex+1}/${cfg.targets}`, layout.offsetX + 12, layout.offsetY + 20);
-  }
-
-  // trail animation display (map points)
-  if(trailAnimation){
-    const now = performance.now();
-    const t = Math.min(1, (now - trailAnimation.start) / trailAnimation.duration);
-    const ease = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
-    const sx = trailAnimation.startPt.x, sy = trailAnimation.startPt.y;
-    const ex = trailAnimation.endPt.x, ey = trailAnimation.endPt.y;
-    const dx_ = sx + (ex - sx)*ease;
-    const dy_ = sy + (ey - sy)*ease;
-    // map
-    const mapX = (x) => (drawLayout.offsetX + (mode === 'camera' ? (drawLayout.destW - (x * (drawLayout.destW/VIDEO_W))) : x * (drawLayout.destW / VIDEO_W)));
-    const mapY = (y) => (drawLayout.offsetY + (y * (drawLayout.destH / VIDEO_H)));
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'rgba(255,255,0,0.95)';
-    ctx.beginPath(); ctx.arc(mapX(dx_), mapY(dy_), 8, 0, Math.PI*2); ctx.fill();
-    if(t >= 1) trailAnimation = null;
-  }
-
-  // handle trial logic outside of draw transforms
-  if(trialRunning && trialState){
-    if(mode === 'camera'){
-      handleFrameForTrial(lastResults);
-    } else {
-      handleFrameForTrialCursor();
-    }
-  }
-}
-
-/* coordinate conversions */
-function px_to_cm(px){ return px / pixels_per_cm; }
-function cm_to_px(cm){ return Math.round(cm * pixels_per_cm); }
-
-function enhanced_sara_score(final_dist_cm, reaction_time_s, missed, percent_time_inside){
-  // If the trial was missed entirely, give the maximum impairment score (4)
-  if(missed) return 4;
-
-  // Helper: clamp null/undefined to a conservative mid/high impairment
-  const safe = (v, fallback) => (v === null || v === undefined || Number.isNaN(v)) ? fallback : v;
-  const fd = safe(final_dist_cm, 30.0);
-  const rt = safe(reaction_time_s, 6.0);
-  const pti = safe(percent_time_inside, 0.0);
-
-  // Convert each metric into a 0-4 subscore (0 = best, 4 = worst)
-  const score_from_final_dist = (d) => {
-    if(d < 3.0) return 0;
-    if(d < 5.0) return 1;
-    if(d < 15.0) return 2;
-    if(d < 30.0) return 3;
-    return 4;
-  };
-  const score_from_reaction = (s) => {
-    if(s < 1.5) return 0;
-    if(s < 3.0) return 1;
-    if(s < 4.0) return 2;
-    if(s < 5.0) return 3;
-    return 4;
-  };
-  const score_from_percent_inside = (p) => {
-    if(p >= 50.0) return 0;
-    if(p >= 30.0) return 1;
-    if(p >= 15.0) return 2;
-    if(p >= 10.0) return 3;
-    return 4;
-  };
-
-  const s_fd = score_from_final_dist(fd);
-  const s_rt = score_from_reaction(rt);
-  const s_pti = score_from_percent_inside(pti);
-
-  // Weights reflect relative importance (sum = 1)
-  const w_fd = 0.45;
-  const w_rt = 0.30;
-  const w_pti = 0.25;
-
-  const combined = (s_fd * w_fd) + (s_rt * w_rt) + (s_pti * w_pti);
-
-  // Round to nearest integer in 0..4
-  const finalScore = Math.min(4, Math.max(0, Math.round(combined)));
-  return finalScore;
-}
-
-function trial_sara_score(final_dist_cm, reaction_time_s, missed, percent_time_inside){
-  // If the trial was missed entirely, give the maximum impairment score (4)
-  if(missed) return 4;
-
-  // Helper: clamp null/undefined to a conservative mid/high impairment
-  const safe = (v, fallback) => (v === null || v === undefined || Number.isNaN(v)) ? fallback : v;
-  const fd = safe(final_dist_cm, 30.0);
-
-  // Convert each metric into a 0-4 subscore (0 = best, 4 = worst)
-  const score_from_final_dist = (d) => {
-    if(d < 3.0) return 0;
-    if(d < 5.0) return 1;
-    if(d < 15.0) return 2;
-    if(d < 30.0) return 3;
-    return 4;
-  };
-
-  return score_from_final_dist(fd);
-}
-
-function pushFrameTouch(trialIdx, frameIdx, ts, x_px, y_px, inside){
-  allTouches.push({trialIdx,frameIdx,ts,x_px,y_px,inside});
-}
-
-function handleFrameForTrial(results){
-  const fps = fpsUsed;
-  let fingertip = false;
-  let cx=null, cy=null;
-  if(results && results.multiHandLandmarks && results.multiHandLandmarks.length>0){
-    const tip = results.multiHandLandmarks[0][8];
-    cx = Math.round(tip.x * VIDEO_W);
-    cy = Math.round(tip.y * VIDEO_H);
-    fingertip = true;
-  }
-  const frameIdx = trialState.positions.length + trialState.missingFrames;
-  const timestamp = (new Date()).toISOString();
-
-  if(fingertip){
-    const dist_px = Math.hypot(cx - trialState.target.x, cy - trialState.target.y);
-    const inside = dist_px <= trialState.target.radius_px;
-    trialState.inside_flags.push(inside);
-    trialState.positions.push({x:cx,y:cy});
-    pushFrameTouch(trialIndex+1, frameIdx, timestamp, cx, cy, inside);
-    if(inside && trialState.reaction_time === null){
-      trialState.reaction_time = (performance.now() - trialState.start_time_ms)/1000.0;
-    }
-  } else {
-    trialState.inside_flags.push(false);
-    trialState.missingFrames++;
-  }
-
-  if(trialState.positions.length > 0){
-    const last = trialState.positions[trialState.positions.length-1];
-    const final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
-    const final_dist_cm = px_to_cm(final_dist_px);
-    statusLine.textContent = `Running — final err: ${final_dist_cm.toFixed(2)} cm`;
-  } else {
-    statusLine.textContent = `Running — no touch yet`;
-  }
-
-  const elapsed = (performance.now() - trialState.start_time_ms)/1000.0;
-  trialLine.textContent = `Trial: ${trialIndex+1}/${cfg.targets}`;
-
-  if(elapsed >= cfg.interval_s){
-    finalizeTrialAndScheduleNext(fps);
-  }
-}
-
-function handleFrameForTrialCursor(){
-  const fps = fpsUsed;
-  let fingertip = false;
-  let cx=null, cy=null;
-  if(lastMousePos){
-    fingertip = true;
-    const canvasCssW = parseFloat(canvas.style.width), canvasCssH = parseFloat(canvas.style.height);
-    const scaleX = VIDEO_W / canvasCssW;
-    const scaleY = VIDEO_H / canvasCssH;
-    cx = Math.round(lastMousePos.x * scaleX);
-    cy = Math.round(lastMousePos.y * scaleY);
-  }
-
-  const frameIdx = trialState.positions.length + trialState.missingFrames;
-  const timestamp = (new Date()).toISOString();
-
-  if(fingertip){
-    const dist_px = Math.hypot(cx - trialState.target.x, cy - trialState.target.y);
-    const inside = dist_px <= trialState.target.radius_px;
-    trialState.inside_flags.push(inside);
-    trialState.positions.push({x:cx,y:cy});
-    pushFrameTouch(trialIndex+1, frameIdx, timestamp, cx, cy, inside);
-    if(inside && trialState.reaction_time === null){
-      trialState.reaction_time = (performance.now() - trialState.start_time_ms)/1000.0;
-    }
-  } else {
-    trialState.inside_flags.push(false);
-    trialState.missingFrames++;
-  }
-
-  if(trialState.positions.length > 0){
-    const last = trialState.positions[trialState.positions.length-1];
-    const final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
-    const final_dist_cm = px_to_cm(final_dist_px);
-    statusLine.textContent = `Running — final err: ${final_dist_cm.toFixed(2)} cm`;
-  } else {
-    statusLine.textContent = `Running — no touch yet`;
-  }
-
-  const elapsed = (performance.now() - trialState.start_time_ms)/1000.0;
-  trialLine.textContent = `Trial: ${trialIndex+1}/${cfg.targets}`;
-
-  if(elapsed >= cfg.interval_s){
-    finalizeTrialAndScheduleNext(fps);
-  }
-}
-
-function finalizeTrialAndScheduleNext(fps){
-  const frames_recorded = trialState.inside_flags.length;
-  const time_inside_s = trialState.inside_flags.filter(Boolean).length / Math.max(1,fps);
-  const percent_time_inside = 100.0 * trialState.inside_flags.filter(Boolean).length / Math.max(1,frames_recorded);
-
-  let final_dist_px=null, final_dist_cm=null;
-  if(trialState.positions.length > 0){
-    const last = trialState.positions[trialState.positions.length-1];
-    final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
-    final_dist_cm = px_to_cm(final_dist_px);
-  }
-
-  const missed = (trialState.positions.length === 0);
-  const trial_score = trial_sara_score(final_dist_cm !== null ? final_dist_cm : null, trialState.reaction_time, missed, percent_time_inside);
-  const enhanced_score = enhanced_sara_score(final_dist_cm !== null ? final_dist_cm : null, trialState.reaction_time, missed, percent_time_inside);
-
-  const summary = {
-    trial: allTargetSummaries.length + 1,
-    tx: trialState.target.x, ty: trialState.target.y,
-    radius_px: trialState.target.radius_px, radius_cm: cfg.radius_cm,
-    final_dist_cm: final_dist_cm !== null ? final_dist_cm : null,
-    final_dist_px: final_dist_px !== null ? final_dist_px : null,
-    tremor_cm: null,
-    smoothness: null,
-    time_inside_s,
-    percent_time_inside,
-    reaction_time: trialState.reaction_time,
-    frames_recorded,
-    missed,
-    trial_score,
-    enhanced_score
-  };
-  allTargetSummaries.push(summary);
-
-  if(missed){
-    appendLog(`<div>⚠️ <strong>Target ${summary.trial} — Missing</strong> — no valid touch detected in ${cfg.interval_s}s<br><small>Score: (not counted)</small></div>`);
-  } else {
-    const rt_ms = summary.reaction_time !== null ? Math.round(summary.reaction_time*1000) : '-';
-    appendLog(`<div>🎯 <strong>Target ${summary.trial}</strong><br>
-      Final error: ${summary.final_dist_cm.toFixed(2)} cm<br>
-      Reaction time: ${rt_ms} ms<br>
-      Percent time inside: ${summary.percent_time_inside.toFixed(1)}%<br>
-      Score (SARA bucket): ${summary.trial_score}</div>`);
-  }
-
-  trialRunning = false;
-  trialState = null;
-  trialIndex++;
-  setTimeout(async ()=>{
-    if(trialIndex < cfg.targets && running){
-      if(cfg.trail && allTargetSummaries.length >= 1){
-        const prev = targets[Math.max(0, trialIndex-1)];
-        const next = targets[trialIndex];
-        startTrail(prev, next);
-        await new Promise(r=>setTimeout(r, 260));
-      }
-      if(cfg.countdown && !firstTrialCountdownDone){
-        await runCountdownAndCue();
-        firstTrialCountdownDone = true;
-      }
-      startTrialInternal();
-    } else {
-      finalizeRunAndLog();
-    }
-  }, 180);
-}
-
-function startTrialInternal(){
-  const [tx,ty] = targets[trialIndex];
-  const radius_px = cm_to_px(cfg.radius_cm);
-  trialState = {
-    target: {x:tx, y:ty, radius_px},
-    positions: [],
-    inside_flags: [],
-    reaction_time: null,
-    start_time_ms: performance.now(),
-    missingFrames: 0
-  };
-  trialRunning = true;
-  appendLog(`<div class="small-muted">Starting trial ${trialIndex+1} (radius ${cfg.radius_cm} cm)</div>`);
-  beep(900,100,0.04);
-}
-
-function finalizeRunAndLog(){
-  appendLog(`<div class="small-muted">Finalizing run...</div>`);
-  const count = cfg.targets;
-  const summaries = allTargetSummaries.slice(-count);
-  const scored = summaries.filter(s=>!s.missed && (typeof s.trial_score === 'number'));
-  const scores = scored.map(s => s.trial_score).filter(v=>v!==null && v!==undefined);
-
-  let totalScoreText = 'No valid targets (all missed)';
-  let finalScore = null;
-  if(scores.length === 0){
-    totalScoreText = 'Total Score: — (no valid targets counted)';
-  } else {
-    let arr = scores.slice().sort((a,b)=>a-b);
-    let removedBestWorst = false;
-    if(arr.length >= 5){
-      arr = arr.slice(1, -1);
-      removedBestWorst = true;
-    }
-    const avg = arr.reduce((a,b)=>a+b,0)/arr.length;
-    finalScore = avg;
-    const removeNote = removedBestWorst ? ` (average of ${arr.length} targets with best & worst removed)` : ` (average of ${arr.length} targets)`;
-    totalScoreText = `Total Score: ${finalScore.toFixed(2)}${removeNote}`;
-  }
-
-  appendLog(`<div style="margin-top:8px"><strong>✅ Test completed successfully.</strong></div>`);
-  appendLog(`<div style="margin-top:6px"><strong>${totalScoreText}</strong></div>`);
-  const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
-  const mean_sara_score = mean(summaries.map(s => s.trial_score).filter(v => typeof v === 'number'));
-  const mean_enhanced_score = mean(summaries.map(s => s.enhanced_score).filter(v => typeof v === 'number'));
-  const mean_distance_to_target_cm = mean(summaries.map(s => s.final_dist_cm).filter(v => typeof v === 'number'));
-  const mean_time_to_target_s = mean(summaries.map(s => s.reaction_time).filter(v => typeof v === 'number'));
-  const mean_percent_time_inside = mean(summaries.map(s => s.percent_time_inside).filter(v => typeof v === 'number'));
-  const mean_tremor = mean(summaries.map(s => s.tremor_cm).filter(v => typeof v === 'number'));
-  const mean_smoothness = mean(summaries.map(s => s.smoothness).filter(v => typeof v === 'number'));
-
-  const runSummary = {
-    ts: new Date().toISOString(),
-    session_id: `${metaData.participant}_${metaData.date}_${metaData.session}`,
-    participant_id: metaData.participant,
-    session: metaData.session,
-    date: metaData.date,
-    hand: metaData.hand,
-    mode,
-    num_targets: cfg.targets,
-    mean_sara_score,
-    mean_enhanced_score,
-    mean_distance_to_target_cm,
-    mean_time_to_target_s,
-    mean_percent_time_inside,
-    mean_tremor,
-    mean_smoothness,
-    notes: metaData.notes,
-    cfg: {...cfg},
-    targets: summaries,
-    finalScore
-  };
-  window.lastRunSummary = runSummary;
-  allFinalSummaries.push(runSummary);
-  running = false;
-  firstTrialCountdownDone = false;
-}
-
-function random_target_position_with_constraints(existingTargetsPx, radius_px, minDistPx){
-  const maxAttempts = 300;
-  const marginX = radius_px + 8;
-  const marginY = radius_px + 8;
-  for(let a=0;a<maxAttempts;a++){
-    const x = Math.floor(Math.random()*(Math.max(1, VIDEO_W - 2*marginX))) + marginX;
-    const y = Math.floor(Math.random()*(Math.max(1, VIDEO_H - 2*marginY))) + marginY;
-    let ok = true;
-    for(const t of existingTargetsPx){
-      const d = Math.hypot(x - t[0], y - t[1]);
-      if(d < minDistPx){ ok = false; break; }
-    }
-    if(ok) return [x,y];
-  }
-  return [Math.floor(VIDEO_W/2), Math.floor(VIDEO_H/2)];
-}
-
-function startTrail(startPt, endPt, duration=260){
-  if(!cfg.trail) return;
-  trailAnimation = {start:performance.now(), duration, startPt:{x:startPt[0],y:startPt[1]}, endPt:{x:endPt[0],y:endPt[1]}}; 
-}
-
-async function runCountdownAndCue(){
-  if(!cfg.countdown) return;
-  countdownOverlay.style.display = 'flex';
-  const seq = [3,2,1];
-  for(let i=0;i<seq.length;i++){
-    countdownOverlay.textContent = String(seq[i]);
-    beep(700 - i*100, 180, 0.06);
-    await new Promise(r=>setTimeout(r, 1000));
-  }
-  countdownOverlay.style.display = 'none';
-}
-
-let firstTrialCountdownDone = false;
-
-startBtn.addEventListener('click', async ()=>{
-  saveSettingsToLocal();
-
-  // camera init only if in camera mode
-  if(mode === 'camera'){
-    if(!hands) await initHands();
-    if(!camera) await startCamera();
-    resizeCanvasBacking();
-
-    // Calibration is patient-specific in Camera mode (finger length, camera
-    // distance) — always re-run it fresh right before every test/run,
-    // regardless of any earlier "Verify Calibration" click.
-    appendLog('<div class="small-muted">Running calibration before test start…</div>');
-    const calibOk = await startCalibrationPromise();
-    if(!calibOk){
-      alert('Calibration failed — no hand detected. Hold your index finger steady in view of the camera, then press Start Test again.');
-      return;
-    }
-  } else {
-    // cursor mode: set VIDEO_W/VIDEO_H to working canvas virtual pixel space (CSS pixels)
-    const viewerRect = viewer.getBoundingClientRect();
-    VIDEO_W = Math.max(1, Math.floor(viewerRect.width));
-    VIDEO_H = Math.max(1, Math.floor(viewerRect.height));
-    resizeCanvasBacking();
-    // show calibration UI overlay
-    calibUI.style.display = 'flex';
-  }
-
-  running = true;
-  trialIndex = 0;
-  targets = [];
-
-  // generate targets relative to VIDEO_W/VIDEO_H (which we've set above)
-  const minDistPx = cm_to_px(cfg.min_distance_cm);
-  const radius_px = cm_to_px(cfg.radius_cm);
-  for(let i=0;i<cfg.targets;i++){
-    const p = random_target_position_with_constraints(targets, radius_px, minDistPx);
-    targets.push(p);
-  }
-  appendLog(`<div class="small-muted">Generated ${targets.length} targets (${mode})</div>`);
-
-  // start-of-run countdown once
-  if(cfg.countdown){
-    await runCountdownAndCue();
-    firstTrialCountdownDone = true;
-  } else {
-    firstTrialCountdownDone = false;
-  }
-
-  // start capturing mouse events if cursor mode
-  if(mode === 'cursor'){
-    attachCursorListeners();
-  }
-
-  startTrialInternal();
-});
-
-/* stop */
-stopBtn.addEventListener('click', ()=>{
-  running = false;
-  trialRunning = false;
-  trialState = null;
-  detachCursorListeners();
-  stopCamera();
-  appendLog('<div class="small-muted">Test stopped by user.</div>');
-  statusLine.textContent = 'Stopped';
-});
-
-/* calibrate button (camera or user) */
-calibrateBtn.addEventListener('click', async ()=>{
-  if(mode === 'camera'){
-    if(!hands) await initHands();
-    if(!camera) await startCamera();
-    resizeCanvasBacking();
-    const ok = await startCalibrationPromise();
-    if(ok){
-      appendLog('<div class="small-muted">Calibration OK</div>');
-      cfg_ppc.value = pixels_per_cm.toFixed(2);
-      ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
-    }
-  } else {
-    const measuredCm = parseFloat(measuredDistance.value);
-    if(!measuredCm || measuredCm <= 0){
-      alert('Enter the measured length of the orange calibration bar.');
-      return;
-    }
-    const barWidthPx = calibBar.getBoundingClientRect().width;
-    pixels_per_cm = barWidthPx / measuredCm;
-    cfg_ppc.value = pixels_per_cm.toFixed(2);
-    ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
-    updateCalibBar();
-    saveSettingsToLocal();
-    appendLog(`<div class="small-muted">Calibration verified — ${pixels_per_cm.toFixed(2)} px/cm</div>`);
-  }
-});
-
-/* export CSV (3 files) - include mode in final summary export */
-exportBtn.addEventListener('click', ()=>{
-  const sanitize = (value) => String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
-  const participant = sanitize(metaData.participant || DEFAULT_META.participant) || 'P000';
-  const sessionLabel = sanitize(metaData.session || DEFAULT_META.session) || 'S1';
-  const dateLabel = (metaData.date || DEFAULT_META.date).slice(0,10);
-  const handLabel = (metaData.hand && metaData.hand.trim()) ? sanitize(metaData.hand) : 'Unknown';
-  const sessionId = `${participant}_${dateLabel}_${sessionLabel}`;
-  const fileSuffix = `${participant}${dateLabel}${sessionLabel}`;
-
-  // touches csv
-  const touchesHeader = ['touch_id','session_id','target_id','participant_id','session','date','hand','trial_idx','frame_idx','timestamp','x_px','y_px','inside'];
-  const touchesLines = [touchesHeader.join(',')];
-  for(const t of allTouches){
-    const targetId = `${sessionId}_T${t.trialIdx+1}`;
-    const touchId = `${sessionId}_T${t.trialIdx+1}_F${t.frameIdx}`;
-    touchesLines.push([
-      touchId,
-      sessionId,
-      targetId,
-      participant,
-      sessionLabel,
-      dateLabel,
-      handLabel,
-      t.trialIdx,
-      t.frameIdx,
-      t.ts,
-      t.x_px===undefined?'':t.x_px,
-      t.y_px===undefined?'':t.y_px,
-      t.inside?1:0
-    ].join(','));
-  }
-  downloadBlob(touchesLines.join('\n'), `RT_touches_${fileSuffix}.csv`);
-
-  // targets summary csv
-  const targHeader = ['target_id','session_id','participant_id','session','date','hand','trial_global_index','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','time_to_target_s','percent_time_inside','frames_recorded','missed','valid','sara_score','enhanced_score'];
-  const targLines = [targHeader.join(',')];
-  for(const s of allTargetSummaries){
-    const targetId = `${sessionId}_T${s.trial}`;
-    const valid = s.missed ? 0 : 1;
-    targLines.push([
-      targetId,
-      sessionId,
-      participant,
-      sessionLabel,
-      dateLabel,
-      handLabel,
-      s.trial,
-      s.tx,
-      s.ty,
-      s.radius_cm,
-      s.radius_px,
-      s.final_dist_cm!==null ? s.final_dist_cm.toFixed(3):'',
-      s.reaction_time!==null ? s.reaction_time.toFixed(3):'',
-      s.percent_time_inside.toFixed(2),
-      s.frames_recorded,
-      s.missed?1:0,
-      valid,
-      s.trial_score!==null ? s.trial_score.toFixed(3) : '',
-      s.enhanced_score!==null ? s.enhanced_score.toFixed(3) : ''
-    ].join(','));
-  }
-  downloadBlob(targLines.join('\n'), `RT_targets_summary_${fileSuffix}.csv`);
-
-  // final summary
-  const finalHeader = ['session_id','participant_id','session','trial','date','hand','mode','num_targets','sara_score','enhanced_score','distance_to_target_cm','time_to_target_s','percent_time_inside','notes'];
-  const finalLines = [finalHeader.join(',')];
-  for(const f of allFinalSummaries){
-    for(const s of f.targets){
-      finalLines.push([
-        f.session_id,
-        f.participant_id,
-        f.session,
-        s.trial,
-        f.date,
-        f.hand,
-        f.mode,
-        f.num_targets,
-        s.trial_score !== null ? s.trial_score.toFixed(3) : '',
-        s.enhanced_score !== null ? s.enhanced_score.toFixed(3) : '',
-        s.final_dist_cm !== null ? s.final_dist_cm.toFixed(3) : '',
-        s.reaction_time !== null ? s.reaction_time.toFixed(3) : '',
-        s.percent_time_inside.toFixed(2),
-        f.notes || ''
-      ].join(','));
-    }
-  }
-  downloadBlob(finalLines.join('\n'), `RT_final_summary_${fileSuffix}.csv`);
-  appendLog(`<div class="small-muted">Exported CSVs</div>`);
-});
-
-/* helper download */
-function downloadBlob(text, filename){
-  const blob = new Blob([text], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-}
-
-/* clear log */
-clearLogBtn.addEventListener('click', ()=>{ clearLog(); });
-
-/* save/apply settings */
-saveSettingsBtn.addEventListener('click', ()=>{ saveSettingsToLocal(); });
-resetSettingsBtn.addEventListener('click', ()=>{ resetSettings(); });
-
-/* attach/detach cursor listeners */
-function attachCursorListeners(){
-  canvas.style.cursor = 'crosshair';
-  canvas.addEventListener('mousemove', onCanvasMouseMove);
-  canvas.addEventListener('mousedown', onCanvasMouseDown);
-  canvas.addEventListener('mouseup', onCanvasMouseUp);
-  canvas.addEventListener('mouseleave', onCanvasMouseLeave);
-}
-function detachCursorListeners(){
-  canvas.style.cursor = 'default';
-  canvas.removeEventListener('mousemove', onCanvasMouseMove);
-  canvas.removeEventListener('mousedown', onCanvasMouseDown);
-  canvas.removeEventListener('mouseup', onCanvasMouseUp);
-  canvas.removeEventListener('mouseleave', onCanvasMouseLeave);
-  lastMousePos = null;
-}
-
-/* mouse handlers store last position in CSS pixels (relative to canvas) */
-function onCanvasMouseMove(e){
-  const rect = canvas.getBoundingClientRect();
-  lastMousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-}
-function onCanvasMouseDown(e){
-  cursorIsDown = true;
-  onCanvasMouseMove(e);
-}
-function onCanvasMouseUp(e){
-  cursorIsDown = false;
-  onCanvasMouseMove(e);
-}
-function onCanvasMouseLeave(e){
-  lastMousePos = null;
-}
-
-/* update calibration bar width according to pixels_per_cm and current canvas scale
-   ensure bar doesn't overflow viewer area — cap to viewer width - margins
-*/
-function updateCalibBar(){
-  const viewerRect = viewer.getBoundingClientRect();
-  const pxFor8_5cm = Math.round(pixels_per_cm * 8.5);
-  const maxWidth = Math.max(24, Math.floor(viewerRect.width - 48)); // leave margins
-  const w = Math.min(pxFor8_5cm, maxWidth);
-  calibBar.style.width = w + 'px';
-}
-
-/* Mode toggle click handlers */
-modeCursor.addEventListener('click', ()=>{
-  setMode('cursor');
-});
-modeCamera.addEventListener('click', ()=>{
-  setMode('camera');
-});
-function setMode(m){
-  if(m === mode) return;
-  mode = m;
-  
-  if(mode === 'cursor'){
-    modeCursor.classList.add('active');
-    modeCamera.classList.remove('active');
-    modeBadge.textContent = 'Cursor';
-    // stop camera if running
-    stopCamera();
-    calibUI.style.display = 'flex';
-    
-    // NEW: Set default radius to 1 cm for Cursor
-    cfg_radius_cm.value = "2.0"; 
-    cfg_min_distance_cm.value = "5.0";
-  } else {
-    modeCamera.classList.add('active');
-    modeCursor.classList.remove('active');
-    modeBadge.textContent = 'Camera (Beta)';
-    calibUI.style.display = 'none';
-    // ensure camera will be initialized when starting
-    
-    // NEW: Set default radius to 5 cm for Camera
-    cfg_radius_cm.value = "5.0";
-    cfg_min_distance_cm.value = "10.0";
-  }
-}
-
-/* Run initialization */
-function init(){
-  loadSettingsFromLocal();
-  resizeCanvasBacking();
-  appendLog('<div class="small-muted">App ready. Verify settings. Use Cursor Mode for mouse-based runs; Camera Mode for a webcam.</div>');
-}
-init();
-
-/* observe viewer size changes */
-new ResizeObserver(()=>{ resizeCanvasBacking(); }).observe(document.getElementById('viewer'));
-
-/* Ensure page draws continuously when running/receiving data */
-(function tick(){
-  if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
-  requestAnimationFrame(tick);
+  bindWeightHandle(els.wHandle1,true);bindWeightHandle(els.wHandle2,false);renderWeightBar();
+  renderTaskList();renderResearch();
 })();

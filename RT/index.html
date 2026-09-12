@@ -1,303 +1,89 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Random Target Touch Test — CeMoQu</title>
-
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Speech Disturbance Test — CeMoQu</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../shared/common.css">
   <link rel="stylesheet" href="../shared/header.css">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="./styles.css">
   <script src="../shared/header.js" defer></script>
-
+  <script src="./app.js" defer></script>
 </head>
 <body>
   <div id="header-container"></div>
-  <div class="shell" role="application" aria-label="Random Target Touch Test — CeMoQu">
-    <!-- Header -->
-    <div class="topbar">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <a href="../index.html" class="btn-pill" style="font-size:12px;padding:6px 12px;">← Back</a>
-        <div class="title-block">
-          <h1>Random Target Touch Test</h1>
-          <div class="small-muted">Point-to-target cursor/camera task with time-in-target and error metrics.</div>
-        </div>
+  <div class="app sd-shell"><div class="page-body">
+    <header class="topbar sd-topbar">
+      <a href="../index.html" class="btn-pill sd-back">← Back</a>
+      <div class="title-block"><h1>Speech Disturbance Test</h1><div class="small-muted">Three guided speech tasks for cerebellar ataxia research</div></div>
+      <div class="top-status" id="topStatus"><span class="status-dot"></span><span>Not started</span></div>
+      <div class="top-actions" id="topActions">
+        <button id="micTestBtn" class="toolbar-btn">Mic Test</button>
+        <button id="startTestBtn" class="toolbar-btn primary" disabled>Start Test</button>
+        <button id="stopTestBtn" class="toolbar-btn danger" disabled>Stop Test</button>
+        <button id="submitDataBtn" class="toolbar-btn" disabled>Submit Data</button>
+        <button id="exportCsvTopBtn" class="toolbar-btn" disabled>Export CSV</button>
+        <span id="toolbarMessage" class="toolbar-message" aria-live="polite"></span>
       </div>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <div class="tag-pill"><span class="led"></span> CeMoQu · v0.1</div>
-      </div>
-    </div>
-
-    <!-- Top content -->
-    <div class="content-grid">
-      <!-- Viewer card (full-width row) -->
-      <section class="card panel viewer-area" aria-label="Viewer area" style="grid-column:1 / -1;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-          <div>
-            <div style="display:flex;flex-direction:column;gap:6px;">
-              <div class="mode-toggle" role="tablist" aria-label="Choose test mode" style="display:flex;gap:8px;">
-                <button id="modeCursor" class="btn-pill active-mode" role="tab" aria-selected="true">Cursor Mode</button>
-                <button id="modeCamera" class="btn-pill inactive-mode" role="tab" aria-selected="false">Camera Mode</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="viewer-toolbar">
-            <button id="startBtn" class="primary">Start Test</button>
-            <button id="stopBtn">Stop Test</button>
-            <button id="uploadBtn">Submit Data</button>
-            <button id="exportBtn">Export CSV</button>
-          </div>
-        </div>
-
-        <!-- Canvas / video -->
-        <div class="canvas-wrap" id="viewer" aria-live="polite">
-          <div class="top-right-info" id="ppcLabel">Pixels/cm: --</div>
-          <video id="video" autoplay playsinline style="display:none"></video>
-          <canvas id="canvas" role="img" aria-label="Camera feed or cursor canvas"></canvas>
-
-          <div id="countdownOverlay" class="overlay-countdown" style="display:none;"></div>
-          <div id="calibSuccessOverlay" class="overlay-success" style="display:none;"></div>
-          <div id="calibPromptOverlay" class="overlay-success" style="display:none;">Show your finger to the camera</div>
-
-        </div>
-
-        <div class="meta-row" style="margin-top:12px;">
-          <div class="small-muted">
-            Input: <span class="chip" id="inputTypeChip">Mouse</span>
-          </div>
-          <div class="small-muted" id="statusLine">Idle</div>
-        </div>
-      </section>
-
-      <!-- Side panels -->
-      <aside style="display:flex;flex-direction:column;gap:12px;">
-        <section class="card panel info-without-heading" style="width:100%;min-height:120px;">
-          <div class="panel-body">
-            <div class="small-muted">
-              Random target touch test for ataxia and upper-limb control. Targets appear at random positions; the system logs time-to-target, time in target, final error, tremor, and smoothness.
-              Runs are scored using a SARA-like composite (0 = no impairment, 4 = severe) that combines final error, reaction time, percent time inside the target, tremor, and movement smoothness.
-            </div>
-          </div>
+    </header>
+    <div class="sd-workspace">
+      <main class="experiment" aria-live="polite">
+        <div class="progress-track" aria-label="Assessment progress"><span class="progress-fill" id="progressFill"></span></div>
+        <div class="experiment-head"><span class="eyebrow" id="stepLabel">PRE-TEST SETUP</span><span class="time-chip" id="timeChip" hidden><span class="record-dot"></span><span id="timeText">00:00</span></span></div>
+        <section class="stage active" id="setupStage">
+          <div class="stage-copy"><h2>Prepare for a clear recording</h2><p>Sit comfortably in a quiet room. Place the microphone about 15–20 cm from your mouth and keep its position steady.</p></div>
+          <div class="setup-illustration" aria-hidden="true"><div class="mic-ring"><span>🎙</span></div><div class="sound-waves"><i></i><i></i><i></i><i></i><i></i></div></div>
+          <div class="quality-strip" id="qualityStrip"><div><span>Microphone</span><strong id="micState">Not checked</strong></div><div><span>Input level</span><strong id="levelState">—</strong></div><div><span>Room noise</span><strong id="noiseState">—</strong></div></div>
+          <div class="stage-actions"><button id="checkMicBtn" class="primary-action">Check Microphone</button></div>
         </section>
-
-        <section class="card panel cursor-calibration-panel" style="width:100%;min-height:0;">
-          <div class="panel-header">
-            <h2>Calibration</h2>
-            <div class="header-actions">
-              <button id="calibrateBtn" class="verify-calibration-btn">Verify Calibration</button>
-            </div>
-          </div>
-          <div class="panel-body">
-            <div id="calibUI" class="calib-ui" style="display:flex;">
-              <div id="calibInstr" class="small-muted">
-                Measure the orange bar with a physical ruler and enter its length in centimeters.
-              </div>
-              <div id="calibBar" class="calib-bar" style="width:120px;">
-                <span>CALIBRATION BAR</span>
-              </div>
-            </div>
-            <div class="row" style="margin-top:14px;">
-              <div style="flex:1;">
-                <label for="measuredDistance">Bar Length (cm)</label>
-                <input id="measuredDistance" type="number" step="0.01" min="0.01" placeholder="e.g. 13.2" />
-              </div>
-              <div style="flex:1;">
-                <label>Index finger length (cm)</label>
-                <input id="cfg_finger_cm" type="number" step="0.1" value="7.5" />
-              </div>
-            </div>
-          </div>
+        <section class="stage" id="taskStage">
+          <div class="task-copy"><h2 id="taskName">Sustained vowel</h2><p id="taskInstruction"></p></div>
+          <div class="stimulus" id="stimulus"></div><div class="countdown" id="countdown" hidden></div>
+          <div class="live-visual" id="liveVisual"><canvas id="waveCanvas" width="900" height="76" aria-label="Live microphone waveform"></canvas><div class="level-track"><span id="levelFill"></span><i class="quiet-mark"></i><i class="clip-mark"></i></div><div class="level-labels"><span>Quiet</span><span>Good level</span><span>Clipping</span></div></div>
+          <div class="stage-actions task-actions"><button id="recordBtn" class="primary-action">Start Recording</button><button id="finishBtn" class="secondary" hidden>Finish Reading</button></div>
         </section>
-
-        <div hidden aria-hidden="true">
-          <span id="statusLineTop">Idle</span>
-          <span id="trialLine">Trial: —</span>
+        <section class="stage" id="processingStage"><div class="processing-ring" aria-hidden="true"></div><h2>Processing recording</h2><p id="processingText">Checking audio quality and calculating measurements…</p></section>
+        <section class="stage" id="reviewStage">
+          <div class="review-mark">✓</div><div class="stage-copy"><h2 id="reviewTitle">Recording complete</h2><p id="reviewMessage">Listen to the recording, then accept it or record again.</p></div><audio id="playback" controls></audio><div class="quality-banner" id="reviewQuality"></div>
+          <div class="stage-actions split-actions"><button id="rerecordBtn" class="secondary">Re-record</button><button id="acceptBtn" class="primary-action">Accept and Continue</button></div>
+        </section>
+        <section class="stage" id="taskResultStage">
+          <div class="stage-copy"><h2 id="taskResultName">Task complete</h2></div>
+          <div class="result-hero task-score"><span>Score</span><strong id="taskResultScore">—</strong><small>/ 6</small></div>
+          <ul class="explain-list" id="taskResultExplain"></ul>
+          <p class="small-muted" id="taskResultHint">Pick a task from the panel on the right to continue, or record this one again.</p>
+          <div class="stage-actions"><button id="viewFinalResultsBtn" class="primary-action" hidden>View Final Results</button></div>
+        </section>
+        <section class="stage" id="resultsStage">
+          <div class="result-hero"><span>Estimated SARA Speech Score</span><strong id="estimatedScore">—</strong><p>Provisional research estimate — not clinically validated</p></div><div class="component-grid" id="componentGrid"></div><div class="calculation-line" id="calculationLine"></div><div class="quality-banner" id="overallWarning"></div>
+          <div class="stage-actions"><button id="restartBtn" class="secondary">Start New Assessment</button></div>
+        </section>
+      </main>
+      <aside class="side-panel">
+        <div class="tab-bar" role="tablist"><button class="side-tab active" data-tab="test" role="tab" aria-selected="true">TEST</button><button class="side-tab" data-tab="research" role="tab" aria-selected="false">RESEARCH</button></div>
+        <div class="tab-panel active" id="testPanel">
+          <section class="side-section" id="testSection"><h3>Test</h3><div class="task-list" id="taskList"></div></section>
+          <section class="side-section" id="summaryPanel" hidden><h3>Result Summary</h3><div class="side-score"><span>Estimated score</span><strong id="sideScore">—</strong><small>0–6</small></div><div class="summary-list" id="summaryList"></div><p class="caution">This standardized browser protocol is not the official conversational SARA examination.</p></section>
+          <section class="side-section" id="setupPanel"><h3>Settings</h3><label for="micSelect">Microphone</label><select id="micSelect"><option value="">Default microphone</option></select><div class="meter"><span id="sideMeter"></span></div><p id="micGuidance">Check your microphone before beginning.</p><div class="form-grid"><label>Sound cue<select id="soundCue"><option value="on">On</option><option value="off">Off</option></select></label><label>Test language<select id="language"><option value="en-US">English (US)</option></select></label><label>Mic distance (cm)<input id="micDistance" type="number" min="1" step="1" value="18"></label></div></section>
         </div>
-
-        <section class="card panel" id="settingsPanel" style="min-height:260px;">
-          <div class="panel-header">
-            <div>
-              <h2>Settings</h2>
+        <div class="tab-panel" id="researchPanel">
+          <section class="side-section"><h3>Clinical Reference</h3><label for="clinicianScore">Clinician-rated SARA Speech score (0–6)</label><select id="clinicianScore"><option value="">Not entered</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select><label for="researchNotes">Clinician / researcher notes</label><textarea id="researchNotes" rows="4" placeholder="Optional same-day reference notes"></textarea></section>
+          <section class="side-section"><h3>Scoring</h3>
+            <div class="weight-bar" id="weightBar">
+              <div class="weight-handle" id="wHandle1" tabindex="0" role="slider" aria-label="Reading / Pa-ta-ka boundary"></div>
+              <div class="weight-handle" id="wHandle2" tabindex="0" role="slider" aria-label="Pa-ta-ka / Vowel boundary"></div>
             </div>
-            <div class="header-actions">
-              <button id="resetSettingsBtn">Reset Settings</button>
-              <button id="saveSettingsBtn">Save Settings</button>
-            </div>
-          </div>
-
-          <div class="panel-body">
-            <div class="col">
-              <div class="settings-primary-grid">
-                <div><label>Targets</label><input id="cfg_targets" type="number" value="5" min="1" /></div>
-                <div><label>Target interval (s)</label><input id="cfg_interval" type="number" value="2.0" step="0.1" min="0.1" /></div>
-                <div><label>Target radius (cm)</label><input id="cfg_radius_cm" type="number" value="2.0" step="0.1" /></div>
-                <div><label>Edge width (px)</label><input id="cfg_edge_px" type="number" value="5" /></div>
-                <div><label>Target spacing (cm)</label><input id="cfg_min_distance_cm" type="number" value="5.0" step="0.1" /></div>
-                <div><label>Hand</label><select id="meta_hand"><option value="">Unknown</option><option value="R">Right</option><option value="L">Left</option></select></div>
-              </div>
-              <input id="cfg_ppc" type="hidden" value="30.0" />
-            </div>
-          </div>
-        </section>
+            <div class="weight-labels"><span id="wLabelReading"></span><span id="wLabelPataka"></span><span id="wLabelVowel"></span></div>
+            <p>Engineering placeholder thresholds pending clinical calibration. Drag the bar to try alternative weightings (snaps to 10%).</p>
+            <button id="showScoringBtn" class="text-button">View calculation details</button><div id="scoringDetails" class="details-box" hidden></div>
+          </section>
+          <section class="side-section"><h3>Audio Download</h3><div id="audioDownloads" class="audio-download-row"></div></section>
+          <section class="side-section"><h3>Detailed Measurements</h3><div id="metricDetails" class="metric-details"><p>Complete the assessment to view task-level measurements.</p></div></section>
+          <section class="side-section limitation"><h3>Research Limitation</h3><p>Browser ASR and acoustic measurements vary by browser, device, microphone, network, accent, and language. Analysis failure is never interpreted as severe impairment.</p></section>
+        </div>
       </aside>
-
-      <!-- Log -->
-      <section class="card panel" id="logPanel" style="min-height:160px;">
-        <div class="panel-header log-header">
-          <div>
-            <h2>Log</h2>
-            <div class="small-muted" style="margin-top:4px;">Run history and summary messages.</div>
-          </div>
-          <div class="header-actions"><button id="clearLogBtn">Clear Log</button></div>
-        </div>
-        <div class="panel-body" style="display:flex;flex-direction:column;padding:0;">
-          <div id="logArea" class="log" role="log" aria-live="polite"></div>
-        </div>
-      </section>
     </div>
-
-    <!-- Footer -->
-    <div class="footer">
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <div class="small-muted">Local only, no data upload.</div>
-        <div class="dot"></div>
-        <div class="small-muted">Use full-screen mode where possible for consistent calibration.</div>
-      </div>
-      <div class="small-muted">CeMoQu · v0.1</div>
-    </div>
-  </div>
-
-  <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-
-  <script src="app.js"></script>
-
-  <script>
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzC8TVgW7KQGKXgIK6bRz-FIzN_im-oFcSD4UsWEHGwOAGr1vJUhBcCClIFMYpmCfXFPw/exec";
-
-    async function uploadDeidentifiedResults() {
-      if (!GOOGLE_SCRIPT_URL) { alert("Upload endpoint not configured."); return; }
-      if (!window.lastRunSummary) { alert("Please complete a test before uploading."); return; }
-
-      const payload = {
-        session_id: "unknown",
-        test_type: "RT",
-        timestamp: new Date().toISOString(),
-        metrics: (() => {
-          const run = window.lastRunSummary;
-          if (!run) return null;
-          const summaries = run.targets || [];
-          const valid = summaries.filter(s => !s.missed);
-          const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : null;
-          return {
-            final_score: run.finalScore ?? null,
-            mean_final_error_cm: mean(valid.map(s => s.final_dist_cm)),
-            mean_reaction_time_s: mean(valid.map(s => s.reaction_time)),
-            mean_tremor_cm: mean(valid.map(s => s.tremor_cm)),
-            mean_smoothness: mean(valid.map(s => s.smoothness)),
-            mean_percent_time_inside: mean(valid.map(s => s.percent_time_inside)),
-            missed_rate: summaries.length ? summaries.filter(s => s.missed).length / summaries.length : null,
-            num_targets: summaries.length,
-            mode: run.mode,
-            target_radius_cm: run.cfg?.radius_cm ?? null,
-            interval_s: run.cfg?.interval_s ?? null,
-            pixels_per_cm: run.cfg?.ppc ?? null
-          };
-        })()
-      };
-
-      try {
-        const res = await fetch(GOOGLE_SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error("Upload failed");
-        await res.json();
-        alert("De-identified results uploaded successfully.");
-      } catch (err) {
-        console.error("Upload Error Details:", err);
-        alert("Upload failed. Data remains local.");
-      }
-    }
-
-    document.getElementById("uploadBtn")?.addEventListener("click", () => {
-      const ok = confirm("Upload de-identified summary metrics only?\n\nNo names, no audio, no raw trajectories.");
-      if (ok) uploadDeidentifiedResults();
-    });
-  </script>
-
-  <script>
-    (function(){
-      const cursorBtn = document.getElementById("modeCursor");
-      const cameraBtn = document.getElementById("modeCamera");
-      if(cursorBtn && cameraBtn){
-        cursorBtn.addEventListener("click", (e) => {
-          e.preventDefault();
-          cursorBtn.classList.add("active-mode"); cursorBtn.classList.remove("inactive-mode");
-          cameraBtn.classList.add("inactive-mode"); cameraBtn.classList.remove("active-mode");
-          cursorBtn.setAttribute("aria-selected","true"); cameraBtn.setAttribute("aria-selected","false");
-          const badge = document.getElementById("modeBadgeText");
-          if(badge) badge.textContent = "Cursor";
-        });
-        cameraBtn.addEventListener("click", (e) => {
-          e.preventDefault();
-          cameraBtn.classList.add("active-mode"); cameraBtn.classList.remove("inactive-mode");
-          cursorBtn.classList.add("inactive-mode"); cursorBtn.classList.remove("active-mode");
-          cameraBtn.setAttribute("aria-selected","true"); cursorBtn.setAttribute("aria-selected","false");
-          const badge = document.getElementById("modeBadgeText");
-          if(badge) badge.textContent = "Camera";
-        });
-      }
-    })();
-  </script>
-
-  <script>
-    /* ST-style two-panel layout. Existing test elements and IDs are preserved. */
-    document.addEventListener('DOMContentLoaded', () => {
-      const grid = document.querySelector('.content-grid');
-      const viewerCard = document.querySelector('.viewer-area');
-      const aside = grid?.querySelector('aside');
-      const logPanel = document.getElementById('logPanel');
-      if (!grid || !viewerCard || !aside || !logPanel) return;
-
-      document.querySelector('.shell')?.classList.add('rt-st-shell');
-      viewerCard.classList.add('rt-st-viewer');
-      aside.classList.add('rt-st-side');
-
-      const viewerHeader = viewerCard.firstElementChild;
-      const moduleTopbar = document.querySelector('.rt-st-shell > .topbar');
-      const versionBadge = moduleTopbar?.querySelector('.tag-pill')?.parentElement;
-      versionBadge?.classList.add('rt-version-badge');
-      const tabBar = document.createElement('div');
-      tabBar.className = 'rt-tab-bar';
-      tabBar.innerHTML = '<button class="rt-tab active" data-panel="test">TEST</button><button class="rt-tab" data-panel="research">RESEARCH</button>';
-
-      const testPanel = document.createElement('div');
-      testPanel.className = 'rt-side-panel active';
-      testPanel.dataset.panel = 'test';
-      const researchPanel = document.createElement('div');
-      researchPanel.className = 'rt-side-panel';
-      researchPanel.dataset.panel = 'research';
-
-      if (viewerHeader && moduleTopbar) {
-        viewerHeader.classList.add('rt-toolbar-top');
-        moduleTopbar.appendChild(viewerHeader);
-      }
-      [...aside.children].forEach(el => testPanel.appendChild(el));
-      researchPanel.appendChild(logPanel);
-
-      aside.replaceChildren(tabBar, testPanel, researchPanel);
-      tabBar.querySelectorAll('.rt-tab').forEach(btn => btn.addEventListener('click', () => {
-        tabBar.querySelectorAll('.rt-tab').forEach(b => b.classList.toggle('active', b === btn));
-        aside.querySelectorAll('.rt-side-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === btn.dataset.panel));
-      }));
-    });
-  </script>
+  </div></div>
 </body>
 </html>
