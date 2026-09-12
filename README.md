@@ -6,7 +6,7 @@ The platform extends selected concepts from the **Scale for the Assessment and R
 
 > **Research use only.** CeMoQu is not a diagnostic tool and does not replace clinician-administered SARA assessment or medical judgment. Current scoring methods are provisional and require clinical validation.
 
-![CeMoQu Home](langding.png)
+![CeMoQu Home](landing.png)
 
 ## Live System
 
