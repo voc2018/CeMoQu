@@ -50,8 +50,6 @@ The current guided sequence is designed around the horizontal test because recor
 
 ![Calibration panel](docs/screenshots/ld-calibration-panel.png)
 
-![Countdown and GO screen](docs/screenshots/ld-countdown-go.png)
-
 ![Running trace](docs/screenshots/ld-running-trace.png)
 
 ## Current interface
