@@ -1,153 +1,258 @@
-# SD Verification Report
+# CeMoQu RT — Verification Report
 
-**Verification date:** 2026-09-07  
-**Protocol version:** `sd-protocol-v2`  
-**Scoring configuration:** `sd-provisional-v1.8`  
-**Build reviewed:** `SD(2).zip`  
-**Status:** Conditional research-prototype verification — not clinical validation
+**Module:** RT — Random Target Touch / Digital Finger Chase  
+**Build reviewed:** `RT091226`  
+**Files reviewed:** `index.html`, `styles.css`, `app.js`  
+**Purpose:** Manual QA checklist for confirming that the RT module works as intended after recent Cursor/Camera Mode refactoring and UI changes.
 
-This report distinguishes checks that were completed from checks that still require a real browser,
-microphone, participant sample, or clinical reference. A code check, synthetic-signal test, or single
-development recording is not described as clinical validation.
+---
 
-## 1. Scope
+## 1. Verification Summary
 
-The reviewed SD build contains three browser-based tasks:
+This report verifies four main areas:
 
-1. Sustained vowel (5 seconds)
-2. Pa-ta-ka repetition (10 seconds)
-3. Standard reading passage (up to 30 seconds)
+1. Cursor Mode calibration and target behavior.
+2. Camera Mode four-step Auto Calibration.
+3. Right-hand and left-hand test sequence.
+4. Result display, logging, and export readiness.
 
-The tasks may be completed in any order. A task may be repeated, and only the most recently accepted
-attempt for each task contributes to the current overall estimate. Earlier attempts remain in the
-session attempt history but are marked unaccepted.
+The most important risk area is Camera Mode because it depends on MediaPipe, webcam coordinate mapping, calibration timing, and target generation.
 
-## 2. Automatically verified against the current build
+---
 
-- JavaScript passes `node --check`.
-- HTML contains no duplicate IDs.
-- SD-local DOM references resolve. The `glob-*` participant/session fields are intentionally supplied
-  by the shared CeMoQu header and therefore require integration testing with `../shared`.
-- Protocol and scoring identifiers in code are `sd-protocol-v2` and `sd-provisional-v1.8`.
-- Configured task durations are 5, 10, and 30 seconds.
-- The default overall weights are Reading 50%, Pa-ta-ka 40%, and Vowel 10%.
-- The research weight control changes weights in 10% increments while preserving a 100% total.
-- Standard order-sensitive dynamic-programming WER produces substitutions, deletions, and insertions.
-- Pa-ta-ka scoring uses overall syllable rate, inter-onset CV, and pause ratio at 40%/30%/30%.
-- Sustained-vowel scoring uses valid phonation duration, F0 CV, and dropout count at 45%/35%/20%.
-- Reading scoring uses WER and ASR-derived words per minute at 80%/20%.
-- The intelligibility-priority rule prevents a Reading component of 4–6 from being averaged below
-  that component score.
-- An `empty_or_invalid` attempt or a task with no numeric scoring metric is returned as `Unavailable`,
-  not automatically mapped to 0 or 6.
-- Quality flags are preserved and displayed but do not automatically block an otherwise measurable
-  attempt.
-- Re-accepting a task marks the previous accepted attempt unaccepted and replaces it in the current
-  calculation.
-- Passage ID, version, title, and text are stored with Reading attempts.
-- Requested and actual browser audio settings, browser user agent, microphone distance, language,
-  transcript, quality flags, detection details, and scoring configuration are included in exports.
-- CSV cells are quoted and embedded quotation marks are escaped.
-- Accepted audio can be downloaded in the browser-selected recorded format.
-- `Submit Data` prepares a payload but does not transmit it; the source contains an explicit TODO.
-- SD contains a scoped `[hidden]` CSS rule and a responsive single-column layout below 900 px.
+## 2. Test Environment Record
 
-## 3. Previously tested in isolated development checks
+Fill this section during manual testing.
 
-The following checks were reported during development and remain useful regression evidence, but are
-not substitutes for current multi-device testing:
+| Item | Value |
+|---|---|
+| Date tested |  |
+| Tester |  |
+| Browser |  |
+| Operating system |  |
+| Device / monitor |  |
+| Browser zoom |  |
+| Camera resolution shown in log |  |
+| RT build / zip file | `RT091226` |
 
-- A synthetic continuous 130 Hz vowel exposed the earlier VAD noise-floor failure. After using the
-  lower of pre-task ambient RMS and the recording's 20th-percentile RMS, the synthetic vowel was
-  detected as active.
-- Pure scoring functions were exercised with altered configuration weights to confirm that displayed
-  configuration values are connected to the computation.
-- A development recording was used to identify low-loudness octave-tracking errors and evaluate the
-  two-stage F0 filter. This is a development-case check, not a validation dataset.
+![Screenshot needed: Full RT page at start of test](./docs/screenshots/rt-main-cursor-mode.png)
 
-## 4. Current implementation limitations confirmed by review
+---
 
-- Thresholds, metric contributions, task weights, quality cutoffs, and the intelligibility-priority
-  rule are engineering placeholders and have not been calibrated against an independent clinical
-  cohort.
-- Browser ASR supplies both WER and the recognized-word count used for WPM. A recognition miss can
-  therefore worsen both Reading metrics; they are not independent.
-- The displayed detection-confidence value is a heuristic, not a calibrated probability.
-- If at least one task metric is numeric, the current component calculation assigns severity 0 to a
-  missing metric. This can bias a partially observed component toward the normal end of the scale and
-  requires an explicit policy decision before clinical calibration.
-- Pa-ta-ka events are amplitude-envelope peaks, not manually verified syllable nuclei. Weak syllables
-  and noise bursts can change rate and rhythm estimates.
-- Pa-ta-ka `pauseRatio` includes all time classified inactive, including possible response latency,
-  trailing silence, weak undetected articulation, and true mid-task pauses.
-- Reading passages have documented phoneme-presence coverage but have not been shown to be equivalent
-  in ASR difficulty, articulatory demand, reading time, or score distribution.
-- A new passage is selected when Reading is re-entered, including re-record. This may reduce rehearsal
-  while introducing an alternate-form effect.
-- Browser-recorded audio may be compressed and browser-dependent; it is not acquisition-grade raw PCM.
-- `Submit Data` is not connected to a production endpoint.
+## 3. Static File Checks
 
-## 5. Real-browser and microphone verification still required
+| Check | Expected result | Status |
+|---|---|---|
+| `index.html` loads | Page opens without broken layout | ☐ Pass ☐ Fail |
+| `styles.css` loads | RT-specific visual layout is applied | ☐ Pass ☐ Fail |
+| `app.js` loads | No JavaScript syntax error in console | ☐ Pass ☐ Fail |
+| Shared header loads | CeMoQu header appears | ☐ Pass ☐ Fail |
+| MediaPipe scripts load | Camera Mode can initialize | ☐ Pass ☐ Fail |
 
-Test over HTTPS or localhost; microphone and browser speech-recognition APIs may not work from
-`file://`.
+Notes:
 
-1. Verify shared-header loading and all `glob-*` metadata fields.
-2. Test microphone permission allowed, denied, revoked, and device-changed states.
-3. Test default and alternate microphones and confirm exported actual settings.
-4. Confirm visible 3–2–1–Go, optional sound cue, recording start at Go, timer behavior, and safe stop.
-5. Confirm full preservation of recording endings and Reading early-finish behavior.
-6. Verify playback, re-record, acceptance replacement, restart, and object-URL cleanup.
-7. Test silence, quiet speech, loud speech, clipping, background noise, and changing room noise.
-8. Test ASR success, partial transcript, no result, unsupported browser, and network loss.
-9. Inspect deliberate substitutions, deletions, insertions, and word-order changes in WER output.
-10. Download CSV and accepted audio; inspect commas, quotes, Unicode, multiline notes, filenames, and
-    codec playback outside the recording browser.
-11. Verify desktop and mobile layout, overflow, keyboard focus, screen-reader labels, contrast, and
-    use by participants with hearing, visual, motor, speech, or cognitive access needs.
-12. Repeat on the intended support matrix, including current Chrome and Edge on Windows/macOS and any
-    Safari, Firefox, Android, or iOS environments the project intends to claim.
+```text
 
-## 6. Signal-analysis validation still required
+```
 
-- Compare VAD active/silent labels with manually annotated recordings.
-- Compare Pa-ta-ka event times, counts, pauses, and rhythm values with expert syllable annotations.
-- Compare F0 tracks, F0 CV, voiced-frame selection, and dropouts with reference acoustic software.
-- Quantify codec, sample-rate, microphone, distance, room-noise, browser, and operating-system effects.
-- Test low-pitched, high-pitched, quiet, breathy, interrupted, and severely dysarthric voices.
-- Measure failure rates rather than evaluating only successful recordings.
+---
 
-## 7. Clinical and statistical validation still required
+## 4. Settings Verification
 
-- Healthy-control and cerebellar-ataxia cohorts covering the intended age, sex, language, accent,
-  education, respiratory, hearing, and severity ranges
-- Same-day blinded clinician-rated official SARA Speech scores based on the agreed conversational
-  protocol
-- Inter-rater reliability of the clinical reference
-- Test–retest reliability and measurement error
-- Concurrent and construct validity of each metric and task component
-- Passage-form effects and passage assignment strategy
-- Calibration or replacement of thresholds, metric contributions, overall weights, and the
-  intelligibility-priority rule
-- Sensitivity to longitudinal change and estimation of clinically meaningful change
-- External validation on an independent cohort
-- Missing-data, unusable-recording, and adjudication rules defined before confirmatory analysis
+Expected default settings:
 
-## 8. Questions requiring neurologist and SLP decisions
+| Setting | Expected value | Status |
+|---|---:|---|
+| Movements per hand | 5 | ☐ Pass ☐ Fail |
+| Target interval | 2.0 s | ☐ Pass ☐ Fail |
+| Target diameter | 3.0 cm | ☐ Pass ☐ Fail |
+| Hand(s) | Right and Left | ☐ Pass ☐ Fail |
+| Cursor spacing | ≥20 cm | ☐ Pass ☐ Fail |
+| Camera movement | 30 cm | ☐ Pass ☐ Fail |
 
-- Is the Reading task appropriate across the intended clinical population and education levels?
-- Should a Reading re-record retain the same passage?
-- Should the recording stop when the passage ends or retain a standardized tail?
-- Which conversational sample should accompany the official SARA Item 4 rating?
-- Which quality or task failures require re-recording, annotation, or clinician adjudication?
-- Should severe dysarthria, anarthria, reading difficulty, cognitive impairment, and non-native
-  English use distinct protocol paths?
-- Which demographic, respiratory, hearing, language, accent, and device covariates are mandatory?
-- How should partially available metrics be handled without interpreting missingness as normality?
+![Screenshot needed: Settings defaults](./docs/screenshots/settings-defaults.png)
 
-## 9. Current verification decision
+---
 
-The current build passes static structural review and is suitable for supervised prototype and
-research-development testing. It is **not verified for diagnostic use, clinical decision-making, or
-claims of validated SARA scoring accuracy**. Advancement beyond provisional status requires the
-real-browser, signal-analysis, accessibility, and clinical/statistical work listed above.
+## 5. Cursor Mode Verification
+
+### 5.1 Cursor Mode Selection
+
+| Step | Expected result | Status |
+|---|---|---|
+| Click Cursor Mode | Cursor Mode becomes active | ☐ Pass ☐ Fail |
+| Previous results are cleared | No old score remains visible | ☐ Pass ☐ Fail |
+| Calibration instruction appears | User is asked to measure calibration bar | ☐ Pass ☐ Fail |
+
+![Screenshot needed: Cursor Mode selected before verification](./docs/screenshots/cursor-calibration-before-verify.png)
+
+### 5.2 Cursor Calibration
+
+| Step | Expected result | Status |
+|---|---|---|
+| Enter measured bar length | Value is accepted | ☐ Pass ☐ Fail |
+| Click Verify Calibration | Calibration result appears | ☐ Pass ☐ Fail |
+| Start Test before verification | Should be blocked | ☐ Pass ☐ Fail |
+| Start Test after verification | Should be allowed | ☐ Pass ☐ Fail |
+
+![Screenshot needed: Cursor calibration verified](./docs/screenshots/cursor-calibration-verified.png)
+
+### 5.3 Cursor Target Generation
+
+| Step | Expected result | Status |
+|---|---|---|
+| Start Test | New right-hand targets are generated | ☐ Pass ☐ Fail |
+| Complete right-hand run | Left-hand run begins | ☐ Pass ☐ Fail |
+| Left-hand run starts | New left-hand targets are generated | ☐ Pass ☐ Fail |
+| Consecutive cursor targets | At least 20 cm apart | ☐ Pass ☐ Fail |
+
+Notes:
+
+```text
+
+```
+
+---
+
+## 6. Camera Mode Verification
+
+### 6.1 Camera Mode Selection
+
+| Step | Expected result | Status |
+|---|---|---|
+| Click Camera Mode | Camera Mode becomes active | ☐ Pass ☐ Fail |
+| Previous results are cleared | No old result remains visible | ☐ Pass ☐ Fail |
+| Camera instruction appears | User is asked to enter actual index finger length | ☐ Pass ☐ Fail |
+| Camera starts | Log shows camera resolution, e.g. 1280×720 | ☐ Pass ☐ Fail |
+
+![Screenshot needed: Camera Mode selected with finger length input](./docs/screenshots/camera-mode-enter-finger-length.png)
+
+### 6.2 Auto Calibration Flow
+
+| Step | Expected result | Status |
+|---|---|---|
+| Enter finger length, e.g. 6.0 | Value is used in calibration calculation | ☐ Pass ☐ Fail |
+| Click Auto Calibration | Open-palm instruction appears | ☐ Pass ☐ Fail |
+| Calibration 1 | Right hand is captured | ☐ Pass ☐ Fail |
+| Calibration 2 | Left hand is captured | ☐ Pass ☐ Fail |
+| Calibration 3 | Right hand is captured | ☐ Pass ☐ Fail |
+| Calibration 4 | Left hand is captured | ☐ Pass ☐ Fail |
+| Each capture completes | Beep/capture behavior remains active | ☐ Pass ☐ Fail |
+| Final average appears | Average px/cm is shown after 4 measurements | ☐ Pass ☐ Fail |
+| Start Test before Auto Calibration | Should be blocked | ☐ Pass ☐ Fail |
+| Start Test after Auto Calibration | Should be allowed | ☐ Pass ☐ Fail |
+
+![Screenshot needed: Camera Auto Calibration open palm instruction](./docs/screenshots/camera-auto-calibration-open-palm.png)
+
+![Screenshot needed: Camera calibration average result](./docs/screenshots/camera-calibration-average-result.png)
+
+### 6.3 Calibration Log Verification
+
+The log should show each completed measurement.
+
+Example expected pattern:
+
+```text
+Camera Calibration 1 of 4 (Right) • measured finger length: ___ px • actual finger length: 6.00 cm • pixels/cm: ___ • samples: ___ • range: ___–___ px
+Camera calibration 1 of 4 complete.
+...
+Camera calibration complete — average ___ px/cm from 4 measurements.
+```
+
+Manual calculation check:
+
+```text
+average = (cal1 + cal2 + cal3 + cal4) ÷ 4
+```
+
+| Check | Expected result | Status |
+|---|---|---|
+| Four calibration values appear | 4 values in log | ☐ Pass ☐ Fail |
+| Average is correct | Final average matches manual calculation | ☐ Pass ☐ Fail |
+| Close hand vs far hand | Closer hand should usually produce larger px/cm | ☐ Pass ☐ Fail |
+| Stable hand capture | Sample range should not be extremely wide | ☐ Pass ☐ Fail |
+
+![Screenshot needed: Camera calibration log values](./docs/screenshots/log-camera-calibration-values.png)
+
+---
+
+## 7. Test Sequence Verification
+
+| Step | Expected result | Status |
+|---|---|---|
+| Click Start Test | Right-hand start message appears | ☐ Pass ☐ Fail |
+| Right-hand message | Text: “The right-hand test will begin.” | ☐ Pass ☐ Fail |
+| Message font | Approximately 13px | ☐ Pass ☐ Fail |
+| Message duration | Approximately 3 seconds | ☐ Pass ☐ Fail |
+| Countdown | 3, 2, 1 appears visually | ☐ Pass ☐ Fail |
+| Right-hand targets | 5 movements by default | ☐ Pass ☐ Fail |
+| Left-hand transition | Left-hand start message appears | ☐ Pass ☐ Fail |
+| Left-hand message | Text: “The left-hand test will begin.” | ☐ Pass ☐ Fail |
+| Left-hand targets | 5 movements by default | ☐ Pass ☐ Fail |
+| Final result | Score/result overlay appears | ☐ Pass ☐ Fail |
+
+![Screenshot needed: Right-hand start message](./docs/screenshots/rt-phase-message-right.png)
+
+![Screenshot needed: Countdown overlay](./docs/screenshots/rt-countdown.png)
+
+![Screenshot needed: Active target screen](./docs/screenshots/rt-running-target-test.png)
+
+![Screenshot needed: Final result overlay](./docs/screenshots/final-result-overlay.png)
+
+---
+
+## 8. Data and Export Verification
+
+| Check | Expected result | Status |
+|---|---|---|
+| Trial data recorded | Target-level summaries appear in log/export | ☐ Pass ☐ Fail |
+| Right/left data separated | Hand labels are correct | ☐ Pass ☐ Fail |
+| CSV export | File downloads successfully | ☐ Pass ☐ Fail |
+| Export includes mode | Cursor/Camera mode recorded | ☐ Pass ☐ Fail |
+| Export includes calibration | pixels/cm recorded | ☐ Pass ☐ Fail |
+| Submit Data confirmation | Upload confirmation asks before sending | ☐ Pass ☐ Fail |
+
+Notes:
+
+```text
+
+```
+
+---
+
+## 9. Known Risk Areas
+
+| Risk | Why it matters | Suggested check |
+|---|---|---|
+| Camera calibration instability | px/cm changes with distance and hand angle | Review four calibration logs |
+| Cursor screen scaling | cm accuracy depends on screen/bar measurement | Re-measure bar after window or zoom changes |
+| Target repetition appearance | constrained area can create similar-looking target patterns | Confirm target generation runs per hand |
+| Low frame rate | tremor estimate may be unreliable | Check measured FPS in output/log |
+| Duplicate UI IDs | Can affect button wiring if present | Inspect `index.html` after layout changes |
+
+---
+
+## 10. Pass / Fail Summary
+
+| Area | Status | Notes |
+|---|---|---|
+| Cursor Mode | ☐ Pass ☐ Fail |  |
+| Camera Mode | ☐ Pass ☐ Fail |  |
+| Auto Calibration | ☐ Pass ☐ Fail |  |
+| Right/Left sequence | ☐ Pass ☐ Fail |  |
+| Scoring/result display | ☐ Pass ☐ Fail |  |
+| Export | ☐ Pass ☐ Fail |  |
+
+Final QA decision:
+
+```text
+☐ Ready for internal testing
+☐ Needs fixes before internal testing
+☐ Needs clinician/research review
+```
+
+Reviewer notes:
+
+```text
+
+```

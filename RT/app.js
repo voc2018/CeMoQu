@@ -1,350 +1,2276 @@
-(() => {
-  'use strict';
+/* RT Finger Chase — Clinic edition (with Cursor Test)
+   Cursor mode uses the physical orange bar. Camera mode uses MediaPipe Hands
+   and the participant's entered index-finger length to derive pixels/cm.
+   Protocol defaults: five movements per hand and exactly 30 cm between targets.
+*/
 
-  const PROTOCOL_VERSION = 'sd-protocol-v2';
-  const PASSAGES = [
-    { id: 'cemq-climb-v1', version: '1.0', title: 'The Climb',
-      text: 'Every step up the steep trail tested her legs, but she kept a steady breath and pushed forward without slowing down. When her knees ached and the cold wind pushed against her chest, she remembered why she had started and pressed on anyway. At the top, the whole valley opened below her, bright and wide, and she finally understood that real strength grows exactly where doubt used to live.' },
-    { id: 'cemq-oneshot-v1', version: '1.0', title: 'One More Shot',
-      text: 'He missed the shot twice while the crowd fell quiet, and for a moment he thought about walking away for good. Instead, he picked up the ball, shook off the doubt, and took one more try with steady, patient hands. The ball spun through the evening air and dropped clean through the hoop, and the whole gym erupted with sound and joy.' },
-    { id: 'cemq-sunrise-v1', version: '1.0', title: 'Before Sunrise',
-      text: 'Every morning before sunrise, the young runner laced her shoes and stepped out into the cold, quiet street. Some mornings her legs felt heavy and her breath came in short, sharp bursts, but she never once turned back toward home. Months later, standing at the finish line with both arms raised high, she knew that every early morning had been a treasure.' }
-  ];
-  function pickPassage(){return PASSAGES[Math.floor(Math.random()*PASSAGES.length)]}
-  const METRIC_CAVEATS = {
-    wordsPerMinute: 'Recognized-word count comes from browser ASR, not a direct timing measurement — inherits ASR accuracy limits.',
-    articulationRateWpm: 'Recognized-word count comes from browser ASR, not a direct timing measurement — inherits ASR accuracy limits.',
-    wer: 'Alignment math is standard, but the transcript it runs on comes from browser ASR, which is tuned for fluent speech and may register unclear speech as errors it did not correctly interpret rather than errors the speaker made.',
-    meanF0Hz: 'Basic autocorrelation pitch estimate. Frames much quieter than the loudest part of the recording are excluded (unreliable pitch tracking at low SNR), and remaining outliers close to double/half the median are corrected; unresolved outliers are dropped. Still approximate — not a substitute for clinical pitch analysis.',
-    medianF0Hz: 'Basic autocorrelation pitch estimate, computed after excluding low-loudness frames and correcting likely octave errors; treat as approximate.',
-    f0Cv: 'Basic autocorrelation pitch estimate. Frames much quieter than the loudest part of the recording are excluded, and remaining outliers close to double/half the median are corrected rather than left to inflate this value; unresolved outliers are dropped. Still an approximate, browser-derived measure.',
-    syllablesPerSecond: 'Rate computed only over time judged "active" — excludes pauses entirely, so frequent or long pauses do not lower this number. Estimated from amplitude-envelope peaks, not verified syllable boundaries.',
-    overallSyllablesPerSecond: 'Rate computed over the full recording including pauses (classic DDK-rate method). Long or frequent pauses lower this number, unlike the active-only rate above — pausing/breakdown is itself a recognized feature of ataxic dysarthria ("scanning speech"), not just noise to exclude.',
-    interOnsetCv: 'Estimated from amplitude-envelope peaks, not verified syllable boundaries — background noise or weak articulation can shift the count.',
-    pauseRatio: 'Share of the recording with no detected speech. In this task, high values may reflect genuine speech-timing breakdown rather than a recording problem.'
+/* DOM */
+const viewer = document.getElementById('viewer');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const modeCursor = document.getElementById('modeCursor');
+const modeCamera = document.getElementById('modeCamera');
+
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const exportBtn = document.getElementById('exportBtn');
+const resetSettingsBtn = document.getElementById('resetSettingsBtn');
+
+const cfg_interval = document.getElementById('cfg_interval');
+const cfg_targets = document.getElementById('cfg_targets');
+const cfg_radius_cm = document.getElementById('cfg_radius_cm');
+const cfg_diameter_cm = document.getElementById('cfg_diameter_cm');
+const cfg_edge_px = document.getElementById('cfg_edge_px');
+const cfg_finger_cm = document.getElementById('cfg_finger_cm');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const settingsSavedMsg = document.getElementById('settingsSavedMsg');
+const calibrateBtn = document.getElementById('calibrateBtn');
+const cfg_ppc = document.getElementById('cfg_ppc');
+
+const meta_hand = document.getElementById('meta_hand');
+
+/* Live read of global header fields (participant/session/date). Not cached —
+   header.html is injected asynchronously by shared/header.js, so this must
+   be looked up at the moment it's needed, same pattern as LD's fieldVal(). */
+function headerFieldVal(id){
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+const statusLine = document.getElementById('statusLine');
+const trialLine = document.getElementById('trialLine');
+const ppcLabel = document.getElementById('ppcLabel');
+
+const logArea = document.getElementById('logArea');
+const clearLogBtn = document.getElementById('clearLogBtn');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const testResultOverlay = document.getElementById('testResultOverlay');
+
+const calibUI = document.getElementById('calibUI');
+const calibBar = document.getElementById('calibBar');
+const calibInstr = document.getElementById('calibInstr');
+const calibInputs = document.getElementById('calibInputs');
+const measuredDistance = document.getElementById('measuredDistance');
+const barLengthField = document.getElementById('barLengthField');
+const fingerLengthField = document.getElementById('fingerLengthField');
+
+let camera = null;
+let cameraFrameRequest = null;
+let hands = null;
+let handFrameBusy = false;
+let handTrackingErrorShown = false;
+let cameraCalibrationRunning = false;
+let cameraCalibrationDone = false;
+let handCalibrationSamples = [];
+let calibrationFreezeImage = null;
+let calibrationFreezeUntil = 0;
+let cameraPreparationPromise = null;
+let calibrationCaptureRunning = false;
+let cameraCalibrationMeasurements = [];
+const CAMERA_CALIBRATION_STEPS = ['Right','Left','Right','Left'];
+let speechRecognition = null;
+let voiceRestartTimer = null;
+
+/* Modes */
+let mode = 'cursor'; // 'cursor' or 'camera'
+
+/* Video intrinsic */
+let VIDEO_W = 640, VIDEO_H = 480;
+
+/* Backing buffer scaling */
+function resizeCanvasBacking(){
+  const viewerRect = viewer.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = Math.max(1, Math.floor(viewerRect.width));
+  const cssH = Math.max(1, Math.floor(viewerRect.height));
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // update calibration bar immediate width
+  updateCalibBar();
+}
+window.addEventListener('resize', resizeCanvasBacking);
+
+/* localStorage keys */
+const LS_PREFIX = 'rt_fingerchase_v1_';
+const LS_SETTINGS = LS_PREFIX + 'settings';
+
+/* Defaults follow SARA Finger Chase; the movement count remains adjustable
+   for research runs, while target-to-target amplitude stays fixed at 30 cm. */
+const DEFAULTS = {
+  targets: 5,
+  interval_s: 2.0,
+  radius_cm: 1.5,
+  edge_px: 20,
+  min_distance_cm: 30.0,
+  center_dot: true,
+  trail: true,
+  countdown: true,
+  ppc: 30.0,
+  finger_cm: 7.5
+};
+
+/* ============================================================
+   RT_SCORING_CONFIG — dysmetria + tremor scoring pipeline
+   ============================================================
+   Single source of truth for the arrival-detection thresholds, the
+   dysmetria/tremor bucket boundaries, and the top-level weight between
+   them. All scoring functions read from this object (same "config is the
+   single source of truth" principle used in the SD module) so that the
+   RESEARCH-tab weight bar and future settings UI can change behavior
+   without code edits.
+
+   References (see RT/TASK-DESIGN-RATIONALE.md for full citations):
+   [1] Schmitz-Hübsch T. et al. "Scale for the assessment and rating of
+       ataxia: development of a new clinical scale." Neurology 66 (2006):
+       1717-1720. — SARA Finger Chase (item 5) and Nose-Finger (item 6)
+       protocols and score buckets.
+   [2] Corticospinal excitability / temporal feedback gap study (Neuroreport,
+       via Ovid): movement onset/offset defined as the time point where
+       index-finger velocity crosses 5% of that movement's peak velocity.
+   [3] Multiple reaching/stroke-rehabilitation trial protocols (clinicaltrials.gov
+       NCT05683158, NCT05767437): movement onset/offset defined at 10% of
+       peak tangential velocity, with a minimum inter-movement interval
+       (~150 ms) used to reject noise-driven "movement units".
+   [4] Sato M. et al. "Quantitative Assessment of Upper Limb Ataxia Using a
+       Virtual Reality-Based Evaluation System." Ann Clin Transl Neurol 13
+       (2026): 180-192. — "terminal trajectory length" and "maximum
+       overshoot distance", measured only in the phase after the finger
+       first reaches the vicinity of the target, both correlate
+       significantly with the SARA upper-limb sub-score (r=0.657 and
+       r=0.609 respectively, p<0.001). Basis for scoring a separate
+       post-arrival "hold phase" instead of only the endpoint.
+   [5] Cerebellar/intention tremor frequency range: Scholarpedia "Tremor"
+       (cerebellar tremor 3-5 Hz) and ScienceDirect "Intention Tremor"
+       overview (3-8 Hz in the upper limb, dominant <5 Hz). Basis for the
+       minimum camera-mode sampling rate used for the low-fps quality flag.
+*/
+const RT_SCORING_CONFIG = {
+  version: 'rt-scoring-v1',
+
+  arrival: {
+    // "Arrival" = the point where the cursor/fingertip stops reaching toward
+    // the target and starts merely holding position. Defined the same way
+    // as movement offset in reaching kinematics literature [2][3]: velocity
+    // drops to a small fraction of that trial's peak velocity...
+    peakVelocityThresholdPct: 0.08, // ...8% of peak (between the 5% and 10% figures reported in [2]/[3])
+    // ...and stays that low for a minimum duration, so a single noisy frame
+    // isn't mistaken for the true end of the reach (same rationale as the
+    // ~150 ms minimum interval used in [3]).
+    minSustainMs: 100
+  },
+
+  // Dysmetria bucket boundaries (cm of error at the arrival point).
+  // Keeps SARA's <5cm / <15cm boundaries [1] but subdivides the 0-1 and
+  // 3-4 ends for finer digital resolution (open question flagged in
+  // TASK-DESIGN-RATIONALE.md pending further calibration data).
+  dysmetriaBucketsCm: [1.0, 5.0, 15.0], // <1->0, <5->1, <15->2, else->3
+
+  // Tremor bucket boundaries (cm of max deviation from the arrival point
+  // during the hold phase). Directly reuses SARA Nose-Finger's tremor
+  // amplitude boundaries (<2cm->1, <5cm->2, >5cm->3) [1] and extends them
+  // one step further (>10cm->4) for symmetry with the dysmetria buckets.
+  tremorBucketsCm: [1.0, 2.0, 5.0], // <1->0, <2->1, <5->2, else->3 (experimental)
+
+  // Top-level weight between the two sub-scores. Basis: [4] found both
+  // classes of post-arrival measure (endpoint-accuracy-adjacent and
+  // trajectory/drift-adjacent) correlate with the SARA upper-limb
+  // sub-score at a similar magnitude (r=0.609 and r=0.657). Weighted
+  // slightly toward dysmetria because it is the metric SARA's own Finger
+  // Chase item explicitly defines [1]; tremor is CeMoQu's extension beyond
+  // the original protocol. User-adjustable via the RESEARCH tab weight bar.
+  weights: { dysmetria: 0.6, tremor: 0.4 },
+
+  // Below this actual measured camera-mode frame rate, the Nyquist limit
+  // (fps/2) falls within the cited cerebellar tremor frequency band
+  // (3-8 Hz) [5], so tremor amplitude for that trial is flagged as
+  // low-confidence rather than being suppressed.
+  minReliableFps: 20
+};
+
+function bucketFromCm(valueCm, boundaries){
+  for(let i=0;i<boundaries.length;i++){
+    if(valueCm < boundaries[i]) return i;
+  }
+  return boundaries.length;
+}
+
+
+/* runtime config */
+let cfg = {...DEFAULTS};
+
+const DEFAULT_META = {
+  participant: 'P000',
+  session: 'S1',
+  date: new Date().toISOString().slice(0,10),
+  hand: 'B',
+  notes: ''
+};
+let metaData = {...DEFAULT_META};
+
+/* pixels per cm (set from settings / calibration) */
+let pixels_per_cm = DEFAULTS.ppc;
+let cursorPixelsPerCm = DEFAULTS.ppc;
+let cameraPixelsPerCm = DEFAULTS.ppc;
+let cursorCalibrationDone = false;
+ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+
+/* trial / data storage */
+let allTouches = [];
+let allTargetSummaries = [];
+let allFinalSummaries = [];
+
+/* per-run runtime */
+let running = false;
+let trialIndex = 0;
+let targets = [];
+let trialRunning = false;
+let trialState = null;
+let trailAnimation = null;
+
+/* letterbox layout cache */
+let drawLayout = { destW:0, destH:0, offsetX:0, offsetY:0, scale:1 };
+
+/* cursor mode state */
+let cursorIsDown = false;
+let lastMousePos = null;
+
+/* utility logging */
+function appendLog(html){
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  logArea.appendChild(el);
+  logArea.scrollTop = logArea.scrollHeight;
+  return el;
+}
+function clearLog(){
+  logArea.textContent = '';
+}
+
+function escapeLogHtml(value){
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function clearPreviousResultsAndMessages(){
+  testResultOverlay.style.display = 'none';
+  testResultOverlay.innerHTML = '';
+  countdownOverlay.style.display = 'none';
+  const overlay = document.getElementById('calibPromptOverlay');
+  if(overlay) overlay.style.display = 'none';
+  trialLine.textContent = '';
+}
+
+function getCalibrationStatusElement(){
+  let el = document.getElementById('calibrationStatusMsg');
+  if(!el && calibrateBtn){
+    el = document.createElement('span');
+    el.id = 'calibrationStatusMsg';
+    el.className = 'small-muted';
+    el.style.marginLeft = '10px';
+    el.style.fontWeight = '800';
+    calibrateBtn.insertAdjacentElement('afterend', el);
+  }
+  return el;
+}
+
+function setCalibrationStatus(message='', tone='neutral'){
+  const el = getCalibrationStatusElement();
+  if(!el) return;
+  el.textContent = message;
+  el.style.color = tone === 'success' ? '#047857' : tone === 'warning' ? '#b45309' : '';
+}
+
+function clearCalibrationStatus(){
+  setCalibrationStatus('', 'neutral');
+}
+
+function showCursorModeInstruction(){
+  setCalibrationGuide(
+    'CURSOR MODE',
+    'Measure the calibration bar',
+    'Please measure the orange calibration bar length and enter the value below.',
+    '',
+    ''
+  );
+  const detection = document.getElementById('calibDetectionStatus');
+  if(detection){ detection.textContent = ''; detection.classList.remove('is-detected'); detection.style.display = 'none'; }
+  statusLine.textContent = 'Cursor Mode: verify calibration before starting';
+}
+
+function showCursorCalibrationResult(){
+  const diameterPx = cursorCmToPx(cfg.radius_cm * 2);
+  const minDistancePx = cursorCmToPx(20);
+  const result = `Calibration verified. Pixels/cm: ${cursorPixelsPerCm.toFixed(2)}. Target diameter: ${(cfg.radius_cm*2).toFixed(1)} cm = ${diameterPx} px. Minimum target distance: 20 cm = ${minDistancePx} px.`;
+  calibInstr.textContent = result;
+  setCalibrationStatus('Verified', 'success');
+  setCalibrationGuide(
+    'CALIBRATION RESULT',
+    'Cursor calibration verified',
+    `Pixels/cm: ${cursorPixelsPerCm.toFixed(2)}. Cursor test is ready to start.`,
+    '',
+    'success'
+  );
+  const detection = document.getElementById('calibDetectionStatus');
+  if(detection){ detection.textContent = ''; detection.classList.remove('is-detected'); detection.style.display = 'none'; }
+  statusLine.textContent = 'Cursor calibration verified';
+}
+
+
+function showCameraCalibrationFinalResult(){
+  ppcLabel.textContent = `Pixels/cm: ${cameraPixelsPerCm.toFixed(2)}`;
+  statusLine.textContent = 'Camera calibration complete';
+  setCalibrationGuide(
+    'CALIBRATION RESULT',
+    'Camera calibration complete',
+    `Average Pixels/cm: ${cameraPixelsPerCm.toFixed(2)}. Please click Start Test.`,
+    '',
+    'success'
+  );
+  const detection = document.getElementById('calibDetectionStatus');
+  if(detection){
+    detection.textContent = '4 OF 4 CALIBRATIONS COMPLETE ✓';
+    detection.classList.add('is-detected');
+    detection.style.display = 'block';
+  }
+}
+
+function setStartAvailability(){
+  if(mode === 'cursor'){
+    startBtn.disabled = !cursorCalibrationDone;
+  }else{
+    startBtn.disabled = !cameraCalibrationDone;
+  }
+}
+
+
+/* save/load settings */
+function saveSettingsToLocal(){
+  const diameterCm = Math.min(10, Math.max(1, parseFloat(cfg_diameter_cm.value) || DEFAULTS.radius_cm * 2));
+  cfg_diameter_cm.value = diameterCm;
+  cfg_radius_cm.value = diameterCm / 2;
+  const s = {
+    settings_version: 5,
+    targets: Math.min(20, Math.max(3, Math.round(parseFloat(cfg_targets.value) || DEFAULTS.targets))),
+    interval_s: parseFloat(cfg_interval.value)||DEFAULTS.interval_s,
+    diameter_cm: diameterCm,
+    radius_cm: diameterCm / 2,
+    edge_px: Number.isFinite(parseInt(cfg_edge_px.value)) ? Math.max(0, parseInt(cfg_edge_px.value)) : DEFAULTS.edge_px,
+    min_distance_cm: 30,
+    center_dot: true,
+    trail: true,
+    countdown: true,
+    ppc: DEFAULTS.ppc,
+    finger_cm: parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm,
+    participant: headerFieldVal('glob-id') || DEFAULT_META.participant,
+    session: headerFieldVal('glob-sess') || DEFAULT_META.session,
+    date: headerFieldVal('glob-date') || DEFAULT_META.date,
+    hand: ['B','R','L'].includes(meta_hand.value) ? meta_hand.value : 'B',
+    notes: DEFAULT_META.notes
   };
-  const PROVISIONAL_SCORING_CONFIG = {
-    version: 'sd-provisional-v1.8', clinicallyValidated: false,
-    label: 'Engineering placeholder thresholds pending clinical calibration',
-    weights: { reading: 0.50, pataka: 0.40, vowel: 0.10 },
-    reading: {
-      metrics: { wer: { classification: 'scoring', contribution: 0.8 }, speechRateWpm: { classification: 'scoring', contribution: 0.2 }, pauses: { classification: 'exploratory' } },
-      thresholds: { wer: [0.05, 0.15, 0.28, 0.42, 0.60, 0.80], speechRateWpm: [150, 125, 100, 75, 50, 25] },
-      qualityRequirements: { asrRequired: true, minActiveSeconds: 5, minDetectionConfidence: 0.45 }
-    },
-    pataka: {
-      metrics: { overallSyllablesPerSecond: { classification: 'scoring', contribution: 0.40 }, interOnsetCv: { classification: 'scoring', contribution: 0.30 }, pauseRatio: { classification: 'scoring', contribution: 0.30 }, syllablesPerSecond: { classification: 'exploratory' }, detectedEvents: { classification: 'exploratory' } },
-      thresholds: { overallSyllablesPerSecond: [6.0, 5.2, 4.4, 3.6, 2.8, 2.0], interOnsetCv: [0.10, 0.16, 0.23, 0.32, 0.44, 0.60], pauseRatio: [0.15, 0.25, 0.35, 0.50, 0.65, 0.80] },
-      qualityRequirements: { minEvents: 6, minDetectionConfidence: 0.45 }
-    },
-    vowel: {
-      metrics: { validPhonationSeconds: { classification: 'scoring', contribution: 0.45 }, f0Cv: { classification: 'scoring', contribution: 0.35 }, phonationDropoutCount: { classification: 'scoring', contribution: 0.20 }, meanF0: { classification: 'exploratory' } },
-      thresholds: { validPhonationSeconds: [4.5, 4.0, 3.4, 2.8, 2.0, 1.0], f0Cv: [0.025, 0.045, 0.070, 0.105, 0.16, 0.24], phonationDropoutCount: [0, 1, 2, 3, 5, 8] },
-      qualityRequirements: { minVoicedFramePct: 25, minDetectionConfidence: 0.45 }
+  localStorage.setItem(LS_SETTINGS, JSON.stringify(s));
+  loadSettingsIntoRuntime();
+  appendLog('<div class="small-muted">Settings saved</div>');
+}
+function loadSettingsFromLocal(){
+  try{
+    const raw = localStorage.getItem(LS_SETTINGS);
+    if(raw){
+      const s = JSON.parse(raw);
+      const currentSettings = Number(s.settings_version) >= 3;
+      const currentFourSettingLayout = Number(s.settings_version) >= 5;
+      cfg_targets.value = currentFourSettingLayout && Number.isFinite(Number(s.targets)) ? Math.min(20,Math.max(3,Math.round(Number(s.targets)))) : DEFAULTS.targets;
+      cfg_interval.value = s.interval_s || DEFAULTS.interval_s;
+      const diameterCm = currentSettings && typeof s.diameter_cm === 'number' ? s.diameter_cm : DEFAULTS.radius_cm * 2;
+      cfg_diameter_cm.value = diameterCm;
+      cfg_radius_cm.value = diameterCm / 2;
+      cfg_edge_px.value = s.edge_px || DEFAULTS.edge_px;
+      cfg_ppc.value = DEFAULTS.ppc;
+      cfg_finger_cm.value = (typeof s.finger_cm === 'number') ? s.finger_cm : DEFAULTS.finger_cm;
+      meta_hand.value = currentFourSettingLayout && ['B','R','L'].includes(s.hand) ? s.hand : 'B';
+    } else {
+      cfg_targets.value = DEFAULTS.targets;
+      cfg_interval.value = DEFAULTS.interval_s;
+      cfg_radius_cm.value = DEFAULTS.radius_cm;
+      cfg_diameter_cm.value = DEFAULTS.radius_cm * 2;
+      cfg_edge_px.value = DEFAULTS.edge_px;
+      cfg_ppc.value = DEFAULTS.ppc;
+      cfg_finger_cm.value = DEFAULTS.finger_cm;
+      meta_hand.value = DEFAULT_META.hand;
     }
+    loadSettingsIntoRuntime();
+  }catch(e){ console.warn('load settings fail',e); }
+}
+function loadSettingsIntoRuntime(){
+  cfg.targets = Math.min(20, Math.max(3, Math.round(parseFloat(cfg_targets.value) || DEFAULTS.targets)));
+  cfg_targets.value = cfg.targets;
+  cfg.interval_s = parseFloat(cfg_interval.value)||DEFAULTS.interval_s;
+  const diameterCm = Math.min(10, Math.max(1, parseFloat(cfg_diameter_cm.value) || DEFAULTS.radius_cm * 2));
+  cfg_diameter_cm.value = diameterCm;
+  cfg_radius_cm.value = diameterCm / 2;
+  cfg.radius_cm = diameterCm / 2;
+  cfg.edge_px = Number.isFinite(parseInt(cfg_edge_px.value)) ? Math.max(0, parseInt(cfg_edge_px.value)) : DEFAULTS.edge_px;
+  cfg_edge_px.value = cfg.edge_px;
+  cfg.min_distance_cm = 30;
+  cfg.center_dot = true;
+  cfg.trail = true;
+  cfg.countdown = true;
+  cfg.finger_cm = parseFloat(cfg_finger_cm.value) || DEFAULTS.finger_cm;
+  if(!cursorCalibrationDone){
+    cursorPixelsPerCm = DEFAULTS.ppc;
+    if(mode === 'cursor') pixels_per_cm = cursorPixelsPerCm;
+  }
+  ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+  metaData = {
+    participant: headerFieldVal('glob-id') || DEFAULT_META.participant,
+    session: headerFieldVal('glob-sess') || DEFAULT_META.session,
+    date: headerFieldVal('glob-date') || DEFAULT_META.date,
+    hand: ['B','R','L'].includes(meta_hand.value) ? meta_hand.value : 'B',
+    notes: DEFAULT_META.notes
   };
-  window.PROVISIONAL_SCORING_CONFIG = PROVISIONAL_SCORING_CONFIG;
+  const handSetting = metaData.hand === 'B' ? 'right and left' : metaData.hand === 'L' ? 'left only' : 'right only';
+  appendLog(`<div class="small-muted">Settings applied: ${cfg.targets} movements per hand • ${cfg.interval_s}s interval • ${(cfg.radius_cm*2).toFixed(1)} cm diameter • Cursor ≥20cm / Camera 30cm movement • ${handSetting}</div>`);
+  updateCalibBar();
+}
 
-  const TASKS = [
-    { key: 'vowel', name: 'Sustained vowel', short: 'AH', seconds: 5, instruction: 'Take a comfortable breath and sustain “ah” at your normal pitch and loudness until the recording stops.' },
-    { key: 'pataka', name: 'Pa-ta-ka repetition', short: 'PA · TA · KA', seconds: 10, instruction: 'Repeat “pa-ta-ka” as quickly and evenly as you can until the recording stops.' },
-    { key: 'reading', name: 'Standard reading passage', short: PASSAGES[0].text, seconds: 30, instruction: 'Read the passage aloud at your normal pace. Speak as naturally and clearly as you can.' }
-  ];
+/* reset settings */
+function resetSettings(){
+  localStorage.removeItem(LS_SETTINGS);
+  loadSettingsFromLocal();
+  appendLog(`<div class="small-muted">Settings reset to defaults</div>`);
+}
 
-  const $ = (id) => document.getElementById(id);
-  const els = {
-    topStatus: $('topStatus'), progressFill: $('progressFill'), stepLabel: $('stepLabel'), timeChip: $('timeChip'), timeText: $('timeText'),
-    micTestBtn: $('micTestBtn'), startTestBtn: $('startTestBtn'), stopTestBtn: $('stopTestBtn'), submitDataBtn: $('submitDataBtn'), exportCsvTopBtn: $('exportCsvTopBtn'), toolbarMessage: $('toolbarMessage'),
-    setupStage: $('setupStage'), taskStage: $('taskStage'), processingStage: $('processingStage'), reviewStage: $('reviewStage'), resultsStage: $('resultsStage'),
-    micState: $('micState'), levelState: $('levelState'), noiseState: $('noiseState'), checkMicBtn: $('checkMicBtn'), micSelect: $('micSelect'), sideMeter: $('sideMeter'), micGuidance: $('micGuidance'),
-    taskName: $('taskName'), taskInstruction: $('taskInstruction'), stimulus: $('stimulus'), countdown: $('countdown'), waveCanvas: $('waveCanvas'), levelFill: $('levelFill'), recordBtn: $('recordBtn'), finishBtn: $('finishBtn'),
-    playback: $('playback'), reviewTitle: $('reviewTitle'), reviewMessage: $('reviewMessage'), reviewQuality: $('reviewQuality'), rerecordBtn: $('rerecordBtn'), acceptBtn: $('acceptBtn'),
-    setupPanel: $('setupPanel'), summaryPanel: $('summaryPanel'), taskList: $('taskList'),
-    estimatedScore: $('estimatedScore'), componentGrid: $('componentGrid'), calculationLine: $('calculationLine'), overallWarning: $('overallWarning'), restartBtn: $('restartBtn'), sideScore: $('sideScore'), summaryList: $('summaryList'),
-    showScoringBtn: $('showScoringBtn'), scoringDetails: $('scoringDetails'), metricDetails: $('metricDetails'), audioDownloads: $('audioDownloads'),
-    taskResultStage: $('taskResultStage'), taskResultName: $('taskResultName'), taskResultScore: $('taskResultScore'), taskResultExplain: $('taskResultExplain'), taskResultHint: $('taskResultHint'), viewFinalResultsBtn: $('viewFinalResultsBtn'),
-    weightBar: $('weightBar'), wHandle1: $('wHandle1'), wHandle2: $('wHandle2'), wLabelReading: $('wLabelReading'), wLabelPataka: $('wLabelPataka'), wLabelVowel: $('wLabelVowel'),
-    clinicianScore: $('clinicianScore'), researchNotes: $('researchNotes'), soundCue: $('soundCue'), language: $('language'), micDistance: $('micDistance')
-  };
+/* WebAudio beep */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function beep(freq=880, dur=120, vol=0.06){
+  try{
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    setTimeout(()=>{ o.stop(); o.disconnect(); g.disconnect(); }, dur);
+  }catch(e){}
+}
 
-  const model = {
-    state: 'idle', taskIndex: 0, attemptNumber: { vowel: 0, pataka: 0, reading: 0 }, attempts: [], accepted: {}, result: null,
-    stream: null, audioContext: null, source: null, analyser: null, monitorFrame: null, recorder: null, chunks: [], stopTimer: null, clockTimer: null,
-    recordStartedAt: 0, currentUrl: null, recognition: null, transcript: '', asrStatus: 'not_started', actualSettings: {}, micCheck: null, cueOscillator: null
-  };
-  const transitions = {
-    idle: ['checking', 'ready', 'error'], checking: ['ready', 'idle', 'error'], ready: ['countdown', 'idle', 'error'], countdown: ['recording', 'ready', 'error'],
-    recording: ['processing', 'ready', 'error'], processing: ['review', 'ready', 'error'], review: ['ready', 'accepted', 'error'], accepted: ['ready', 'completed'], completed: ['idle'], error: ['idle', 'checking', 'ready']
-  };
+/* MediaPipe hands (camera) */
+async function initHands(){
+  const handModel = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`
+  });
+  handModel.setOptions({ modelComplexity:1, maxNumHands:1, minDetectionConfidence:0.7, minTrackingConfidence:0.7 });
+  handModel.onResults(onHandsResults);
+  if(typeof handModel.initialize === 'function') await handModel.initialize();
+  hands = handModel;
+}
 
-  function setState(next) {
-    if (model.state !== next && !(transitions[model.state] || []).includes(next)) throw new Error(`Invalid state transition: ${model.state} → ${next}`);
-    model.state = next;
-    const label = { idle: 'Not started', checking: 'Checking microphone', ready: 'Ready', countdown: 'Get ready', recording: 'Recording', processing: 'Processing', review: 'Review recording', accepted: 'Accepted', completed: 'Complete', error: 'Needs attention' }[next];
-    els.topStatus.lastElementChild.textContent = label;
-    els.topStatus.classList.toggle('recording', next === 'recording');
-    renderTaskList();
-    lockActions(['countdown', 'recording', 'processing'].includes(next));
-  }
-  function lockActions(locked) { document.querySelectorAll('.side-tab').forEach(b => { b.disabled = locked; }); }
-  function showStage(stage) { ['setupStage','taskStage','processingStage','reviewStage','taskResultStage','resultsStage'].forEach(k => els[k].classList.toggle('active', els[k] === stage)); }
-  function progress(percent) { els.progressFill.style.width = `${percent}%`; }
+function getDetectedHand(results){
+  return results?.multiHandLandmarks?.[0] || null;
+}
 
-  async function requestMicrophone() {
-    releaseMedia();
-    const deviceId = els.micSelect.value;
-    const requested = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1, sampleRate: { ideal: 48000 } };
-    if (deviceId) requested.deviceId = { exact: deviceId };
-    model.stream = await navigator.mediaDevices.getUserMedia({ audio: requested });
-    const track = model.stream.getAudioTracks()[0];
-    model.actualSettings = track.getSettings ? track.getSettings() : {};
-    model.requestedConstraints = requested;
-    model.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await model.audioContext.resume();
-    model.source = model.audioContext.createMediaStreamSource(model.stream);
-    model.analyser = model.audioContext.createAnalyser(); model.analyser.fftSize = 2048; model.analyser.smoothingTimeConstant = .72;
-    model.source.connect(model.analyser); startMonitor(); await populateDevices(); return model.stream;
-  }
-  async function populateDevices() {
-    if (!navigator.mediaDevices?.enumerateDevices) return;
-    const current = els.micSelect.value; const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
-    els.micSelect.innerHTML = '<option value="">Default microphone</option>' + devices.map((d,i) => `<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label || `Microphone ${i+1}`)}</option>`).join('');
-    if ([...els.micSelect.options].some(o => o.value === current)) els.micSelect.value = current;
-  }
-  function startMonitor() {
-    cancelAnimationFrame(model.monitorFrame); const data = new Float32Array(model.analyser.fftSize); const ctx = els.waveCanvas.getContext('2d');
-    const loop = () => { if (!model.analyser) return; model.analyser.getFloatTimeDomainData(data); const rms = Math.sqrt(data.reduce((s,v) => s + v*v, 0) / data.length); const peak = data.reduce((m,v) => Math.max(m, Math.abs(v)), 0); const pct = Math.min(100, Math.sqrt(rms) * 150); els.levelFill.style.width = `${pct}%`; els.sideMeter.style.width = `${pct}%`; drawWave(ctx, data, peak); model.lastRms = rms; model.lastPeak = peak; model.monitorFrame = requestAnimationFrame(loop); }; loop();
-  }
-  function drawWave(ctx, data, peak) { const { width:w,height:h } = ctx.canvas; ctx.clearRect(0,0,w,h); ctx.strokeStyle = peak > .98 ? '#ef4444' : '#21c1fb'; ctx.lineWidth = 2; ctx.beginPath(); for(let i=0;i<data.length;i++){ const x=i/(data.length-1)*w,y=h/2+clamp(data[i]*1.6,-.48,.48)*h; i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); ctx.strokeStyle='#244050';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke(); }
+function landmarkDistancePx(a, b){
+  return Math.hypot((a.x-b.x)*VIDEO_W, (a.y-b.y)*VIDEO_H);
+}
 
-  async function checkMicrophone() {
-    if (model.state === 'checking') return; setState('checking'); els.checkMicBtn.disabled = true; els.micTestBtn.disabled = true; els.micGuidance.textContent = 'Stay quiet briefly, then say a few words at your normal level.';
-    try {
-      await requestMicrophone(); const noise=[]; const signal=[]; for(let i=0;i<30;i++){ await wait(100); (i<10?noise:signal).push(model.lastRms||0); }
-      const noiseRms = mean(noise), signalRms = Math.max(...signal), peak = model.lastPeak || 0;
-      const flags=[]; if(signalRms < .008) flags.push('too_quiet'); if(peak > .98) flags.push('clipping'); if(noiseRms > .035) flags.push('background_noise');
-      model.micCheck = { timestamp: new Date().toISOString(), noiseRms, maxSignalRms: signalRms, peak, flags, passed: signalRms >= .008 && peak <= .98 };
-      els.micState.textContent='Ready';els.micState.className='good';els.levelState.textContent=signalRms<.008?'Too quiet':peak>.98?'Clipping':'Good';els.levelState.className=flags.length?'warn':'good';els.noiseState.textContent=noiseRms>.035?'High':'Acceptable';els.noiseState.className=noiseRms>.035?'warn':'good';
-      els.micGuidance.textContent = flags.length ? `Check complete: ${flags.map(pretty).join(', ')}. You may retry or continue.` : 'Microphone level is suitable. You can begin.';
-      els.startTestBtn.disabled = false; setState('ready');
-    } catch (error) { setState('error'); els.micState.textContent='Unavailable';els.micState.className='warn';els.micGuidance.textContent=`Microphone access failed: ${error.message}`; els.startTestBtn.disabled=true; }
-    finally { els.checkMicBtn.disabled=false; els.checkMicBtn.textContent='Check Again'; els.micTestBtn.disabled=false; }
-  }
+/* Anatomical index-finger length: MCP(5) -> PIP(6) -> DIP(7) -> tip(8). */
+function indexFingerLengthPx(landmarks){
+  if(!landmarks || landmarks.length < 21) return null;
+  return landmarkDistancePx(landmarks[5],landmarks[6]) +
+    landmarkDistancePx(landmarks[6],landmarks[7]) +
+    landmarkDistancePx(landmarks[7],landmarks[8]);
+}
 
-  function startTask(key) {
-    if (!model.micCheck || model.state !== 'ready') return;
-    const idx = TASKS.findIndex(t => t.key === key);
-    if (idx < 0) return;
-    model.taskIndex = idx;
-    els.micTestBtn.disabled = true; els.stopTestBtn.disabled = false; els.toolbarMessage.textContent = '';
-    loadTask();
-  }
-  function startFirstIncompleteTask() {
-    if (Object.keys(model.accepted).length >= 3) { restart(); if (model.micCheck) startTask(TASKS[0].key); return; }
-    const next = TASKS.find(t => !model.accepted[t.key]);
-    if (next) startTask(next.key);
-  }
-  function loadTask() {
-    const task=TASKS[model.taskIndex]; showStage(els.taskStage); setState('ready'); els.stepLabel.textContent=`TASK ${model.taskIndex+1} OF 3 · ${task.name.toUpperCase()}`; els.taskName.textContent=task.name;els.taskInstruction.textContent=task.instruction;
-    if(task.key==='reading'){model.currentPassage=pickPassage();els.stimulus.textContent=model.currentPassage.text}else{els.stimulus.textContent=task.short}
-    els.stimulus.classList.toggle('passage',task.key==='reading');els.recordBtn.hidden=false;els.recordBtn.disabled=false;els.recordBtn.textContent='Start Recording';els.finishBtn.hidden=true;els.timeChip.hidden=true;progress(12+model.taskIndex*24);
-  }
-  async function countdownAndRecord() {
-    if(model.state==='error')setState('ready');if(model.state!=='ready')return;setState('countdown');els.recordBtn.disabled=true;els.countdown.hidden=false;
-    try{for(const token of ['3','2','1','Go']){els.countdown.textContent=token;if(els.soundCue.value==='on')beep(token==='Go'?760:520,token==='Go'?180:90);await wait(token==='Go'?350:1000)}els.countdown.hidden=true;await startRecording()}catch(error){els.countdown.hidden=true;fail(error)}
-  }
-  function beep(freq,duration){ stopCue(); try{const ctx=model.audioContext,osc=ctx.createOscillator(),gain=ctx.createGain();osc.frequency.value=freq;gain.gain.value=.05;osc.connect(gain);gain.connect(ctx.destination);osc.start();model.cueOscillator=osc;setTimeout(()=>{try{osc.stop();}catch{}if(model.cueOscillator===osc)model.cueOscillator=null;},duration);}catch{} }
-  function stopCue(){if(model.cueOscillator){try{model.cueOscillator.stop();}catch{}model.cueOscillator=null;}}
-  function chooseMime(){ return ['audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/webm'].find(t=>window.MediaRecorder?.isTypeSupported?.(t))||''; }
-  async function startRecording() {
-    if(!model.stream)await requestMicrophone(); const task=TASKS[model.taskIndex];model.chunks=[];model.transcript='';model.asrStatus=task.key==='reading'?'starting':'not_applicable';
-    const mime=chooseMime();model.recorder=new MediaRecorder(model.stream,mime?{mimeType:mime,audioBitsPerSecond:128000}:undefined);model.recorder.ondataavailable=e=>{if(e.data.size)model.chunks.push(e.data)};model.recorder.onerror=e=>fail(e.error||new Error('Recorder error'));model.recorder.onstop=processRecording;
-    if(task.key==='reading')startRecognition();model.recordStartedAt=performance.now();model.recorder.start(250);setState('recording');els.timeChip.hidden=false;els.finishBtn.hidden=task.key!=='reading';els.recordBtn.hidden=true;
-    updateClock(task.seconds);
-  }
-  function updateClock(maxSeconds){clearInterval(model.clockTimer);model.autoStopped=false;model.taskMaxSeconds=maxSeconds;const tick=()=>{const elapsed=(performance.now()-model.recordStartedAt)/1000,remaining=Math.max(0,maxSeconds-elapsed);els.timeText.textContent=`00:${String(Math.ceil(remaining)).padStart(2,'0')}`;if(elapsed>=maxSeconds&&!model.autoStopped&&model.state==='recording'){model.autoStopped=true;stopRecording()}};tick();model.clockTimer=setInterval(tick,100)}
-  function stopRecording(){if(model.state!=='recording')return;clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopRecognition();setState('processing');showStage(els.processingStage);els.stepLabel.textContent='PROCESSING';els.timeChip.hidden=true;els.finishBtn.hidden=true;try{if(model.recorder?.state!=='inactive')model.recorder.stop();else processRecording();}catch(error){fail(error)}}
-  function startRecognition(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){model.asrStatus='unavailable';return}try{const rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang=els.language.value;rec.onresult=e=>{let heard='';for(let i=0;i<e.results.length;i++)heard+=`${e.results[i][0].transcript} `;model.transcript=heard.trim()};rec.onerror=e=>{model.asrStatus=`error_${e.error}`};rec.onend=()=>{if(model.asrStatus==='listening')model.asrStatus=model.transcript?'complete':'no_result'};rec.start();model.recognition=rec;model.asrStatus='listening'}catch(e){model.asrStatus='error_start'}}
-  function stopRecognition(){if(model.recognition){try{model.recognition.stop()}catch{}model.recognition=null}if(model.asrStatus==='listening')model.asrStatus=model.transcript?'complete':'no_result'}
+function fingerIsStraight(landmarks, base, middle, distal, tip){
+  const path = landmarkDistancePx(landmarks[base],landmarks[middle]) +
+    landmarkDistancePx(landmarks[middle],landmarks[distal]) +
+    landmarkDistancePx(landmarks[distal],landmarks[tip]);
+  const direct = landmarkDistancePx(landmarks[base],landmarks[tip]);
+  return path > 0 && direct/path >= 0.88;
+}
 
-  async function processRecording() {
-    try {
-      const task=TASKS[model.taskIndex], duration=(performance.now()-model.recordStartedAt)/1000, blob=new Blob(model.chunks,{type:model.recorder?.mimeType||model.chunks[0]?.type||'audio/webm'});
-      const decoded=await decodeBlob(blob);const base=analyzeSignal(decoded,duration,model.micCheck?.noiseRms);let specific={};if(task.key==='vowel')specific=analyzeVowel(base);if(task.key==='pataka')specific=analyzePataka(base);if(task.key==='reading')specific=analyzeReading(base,model.transcript,model.asrStatus,model.currentPassage);
-      const metrics={...base.summary,...specific.metrics};const quality={...base.quality,...specific.quality};const scoring=scoreTask(task.key,metrics,quality);
-      model.attemptNumber[task.key]++;const attempt={trialId:crypto.randomUUID?.()||`${Date.now()}-${task.key}`,task:task.key,taskName:task.name,attemptNumber:model.attemptNumber[task.key],accepted:false,timestamp:new Date().toISOString(),durationSeconds:duration,blob,mimeType:blob.type,codec:blob.type.includes('opus')?'Opus':'browser-selected',sampleRate:decoded.sampleRate,channelCount:decoded.numberOfChannels,requestedConstraints:model.requestedConstraints,actualSettings:model.actualSettings,browser:navigator.userAgent,microphoneDistanceCm:Number(els.micDistance.value)||null,testLanguage:els.language.value,metrics,quality,scoring,transcript:task.key==='reading'?model.transcript:null,asrStatus:task.key==='reading'?model.asrStatus:'not_applicable',passage:task.key==='reading'?model.currentPassage:null,detection:specific.detection||base.detection};
-      model.attempts.push(attempt);model.currentAttempt=attempt;showReview(attempt);setState('review');
-    } catch(error){fail(error)}
-  }
-  async function decodeBlob(blob){const buffer=await blob.arrayBuffer();const temp=new (window.AudioContext||window.webkitAudioContext)();try{return await temp.decodeAudioData(buffer.slice(0))}finally{await temp.close()}}
-  function analyzeSignal(audioBuffer,duration,ambientNoiseRms){const channel=audioBuffer.getChannelData(0),sr=audioBuffer.sampleRate,frame=Math.max(256,Math.round(sr*.02)),hop=Math.round(frame/2),rms=[],peaks=[];for(let i=0;i+frame<=channel.length;i+=hop){let sum=0,peak=0;for(let j=0;j<frame;j++){const v=channel[i+j];sum+=v*v;peak=Math.max(peak,Math.abs(v))}rms.push(Math.sqrt(sum/frame));peaks.push(peak)}const sorted=[...rms].sort((a,b)=>a-b),percentileNoise=percentile(sorted,.2),hasAmbient=Number.isFinite(ambientNoiseRms),noise=hasAmbient?Math.min(ambientNoiseRms,percentileNoise):percentileNoise,threshold=Math.max(.006,noise*3),active=rms.map(v=>v>threshold),activeFrames=active.filter(Boolean).length,frameSec=hop/sr,segments=segmentsFromMask(active,frameSec,.12),activeDuration=activeFrames*frameSec,silence=Math.max(0,duration-activeDuration),peak=Math.max(0,...peaks),flags=[];if(activeDuration<.4)flags.push('empty_or_invalid');if(mean(rms)<.008)flags.push('too_quiet');if(peak>.98)flags.push('clipping');if(noise>.035)flags.push('background_noise');const confidence=clamp((activeFrames/Math.max(1,rms.length))*1.4+(peak>.02?.25:0)-(flags.includes('clipping')?.15:0),0,1);return{frames:{channel,sr,rms,active,frameSec,threshold,segments},summary:{totalDurationSeconds:round(duration),activeDurationSeconds:round(activeDuration),silenceDurationSeconds:round(silence),detectionThreshold:round(threshold,5),intensityMean:round(mean(rms),5),intensityCv:round(cv(rms),4),peakAmplitude:round(peak,4),pauseCount:Math.max(0,segments.length-1),totalPauseDurationSeconds:round(internalGapDuration(segments)),meanPauseDurationSeconds:round(internalGapDuration(segments)/Math.max(1,segments.length-1)),pauseRatio:round(silence/Math.max(duration,.001),4),detectionConfidence:round(confidence,3)},quality:{flags,valid:!flags.includes('empty_or_invalid'),detectionConfidence:confidence},detection:{method:hasAmbient?'adaptive RMS threshold; noise floor = min(pre-task ambient noise, in-recording 20th-percentile RMS); 20 ms frames, 50% overlap':'adaptive RMS threshold; noise floor = in-recording 20th-percentile RMS (no pre-task ambient measurement available); 20 ms frames, 50% overlap',threshold:round(threshold,5),ambientNoiseRmsUsed:hasAmbient?round(ambientNoiseRms,5):null,segments}}}
-  function analyzeVowel(base){const cfg=PROVISIONAL_SCORING_CONFIG.vowel.qualityRequirements;const {channel,sr,active,frameSec}=base.frames;const frame=Math.round(sr*.04),hop=Math.round(sr*.02);const f0=[],f0Rms=[];
-    for(let i=0,k=0;i+frame<=channel.length;i+=hop,k++){
-      if(!active[Math.min(k,active.length-1)])continue;
-      const seg=channel.subarray(i,i+frame);let sum=0;for(let j=0;j<seg.length;j++)sum+=seg[j]*seg[j];const segRms=Math.sqrt(sum/seg.length);
-      const hz=estimateF0(seg,sr);if(hz>=60&&hz<=400){f0.push(hz);f0Rms.push(segRms)}
-    }
-    const voicedPct=f0.length/Math.max(1,Math.floor((channel.length-frame)/hop)+1)*100;
-    const loudRef=f0Rms.length?Math.max(...f0Rms):0;
-    const confidentF0=loudRef?f0.filter((v,idx)=>f0Rms[idx]>=loudRef*0.3):f0;
-    const med=confidentF0.length?percentile([...confidentF0].sort((a,b)=>a-b),.5):0;
-    const semitoneTol=Math.pow(2,4/12);
-    const octaveCorrected=[];
-    confidentF0.forEach(v=>{
-      if(!med){octaveCorrected.push(v);return}
-      const ratio=v/med;
-      if(ratio>1/semitoneTol&&ratio<semitoneTol)octaveCorrected.push(v);
-      else if(Math.abs(v*2-med)/med<.15)octaveCorrected.push(v*2);
-      else if(Math.abs(v/2-med)/med<.15)octaveCorrected.push(v/2);
+function isOpenCalibrationHand(landmarks){
+  if(!landmarks || landmarks.length < 21) return false;
+  return fingerIsStraight(landmarks,5,6,7,8) &&
+    fingerIsStraight(landmarks,9,10,11,12) &&
+    fingerIsStraight(landmarks,13,14,15,16) &&
+    fingerIsStraight(landmarks,17,18,19,20);
+}
+
+function updateHandCalibrationIndicator(results){
+  if(!cameraCalibrationRunning || cameraCalibrationDone) return;
+  const landmarks = getDetectedHand(results);
+  const open = isOpenCalibrationHand(landmarks);
+  const detection = document.getElementById('calibDetectionStatus');
+  const ready = document.getElementById('calibGuideStatus');
+  if(!detection) return;
+  if(ready){ ready.disabled = true; ready.style.display = 'none'; }
+  detection.textContent = !landmarks
+    ? 'SEARCHING FOR YOUR HAND…'
+    : open ? 'OPEN HAND DETECTED ✓' : 'STRAIGHTEN ALL FINGERS';
+  detection.classList.toggle('is-detected', open);
+}
+
+/* start camera */
+async function startCamera(){
+  const vw = 1280, vh = 720;
+  try{
+    VIDEO_W = vw;
+    VIDEO_H = vh;
+    resizeCanvasBacking();
+    appendLog(`<div class="small-muted">Camera starting...</div>`);
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:vw},height:{ideal:vh},aspectRatio:{ideal:16/9},facingMode:'user'},
+      audio:false
     });
-    const f0Stable=octaveCorrected.length?octaveCorrected:(confidentF0.length?confidentF0:f0);
-    const f0Sorted=[...f0Stable].sort((a,b)=>a-b);
-    const toleredSegments=segmentsFromMask(active,frameSec,.3),dropouts=Math.max(0,toleredSegments.length-1),confidence=clamp(base.quality.detectionConfidence*(Math.min(1,f0.length/30)),0,1),flags=[...base.quality.flags];
-    if(voicedPct<cfg.minVoicedFramePct)flags.push('low_voicing_confidence');if(confidence<cfg.minDetectionConfidence)flags.push('low_detection_confidence');
-    return{metrics:{validPhonationSeconds:base.summary.activeDurationSeconds,voicedFramePercentage:round(voicedPct,1),meanF0Hz:round(mean(f0Sorted),1),medianF0Hz:round(percentile(f0Sorted,.5),1),f0SdHz:round(sd(f0Sorted),1),f0Cv:round(cv(f0Sorted),4),phonationDropoutCount:dropouts},quality:{flags,valid:base.quality.valid&&voicedPct>=cfg.minVoicedFramePct&&confidence>=cfg.minDetectionConfidence,detectionConfidence:confidence},detection:{...base.detection,voicedFrames:f0.length,pitchMethod:'normalized autocorrelation; browser-derived exploratory F0. Frames quieter than 30% of this recording\'s loudest voiced frame are excluded (low-SNR frames are unreliable for pitch tracking); remaining outliers within 4 semitones of the median are kept as-is, values close to double/half the median are octave-corrected, and unresolved outliers are dropped.',dropoutMethod:'gaps under 300ms are bridged as continuous phonation, not counted as separate dropouts'}}}
-  function analyzePataka(base){const cfg=PROVISIONAL_SCORING_CONFIG.pataka.qualityRequirements;const env=base.frames.rms,dt=base.frames.frameSec,smooth=movingAverage(env,5),threshold=Math.max(base.frames.threshold*1.35,percentile([...smooth].sort((a,b)=>a-b),.58)),events=[];for(let i=2;i<smooth.length-2;i++){if(smooth[i]>threshold&&smooth[i]>=smooth[i-1]&&smooth[i]>smooth[i+1]&&(!events.length||(i-events.at(-1))*dt>.09))events.push(i)}const intervals=events.slice(1).map((v,i)=>(v-events[i])*dt),cycles=events.length/3,active=Math.max(base.summary.activeDurationSeconds,.001),total=Math.max(base.summary.totalDurationSeconds,.001),confidence=clamp(base.quality.detectionConfidence*Math.min(1,events.length/18),0,1),flags=[...base.quality.flags];if(events.length<cfg.minEvents||confidence<cfg.minDetectionConfidence)flags.push('low_event_detection_confidence');return{metrics:{estimatedSyllableNucleusCount:events.length,estimatedPatakaCycleCount:round(cycles,1),syllablesPerSecond:round(events.length/active,2),overallSyllablesPerSecond:round(events.length/total,2),cyclesPerSecond:round(cycles/active,2),meanInterOnsetIntervalSeconds:round(mean(intervals),3),interOnsetSdSeconds:round(sd(intervals),3),interOnsetCv:round(cv(intervals),3),rhythmIrregularity:round(cv(intervals),3),interruptionCount:base.summary.pauseCount},quality:{flags,valid:base.quality.valid&&events.length>=cfg.minEvents&&confidence>=cfg.minDetectionConfidence,detectionConfidence:confidence},detection:{...base.detection,eventMethod:'local maxima of smoothed amplitude envelope; events are estimates, not verified syllables',eventTimesSeconds:events.map(i=>round(i*dt,3)),eventThreshold:round(threshold,5)}}}
-  function analyzeReading(base,transcript,asrStatus,passage){const cfg=PROVISIONAL_SCORING_CONFIG.reading.qualityRequirements;const refWords=tokenize(passage.text);const alignment=(asrStatus==='complete'&&transcript)?alignWords(refWords,tokenize(transcript)):null,recognized=transcript?tokenize(transcript).length:0,active=Math.max(base.summary.activeDurationSeconds,.001),confidence=alignment?clamp(base.quality.detectionConfidence*(recognized/Math.max(1,refWords.length)),0,1):0,flags=[...base.quality.flags];if(!alignment)flags.push('asr_unavailable');if(confidence<cfg.minDetectionConfidence)flags.push('low_asr_confidence');if(base.summary.activeDurationSeconds<cfg.minActiveSeconds)flags.push('insufficient_active_speech');return{metrics:{referenceWordCount:refWords.length,recognizedWordCount:recognized,wer:alignment?round(alignment.wer,4):null,substitutions:alignment?.substitutions??null,deletions:alignment?.deletions??null,insertions:alignment?.insertions??null,wordAccuracyPercentage:alignment?round(Math.max(0,1-alignment.wer)*100,1):null,wordsPerMinute:alignment?round(recognized/(base.summary.totalDurationSeconds/60),1):null,articulationRateWpm:alignment?round(recognized/(active/60),1):null,pitchVariability:null},quality:{flags,valid:base.quality.valid&&!!alignment&&confidence>=cfg.minDetectionConfidence&&base.summary.activeDurationSeconds>=cfg.minActiveSeconds,detectionConfidence:confidence},detection:{...base.detection,alignmentMethod:'standard order-sensitive Levenshtein dynamic-programming WER',asrStatus,asrConfidenceAvailable:false}}}
-
-  function scoreTask(key,m,q){const cfg=PROVISIONAL_SCORING_CONFIG[key];let parts=[];
-    if(key==='reading'){parts=[{metric:'wer',value:m.wer,severity:severityHigh(m.wer,cfg.thresholds.wer),weight:cfg.metrics.wer.contribution},{metric:'speechRateWpm',value:m.wordsPerMinute,severity:severityLow(m.wordsPerMinute,cfg.thresholds.speechRateWpm),weight:cfg.metrics.speechRateWpm.contribution}]}
-    if(key==='pataka'){parts=[{metric:'overallSyllablesPerSecond',value:m.overallSyllablesPerSecond,severity:severityLow(m.overallSyllablesPerSecond,cfg.thresholds.overallSyllablesPerSecond),weight:cfg.metrics.overallSyllablesPerSecond.contribution},{metric:'interOnsetCv',value:m.interOnsetCv,severity:severityHigh(m.interOnsetCv,cfg.thresholds.interOnsetCv),weight:cfg.metrics.interOnsetCv.contribution},{metric:'pauseRatio',value:m.pauseRatio,severity:severityHigh(m.pauseRatio,cfg.thresholds.pauseRatio),weight:cfg.metrics.pauseRatio.contribution}]}
-    if(key==='vowel'){parts=[{metric:'validPhonationSeconds',value:m.validPhonationSeconds,severity:severityLow(m.validPhonationSeconds,cfg.thresholds.validPhonationSeconds),weight:cfg.metrics.validPhonationSeconds.contribution},{metric:'f0Cv',value:m.f0Cv,severity:severityHigh(m.f0Cv,cfg.thresholds.f0Cv),weight:cfg.metrics.f0Cv.contribution},{metric:'phonationDropoutCount',value:m.phonationDropoutCount,severity:severityHigh(m.phonationDropoutCount,cfg.thresholds.phonationDropoutCount),weight:cfg.metrics.phonationDropoutCount.contribution}]}
-    const hasUsableData=!q.flags.includes('empty_or_invalid')&&parts.some(p=>p.value!=null&&Number.isFinite(p.value));
-    if(!hasUsableData)return{available:false,score:null,confidence:round(q.detectionConfidence,3),reason:`No usable data for this task (all scoring metrics unavailable: ${q.flags.join(', ')||'unknown'})`,metricsUsed:parts,thresholds:cfg.thresholds,configVersion:PROVISIONAL_SCORING_CONFIG.version};
-    const raw=parts.reduce((s,p)=>s+p.severity*p.weight,0),score=Math.round(raw);return{available:true,score,rawScore:round(raw,3),confidence:round(q.detectionConfidence,3),qualityPassed:q.valid,qualityFlags:q.flags,metricsUsed:parts,thresholds:cfg.thresholds,explanation:parts.map(p=>`${p.metric}: ${p.value} → severity ${p.severity} × ${p.weight}`).join('; ')+(q.valid?'':` (computed despite quality flags: ${q.flags.join(', ')})`),configVersion:PROVISIONAL_SCORING_CONFIG.version};}
-  function severityHigh(value,thresholds){if(value==null||!Number.isFinite(value))return 0;let s=0;thresholds.forEach((t,i)=>{if(value>t)s=i+1});return Math.min(6,s)}
-  function severityLow(value,thresholds){if(value==null||!Number.isFinite(value))return 0;let s=0;thresholds.forEach((t,i)=>{if(value<t)s=i+1});return Math.min(6,s)}
-
-  function showReview(a){showStage(els.reviewStage);els.stepLabel.textContent=`REVIEW · ${a.taskName.toUpperCase()}`;if(model.currentUrl)URL.revokeObjectURL(model.currentUrl);model.currentUrl=URL.createObjectURL(a.blob);els.playback.src=model.currentUrl;els.reviewTitle.textContent=`${a.taskName} complete`;const flags=a.quality.flags;els.reviewQuality.className=`quality-banner show ${a.quality.valid?'good':flags.includes('empty_or_invalid')?'bad':'warn'}`;els.reviewQuality.textContent=a.quality.valid?'Recording quality checks passed.':`Review recommended: ${flags.map(pretty).join(', ')}.`;els.acceptBtn.disabled=false;els.acceptBtn.textContent=model.taskIndex===2?'Accept and View Results':'Accept and Continue';progress(25+model.taskIndex*24)}
-  function rerecord(){if(model.state!=='review')return;els.playback.pause();setState('ready');loadTask()}
-  function taskSummaryDetail(t,a){const m=a.metrics;
-    if(t.key==='reading'){
-      const words=(m.recognizedWordCount!=null&&m.referenceWordCount!=null)?`${m.recognizedWordCount} / ${m.referenceWordCount} words in ${m.totalDurationSeconds}s (${formatValue(m.wordsPerMinute)} wpm)`:'Words: unavailable';
-      const errCount=(m.substitutions??0)+(m.deletions??0)+(m.insertions??0);
-      const acc=m.wordAccuracyPercentage!=null?`${formatValue(m.wordAccuracyPercentage)}% accuracy (${errCount} error${errCount===1?'':'s'}: ${m.substitutions??0} substituted, ${m.deletions??0} deleted, ${m.insertions??0} inserted)`:'Accuracy: unavailable (ASR unavailable)';
-      return `${words}<br>${acc}`;
-    }
-    if(t.key==='pataka'){
-      const overall=m.overallSyllablesPerSecond!=null?`${formatValue(m.overallSyllablesPerSecond)}/sec overall`:'overall rate unavailable';
-      const active=m.syllablesPerSecond!=null?`${formatValue(m.syllablesPerSecond)}/sec while speaking`:null;
-      const cycles=m.estimatedSyllableNucleusCount!=null?`~${formatValue(m.estimatedSyllableNucleusCount)} syllables detected in ${m.totalDurationSeconds}s (${overall}${active?'; '+active:''})`:'Syllable count: unavailable';
-      const rhythm=m.interOnsetCv!=null?`Rhythm variability: ${Math.round(m.interOnsetCv*100)}%`:'Rhythm variability: unavailable';
-      const pause=m.pauseRatio!=null?`Time spent paused: ${Math.round(m.pauseRatio*100)}%`:'';
-      return `${cycles}<br>${rhythm}${pause?' · '+pause:''} (lower = more regular / less paused)`;
-    }
-    if(t.key==='vowel'){
-      const pitch=m.meanF0Hz!=null?`Average pitch: ${formatValue(m.meanF0Hz)} Hz`:'Average pitch: unavailable';
-      const stability=m.f0Cv!=null?`Pitch variability: ${Math.round(m.f0Cv*100)}% (lower = more stable)`:'Pitch variability: unavailable';
-      return `${pitch}<br>${stability}`;
-    }
-    return '';
-  }
-  function renderTaskResultSummary(){
-    const acceptedList=TASKS.filter(t=>model.accepted[t.key]);
-    els.summaryPanel.hidden=acceptedList.length===0;
-    els.summaryList.innerHTML=acceptedList.slice().reverse().map(t=>{const a=model.accepted[t.key],scoreText=a.scoring?.available?`${a.scoring.score} / 6`:'Unavailable';return `<div class="summary-task"><div class="summary-task-head"><span>${escapeHtml(t.name)}</span><strong>${scoreText}</strong></div><div class="summary-task-detail">${taskSummaryDetail(t,a)}</div></div>`}).join('');
-  }
-  function acceptAttempt(){if(model.state!=='review')return;const key=model.currentAttempt.task;if(model.accepted[key])model.accepted[key].accepted=false;model.currentAttempt.accepted=true;model.accepted[key]=model.currentAttempt;renderTaskResultSummary();renderResearch();const allDone=Object.keys(model.accepted).length>=3;if(allDone)computeOverallResult();setState('accepted');setState('ready');els.micTestBtn.disabled=false;els.stopTestBtn.disabled=true;showTaskResult(model.currentAttempt,allDone)}
-  const EXPLANATIONS = {
-    vowel: {
-      validPhonationSeconds: s => s>=4 ? "The sustained sound didn't last as long as expected." : s>=2 ? 'The sustained sound was a little shorter than expected.' : null,
-      f0Cv: s => s>=4 ? 'Your pitch was noticeably unstable while holding the sound.' : s>=2 ? 'Your pitch wavered somewhat.' : null,
-      phonationDropoutCount: s => s>=4 ? 'There were noticeable interruptions during phonation.' : s>=2 ? 'There were a few brief interruptions.' : null
-    },
-    pataka: {
-      overallSyllablesPerSecond: s => s>=4 ? 'Your overall repetition rate, including pauses, was slow.' : s>=2 ? 'Your overall repetition rate was a bit slow.' : null,
-      interOnsetCv: s => s>=4 ? 'The rhythm between repetitions was quite irregular.' : s>=2 ? 'The rhythm between repetitions was somewhat uneven.' : null,
-      pauseRatio: s => s>=4 ? 'You paused frequently or for long stretches during the task.' : s>=2 ? 'There were some noticeable pauses.' : null
-    },
-    reading: {
-      wer: s => s>=4 ? 'Many words were not recognized correctly, suggesting reduced clarity.' : s>=2 ? 'Some words were not recognized clearly.' : null,
-      speechRateWpm: s => s>=4 ? 'Your reading speed was much slower than typical.' : s>=2 ? 'Your reading speed was somewhat slow.' : null
-    }
-  };
-  function explainScore(taskKey,attempt){
-    if(!attempt.scoring.available) return [attempt.scoring.reason||'This attempt could not be scored — not enough usable data was captured.'];
-    const lines=(attempt.scoring.metricsUsed||[]).map(p=>EXPLANATIONS[taskKey]?.[p.metric]?.(p.severity)).filter(Boolean);
-    if(!lines.length) lines.push('Performance was within the normal range for every measure in this task.');
-    if(!attempt.scoring.qualityPassed) lines.push('Note: this recording tripped a data-quality flag, so this score should be read with some caution.');
-    return lines;
-  }
-  function showTaskResult(attempt,allDone){
-    const task=TASKS.find(t=>t.key===attempt.task);
-    showStage(els.taskResultStage);
-    els.stepLabel.textContent='TASK RESULT';
-    els.taskResultName.textContent=task.name;
-    els.taskResultScore.textContent=attempt.scoring.available?attempt.scoring.score:'—';
-    els.taskResultExplain.innerHTML=explainScore(attempt.task,attempt).map(s=>`<li>${escapeHtml(s)}</li>`).join('');
-    els.viewFinalResultsBtn.hidden=!allDone;
-    progress(Math.round(Object.keys(model.accepted).length/3*100));
-  }
-  function computeOverallResult(){const r=model.accepted.reading,p=model.accepted.pataka,v=model.accepted.vowel,W=PROVISIONAL_SCORING_CONFIG.weights;if(!r?.scoring.available){model.result={available:false,reason:'Reading intelligibility could not be assessed.'}}else if(!p?.scoring.available||!v?.scoring.available){model.result={available:false,reason:'One or more task component scores are unavailable.'}}else{const raw=r.scoring.score*W.reading+p.scoring.score*W.pataka+v.scoring.score*W.vowel,rounded=Math.round(raw);let final=rounded,floor=false;if(r.scoring.score===6){final=6;floor=true}else if(r.scoring.score===5&&final<5){final=5;floor=true}else if(r.scoring.score===4&&final<4){final=4;floor=true}model.result={available:true,weightedScore:round(raw,2),roundedWeightedScore:rounded,estimatedScore:final,intelligibilityFloorApplied:floor,weights:{...PROVISIONAL_SCORING_CONFIG.weights},scoringVersion:PROVISIONAL_SCORING_CONFIG.version,clinicallyValidated:false}}}
-  function showResults(){showStage(els.resultsStage);els.stepLabel.textContent='ASSESSMENT COMPLETE';progress(100);const result=model.result;els.estimatedScore.textContent=result.available?result.estimatedScore:'Unavailable';els.sideScore.textContent=result.available?result.estimatedScore:'—';els.componentGrid.innerHTML=TASKS.slice().reverse().map(t=>componentCard(t)).join('');renderTaskResultSummary();els.calculationLine.textContent=result.available?`Weighted ${result.weightedScore} → rounded ${result.roundedWeightedScore} → final ${result.estimatedScore}${result.intelligibilityFloorApplied?' · intelligibility-priority rule applied':''}`:result.reason;const warnings=Object.values(model.accepted).flatMap(a=>a.quality.flags);els.overallWarning.className=`quality-banner show ${warnings.length?'warn':'good'}`;els.overallWarning.textContent=warnings.length?`Data-quality flags: ${[...new Set(warnings)].map(pretty).join(', ')}.`:'All accepted recordings passed configured quality checks.';enableExports();renderResearch();}
-  function componentCard(t){const s=model.accepted[t.key]?.scoring;return `<div class="component-card"><span>${escapeHtml(t.name)} <small>${Math.round(PROVISIONAL_SCORING_CONFIG.weights[t.key]*100)}%</small></span><strong>${s?.available?s.score:'—'}</strong> / 6</div>`}
-  function renderTaskList(){const canStart=!!model.micCheck&&model.state==='ready';const listLabels={pataka:'PA-TA-KA'};els.taskList.innerHTML=TASKS.map((t,i)=>{const a=model.accepted[t.key],done=!!a;const right=done?(a.scoring?.available?`<strong>${a.scoring.score} / 6</strong>`:`<strong>Unavailable</strong>`):`<small>${t.key==='reading'?'≤30':t.seconds}s</small>`;return `<button type="button" class="task-item-btn ${done?'done':''}" data-task="${t.key}" ${canStart?'':'disabled'}><span class="task-index">${done?'✓':i+1}</span><span class="task-item-label">${escapeHtml(listLabels[t.key]||t.name)}</span>${right}</button>`}).join('')}
-  function renderResearch(){els.scoringDetails.textContent=JSON.stringify(PROVISIONAL_SCORING_CONFIG,null,2);const audioLabels={vowel:'AH',pataka:'PA-TA-KA',reading:'READING'};els.audioDownloads.innerHTML=TASKS.map(t=>{const a=model.accepted[t.key];return `<button type="button" class="audio-dl-btn" data-audio="${t.key}" ${a?'':'disabled'}>${audioLabels[t.key]}</button>`}).join('');els.metricDetails.innerHTML=TASKS.map(t=>metricGroup(t,model.accepted[t.key])).join('')}
-  function metricDisplayValue(t,a,k,v){if((k==='wordsPerMinute'||k==='articulationRateWpm')&&t.key==='reading'&&a.metrics.referenceWordCount!=null&&a.metrics.recognizedWordCount!=null){return `${a.metrics.recognizedWordCount} / ${a.metrics.referenceWordCount} words (${formatValue(v)} wpm)`}return formatValue(v)}
-  function metricGroup(t,a){if(!a)return'';const classifications={...PROVISIONAL_SCORING_CONFIG[t.key].metrics};return `<div class="metric-group"><h4>${escapeHtml(t.name)} · confidence ${a.scoring.confidence}</h4>${detectionViz(t,a)}${Object.entries(a.metrics).map(([k,v])=>`<div class="metric-row"><span>${escapeHtml(pretty(k))}<i class="metric-class">${escapeHtml(classifications[k]?.classification||classificationFor(k))}</i></span><b>${escapeHtml(metricDisplayValue(t,a,k,v))}</b></div>${METRIC_CAVEATS[k]?`<div class="metric-caveat">${escapeHtml(METRIC_CAVEATS[k])}</div>`:''}`).join('')}</div>`}
-  function detectionViz(t,a){if(t.key!=='pataka')return'';const total=Math.max(.001,a.durationSeconds),events=a.detection?.eventTimesSeconds||[];return `<div class="detection-viz" title="Estimated amplitude-envelope events">${events.map(x=>`<i style="left:${clamp(x/total*100,0,100)}%"></i>`).join('')}<span>Estimated events · inspect for detection error</span></div>`}
-  function classificationFor(k){return /duration|threshold|confidence|peak|silence/i.test(k)?'quality_control':'exploratory'}
-
-  function buildExport(){const headerValues={participantId:$('glob-id')?.value||'',participantName:$('glob-name')?.value||'',age:$('glob-age')?.value||'',sex:$('glob-sex')?.value||'',sessionId:$('glob-sess')?.value||'',operator:$('glob-op')?.value||'',date:$('glob-date')?.value||''};return{module:'CeMoQu Speech Disturbance',protocolVersion:PROTOCOL_VERSION,createdAt:new Date().toISOString(),identification:headerValues,testLanguage:els.language.value,microphoneDistanceCm:Number(els.micDistance.value)||null,microphoneCheck:model.micCheck,acceptedTrials:Object.values(model.accepted).map(withoutBlob),attemptHistory:model.attempts.map(withoutBlob),overallScoring:model.result,scoringConfiguration:PROVISIONAL_SCORING_CONFIG,clinicalReference:{clinicianRatedSaraSpeechScore:els.clinicianScore.value===''?null:Number(els.clinicianScore.value),notes:els.researchNotes.value},limitations:['Research prototype; not diagnostic or clinically validated.','Standardized reading is a proxy; official SARA Speech is assessed during normal conversation.','Browser ASR and compressed recording behavior vary by platform.']}}
-  function withoutBlob(a){const {blob,...rest}=a;return rest}
-  function filename(ext,task='session'){const p=safe($('glob-id')?.value||'unknown'),s=safe($('glob-sess')?.value||'session'),stamp=new Date().toISOString().replace(/[:.]/g,'-');return `${p}_${s}_SD_${task}_${stamp}.${ext}`}
-  function exportJson(){download(new Blob([JSON.stringify(buildExport(),null,2)],{type:'application/json;charset=utf-8'}),filename('json'))}
-  function exportTrial(){const latest=model.currentAttempt||Object.values(model.accepted).at(-1);if(!latest)return;download(new Blob([JSON.stringify({...withoutBlob(latest),protocolVersion:PROTOCOL_VERSION},null,2)],{type:'application/json;charset=utf-8'}),filename('json',latest.task))}
-  function exportCsv(){const data=buildExport(),rows=[];for(const a of data.acceptedTrials){const base={participant_id:data.identification.participantId,session_id:data.identification.sessionId,trial_id:a.trialId,attempt_number:a.attemptNumber,accepted_attempt:a.accepted,task:a.task,timestamp:a.timestamp,test_language:a.testLanguage,mic_distance_cm:a.microphoneDistanceCm,mime_type:a.mimeType,codec:a.codec,sample_rate:a.sampleRate,channel_count:a.channelCount,quality_flags:a.quality.flags.join('|'),detection_confidence:a.quality.detectionConfidence,component_score:a.scoring.score,scoring_version:a.scoring.configVersion,clinician_score:data.clinicalReference.clinicianRatedSaraSpeechScore,researcher_notes:data.clinicalReference.notes,estimated_sara_speech_score:data.overallScoring?.estimatedScore??'',weighted_score:data.overallScoring?.weightedScore??'',intelligibility_floor_applied:data.overallScoring?.intelligibilityFloorApplied??''};rows.push({...base,...flatten(a.metrics,'metric_'),transcript:a.transcript||'',reference_text:a.passage?.text||'',requested_constraints:JSON.stringify(a.requestedConstraints),actual_settings:JSON.stringify(a.actualSettings),browser:a.browser})}const headers=[...new Set(rows.flatMap(Object.keys))];const csv=[headers.map(csvCell).join(','),...rows.map(r=>headers.map(h=>csvCell(r[h]??'')).join(','))].join('\r\n');download(new Blob(['\ufeff',csv],{type:'text/csv;charset=utf-8'}),filename('csv'))}
-  function downloadAudio(key){const a=model.accepted[key];if(!a)return;const ext=a.mimeType.includes('ogg')?'ogg':a.mimeType.includes('wav')?'wav':'webm';download(a.blob,filename(ext,key))}
-  function enableExports(){els.exportCsvTopBtn.disabled=false;els.stopTestBtn.disabled=true;els.submitDataBtn.disabled=!model.result?.available;}
-  function stopTest(){if(!['countdown','recording','processing','review'].includes(model.state))return;clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopCue();stopRecognition();if(model.recorder&&model.recorder.state!=='inactive'){model.recorder.onstop=null;try{model.recorder.stop()}catch{}}cleanupAttemptUrls();els.countdown.hidden=true;els.timeChip.hidden=true;els.finishBtn.hidden=true;try{els.playback.pause()}catch{}setState('ready');loadTask()}
-  function submitData(){if(!model.result?.available){els.toolbarMessage.textContent='Complete the assessment before submitting.';return}
-    // TODO: wire to the real CeMoQu submission endpoint/shared upload function used by LD/RT/ST.
-    // That code was not available when this was built, so this only prepares the payload and
-    // does not actually transmit it anywhere yet.
-    const payload=buildExport();
-    console.warn('submitData(): no submission endpoint configured yet — payload prepared but not sent.',payload);
-    els.toolbarMessage.textContent='Submit endpoint not yet configured — see console for the prepared payload.';
-  }
-  function restart(){cleanupAttemptUrls();model.attempts=[];model.accepted={};model.result=null;model.taskIndex=0;model.attemptNumber={vowel:0,pataka:0,reading:0};renderTaskResultSummary();setState('idle');if(model.micCheck)setState('ready');showStage(els.setupStage);progress(0);els.stepLabel.textContent='PRE-TEST SETUP';els.startTestBtn.disabled=!model.micCheck;els.micTestBtn.disabled=false;els.stopTestBtn.disabled=true;els.submitDataBtn.disabled=true;els.exportCsvTopBtn.disabled=true;els.toolbarMessage.textContent='';}
-  function releaseMedia(){cancelAnimationFrame(model.monitorFrame);model.monitorFrame=null;if(model.stream)model.stream.getTracks().forEach(t=>t.stop());model.stream=null;model.source?.disconnect();model.analyser?.disconnect();model.source=null;model.analyser=null;if(model.audioContext&&model.audioContext.state!=='closed')model.audioContext.close();model.audioContext=null}
-  function cleanupAttemptUrls(){if(model.currentUrl)URL.revokeObjectURL(model.currentUrl);model.currentUrl=null}
-  function fail(error){console.error(error);clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopRecognition();try{if(model.state!=='error')setState('error')}catch{}showStage(els.taskStage);els.taskInstruction.textContent=`Error: ${error.message||error}`;els.recordBtn.hidden=false;els.recordBtn.disabled=false;els.recordBtn.textContent='Try Again'}
-
-  function estimateF0(x,sr){let meanX=mean(x),energy=0;const y=new Float32Array(x.length);for(let i=0;i<x.length;i++){y[i]=x[i]-meanX;energy+=y[i]*y[i]}if(energy/x.length<1e-5)return null;const min=Math.floor(sr/400),max=Math.min(Math.floor(sr/60),x.length-2);let best=0,bestLag=0;for(let lag=min;lag<=max;lag++){let sum=0,a=0,b=0;for(let i=0;i<x.length-lag;i++){sum+=y[i]*y[i+lag];a+=y[i]*y[i];b+=y[i+lag]*y[i+lag]}const corr=sum/Math.sqrt(a*b||1);if(corr>best){best=corr;bestLag=lag}}return best>.35?sr/bestLag:null}
-  function alignWords(ref,hyp){const m=ref.length,n=hyp.length,dp=Array.from({length:m+1},()=>Array(n+1));for(let i=0;i<=m;i++)dp[i][0]={cost:i,s:0,d:i,ins:0};for(let j=0;j<=n;j++)dp[0][j]={cost:j,s:0,d:0,ins:j};for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){if(ref[i-1]===hyp[j-1])dp[i][j]={...dp[i-1][j-1]};else{const opts=[{...dp[i-1][j-1],type:'s'},{...dp[i-1][j],type:'d'},{...dp[i][j-1],type:'ins'}].map(o=>({...o,cost:o.cost+1}));const best=opts.sort((a,b)=>a.cost-b.cost)[0];best[best.type]++;delete best.type;dp[i][j]=best}}const r=dp[m][n];return{wer:(r.s+r.d+r.ins)/Math.max(1,m),substitutions:r.s,deletions:r.d,insertions:r.ins}}
-  function segmentsFromMask(mask,dt,minGap){const seg=[];let start=null,last=null;for(let i=0;i<mask.length;i++){if(mask[i]){if(start===null)start=i;last=i}else if(start!==null&&(i-last)*dt>=minGap){seg.push({start:round(start*dt),end:round((last+1)*dt)});start=null;last=null}}if(start!==null)seg.push({start:round(start*dt),end:round((last+1)*dt)});return seg}
-  function internalGapDuration(seg){let s=0;for(let i=1;i<seg.length;i++)s+=Math.max(0,seg[i].start-seg[i-1].end);return s}
-  const mean=a=>a?.length?a.reduce((s,v)=>s+v,0)/a.length:0;const sd=a=>{if(!a?.length)return 0;const m=mean(a);return Math.sqrt(mean(a.map(v=>(v-m)**2)))};const cv=a=>{const m=mean(a);return m?sd(a)/m:0};const percentile=(a,p)=>a?.length?a[Math.min(a.length-1,Math.max(0,Math.floor((a.length-1)*p)))]:0;const round=(n,d=3)=>Number.isFinite(n)?Number(n.toFixed(d)):null;const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));const movingAverage=(a,w)=>a.map((_,i)=>mean(a.slice(Math.max(0,i-w+1),i+1)));const wait=ms=>new Promise(r=>setTimeout(r,ms));const tokenize=s=>(s.toLowerCase().match(/[a-z0-9']+/g)||[]);const pretty=s=>String(s).replace(/([a-z])([A-Z])/g,'$1 $2').replace(/_/g,' ').replace(/^./,c=>c.toUpperCase());const safe=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,'_');const formatValue=v=>v==null?'Unavailable':Array.isArray(v)?v.join(', '):typeof v==='object'?JSON.stringify(v):String(v);const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const flatten=(o,p='')=>Object.fromEntries(Object.entries(o).map(([k,v])=>[`${p}${k}`,typeof v==='object'&&v!==null?JSON.stringify(v):v]));const csvCell=v=>`"${String(v).replace(/"/g,'""')}"`;function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-
-  els.checkMicBtn.addEventListener('click',checkMicrophone);els.recordBtn.addEventListener('click',countdownAndRecord);els.finishBtn.addEventListener('click',stopRecording);els.rerecordBtn.addEventListener('click',rerecord);els.acceptBtn.addEventListener('click',acceptAttempt);els.restartBtn.addEventListener('click',restart);els.viewFinalResultsBtn.addEventListener('click',showResults);els.micSelect.addEventListener('change',()=>{model.micCheck=null;els.startTestBtn.disabled=true;checkMicrophone()});
-  els.taskList.addEventListener('click',e=>{const btn=e.target.closest('[data-task]');if(btn&&!btn.disabled)startTask(btn.dataset.task)});
-  els.micTestBtn.addEventListener('click',checkMicrophone);els.startTestBtn.addEventListener('click',startFirstIncompleteTask);els.stopTestBtn.addEventListener('click',stopTest);els.submitDataBtn.addEventListener('click',submitData);els.exportCsvTopBtn.addEventListener('click',exportCsv);
-  document.querySelectorAll('.side-tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.side-tab').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-selected',b===btn)});$('testPanel').classList.toggle('active',btn.dataset.tab==='test');$('researchPanel').classList.toggle('active',btn.dataset.tab==='research')}));
-  els.showScoringBtn.addEventListener('click',()=>{els.scoringDetails.hidden=!els.scoringDetails.hidden;els.showScoringBtn.textContent=els.scoringDetails.hidden?'View calculation details':'Hide calculation details'});els.audioDownloads.addEventListener('click',e=>{const key=e.target.dataset.audio;if(key&&!e.target.disabled)downloadAudio(key)});window.addEventListener('beforeunload',()=>{clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopCue();stopRecognition();releaseMedia();cleanupAttemptUrls()});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&model.state==='recording'){const elapsed=(performance.now()-model.recordStartedAt)/1000;if(elapsed>=model.taskMaxSeconds&&!model.autoStopped){model.autoStopped=true;stopRecording()}}});
-  function renderWeightBar(){
-    const w=PROVISIONAL_SCORING_CONFIG.weights;
-    const rPct=Math.round(w.reading*100),pPct=Math.round(w.pataka*100),vPct=Math.round(w.vowel*100);
-    els.wHandle1.style.left=rPct+'%';els.wHandle2.style.left=(rPct+pPct)+'%';
-    els.wLabelReading.textContent=`Reading ${rPct}%`;els.wLabelPataka.textContent=`Pa-ta-ka ${pPct}%`;els.wLabelVowel.textContent=`Vowel ${vPct}%`;
-  }
-  function currentHandlePcts(){const w=PROVISIONAL_SCORING_CONFIG.weights;const h1=Math.round(w.reading*100);return [h1,h1+Math.round(w.pataka*100)]}
-  function applyHandlePcts(h1,h2){PROVISIONAL_SCORING_CONFIG.weights={reading:h1/100,pataka:(h2-h1)/100,vowel:(100-h2)/100};renderWeightBar();renderResearch();if(Object.keys(model.accepted).length>=3){computeOverallResult();if(els.resultsStage.classList.contains('active'))showResults()}}
-  function bindWeightHandle(handleEl,isFirst){
-    handleEl.addEventListener('pointerdown',e=>{
-      handleEl.setPointerCapture(e.pointerId);
-      const barRect=els.weightBar.getBoundingClientRect();
-      function move(ev){
-        let pct=((ev.clientX-barRect.left)/barRect.width)*100;
-        pct=Math.max(0,Math.min(100,Math.round(pct/10)*10));
-        let [h1,h2]=currentHandlePcts();
-        if(isFirst)h1=Math.max(0,Math.min(pct,h2));else h2=Math.max(h1,Math.min(pct,100));
-        applyHandlePcts(h1,h2);
+    video.srcObject = stream;
+    await video.play();
+    let active = true;
+    camera = {
+      stop(){
+        active = false;
+        if(cameraFrameRequest) cancelAnimationFrame(cameraFrameRequest);
+        cameraFrameRequest = null;
+        stream.getTracks().forEach(track=>track.stop());
       }
-      function up(){handleEl.releasePointerCapture(e.pointerId);handleEl.removeEventListener('pointermove',move);handleEl.removeEventListener('pointerup',up)}
-      handleEl.addEventListener('pointermove',move);handleEl.addEventListener('pointerup',up);
+    };
+    const processFrame = async ()=>{
+      if(!active) return;
+      if(!handFrameBusy && video.readyState >= 2){
+        handFrameBusy = true;
+        try{
+          if(hands) await hands.send({image:video});
+        }catch(e){
+          if(!handTrackingErrorShown){
+            handTrackingErrorShown = true;
+            appendLog(`<div style="color:#f88">Tracking error: ${sanitize(e?.message || String(e))}</div>`);
+            statusLine.textContent = 'Tracking error';
+          }
+        }finally{
+          handFrameBusy = false;
+        }
+      }
+      cameraFrameRequest = requestAnimationFrame(processFrame);
+    };
+    cameraFrameRequest = requestAnimationFrame(processFrame);
+    handTrackingErrorShown = false;
+
+    if(video.videoWidth) VIDEO_W = video.videoWidth;
+    if(video.videoHeight) VIDEO_H = video.videoHeight;
+    resizeCanvasBacking();
+    appendLog(`<div class="small-muted">Camera ready: ${VIDEO_W}x${VIDEO_H}</div>`);
+
+  }catch(e){
+    appendLog(`<div style="color:#f88">Camera error: ${e.message}</div>`);
+    throw e;
+  }
+}
+
+/* stop camera safely */
+function stopCamera(){
+  stopCalibrationVoiceControl();
+  try{
+    if(camera?.stop) camera.stop();
+    if(video?.srcObject){
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach(t=>t.stop());
+      video.srcObject = null;
+    }
+  }catch(e){}
+  camera = null;
+  if(cameraFrameRequest) cancelAnimationFrame(cameraFrameRequest);
+  cameraFrameRequest = null;
+  hands = null;
+  cameraCalibrationRunning = false;
+  handFrameBusy = false;
+}
+
+function setCalibrationGuide(kicker, title, body, status='', state=''){
+  const card = document.getElementById('calibPromptOverlay');
+  if(!card) return;
+  document.getElementById('calibGuideKicker').textContent = kicker;
+  document.getElementById('calibGuideTitle').textContent = title;
+  document.getElementById('calibGuideBody').textContent = body;
+  const statusControl = document.getElementById('calibGuideStatus');
+  if(statusControl){
+    statusControl.textContent = status || '';
+    statusControl.disabled = true;
+    statusControl.style.display = status ? 'inline-flex' : 'none';
+  }
+  const detection = document.getElementById('calibDetectionStatus');
+  if(detection) detection.style.display = '';
+  card.classList.toggle('is-warning', state === 'warning');
+  card.classList.toggle('is-success', state === 'success');
+  card.classList.toggle('is-accepted', state === 'accepted');
+  card.style.display = 'block';
+}
+
+function showReadyAccepted(){
+  const card = document.getElementById('calibPromptOverlay');
+  const status = document.getElementById('calibGuideStatus');
+  if(card) card.classList.add('is-accepted');
+  if(status){
+    status.textContent = 'READY RECEIVED ✓';
+    status.disabled = true;
+  }
+  beep(1040, 150, 0.08);
+}
+
+async function captureCameraCalibrationMeasurement(handName, stepIndex, totalSteps){
+  cameraCalibrationRunning = true;
+  handCalibrationSamples = [];
+  const stepLabel = `Calibration ${stepIndex} of ${totalSteps}`;
+  statusLine.textContent = `${stepLabel}: waiting for open ${handName.toLowerCase()} hand`;
+  setCalibrationGuide(
+    'CAMERA CALIBRATION',
+    stepLabel,
+    `Please open your ${handName.toLowerCase()} palm and show your hand to the camera.`,
+    ''
+  );
+  const openDetected = await waitForOpenCalibrationHand(10000);
+  if(!openDetected){
+    setCalibrationGuide('TRY AGAIN','Hand not detected',`Please keep your whole ${handName.toLowerCase()} hand visible, palm facing the camera, and click Auto Calibration again.`,'','warning');
+    statusLine.textContent = `${stepLabel}: hand not detected`;
+    return null;
+  }
+
+  handCalibrationSamples = [];
+  calibrationCaptureRunning = true;
+  statusLine.textContent = `${stepLabel}: capturing`;
+  setCalibrationGuide(
+    'CAMERA CALIBRATION',
+    `${stepLabel}: Capturing`,
+    `Keep your ${handName.toLowerCase()} hand open and still.`,
+    ''
+  );
+  await new Promise(r=>setTimeout(r, 1000));
+  calibrationCaptureRunning = false;
+
+  const samples = handCalibrationSamples.filter(Number.isFinite).sort((a,b)=>a-b);
+  const medianPx = samples.length ? samples[Math.floor(samples.length/2)] : null;
+  const actualFingerCm = parseFloat(cfg_finger_cm.value);
+  if(!medianPx || samples.length < 3 || !actualFingerCm || actualFingerCm <= 0){
+    setCalibrationGuide('TRY AGAIN','Calibration failed',`Keep the whole ${handName.toLowerCase()} hand visible, palm facing the camera, and fully straighten your fingers.`,'','warning');
+    updateHandCalibrationIndicator(lastResults);
+    statusLine.textContent = `${stepLabel}: try again`;
+    return null;
+  }
+
+  const ppcValue = medianPx / actualFingerCm;
+
+  // Log each completed camera calibration measurement without changing the capture/beep flow.
+  // The user can intentionally place the hand close/far for the 4 trials and compare measured px values.
+  const minPx = samples[0];
+  const maxPx = samples[samples.length - 1];
+  const calibrationLog = [
+    `Camera ${stepLabel} (${handName})`,
+    `measured finger length: ${medianPx.toFixed(1)} px`,
+    `actual finger length: ${actualFingerCm.toFixed(2)} cm`,
+    `pixels/cm: ${ppcValue.toFixed(2)}`,
+    `samples: ${samples.length}`,
+    `range: ${minPx.toFixed(1)}–${maxPx.toFixed(1)} px`
+  ].join(' • ');
+  console.log(calibrationLog);
+  appendLog(`<div class="small-muted">${escapeLogHtml(calibrationLog)}</div>`);
+
+  beep(980,160,0.08);
+  setCalibrationGuide(
+    'CAMERA CALIBRATION',
+    `${stepLabel} complete`,
+    `${stepLabel} complete.`,
+    '',
+    'success'
+  );
+  const detection = document.getElementById('calibDetectionStatus');
+  if(detection){
+    detection.textContent = `${stepIndex} OF ${totalSteps} COMPLETE ✓`;
+    detection.classList.add('is-detected');
+    detection.style.display = 'block';
+  }
+  statusLine.textContent = `${stepLabel} complete`;
+  appendLog(`<div class="small-muted">Camera ${stepLabel.toLowerCase()} complete.</div>`);
+  await new Promise(r=>setTimeout(r, 700));
+  return ppcValue;
+}
+
+async function runCameraCalibrationSequence(){
+  stopCalibrationVoiceControl();
+  cameraCalibrationRunning = true;
+  cameraCalibrationDone = false;
+  cameraCalibrationMeasurements = [];
+  setStartAvailability();
+
+  const actualFingerCm = parseFloat(cfg_finger_cm.value);
+  if(!actualFingerCm || actualFingerCm <= 0){
+    setCalibrationGuide('CAMERA MODE','Enter index finger length','Please enter your index finger length before auto calibration.','', 'warning');
+    statusLine.textContent = 'Enter index finger length before calibration';
+    return false;
+  }
+  cfg.finger_cm = actualFingerCm;
+
+  for(let i=0;i<CAMERA_CALIBRATION_STEPS.length;i++){
+    const handName = CAMERA_CALIBRATION_STEPS[i];
+    const measurement = await captureCameraCalibrationMeasurement(handName, i+1, CAMERA_CALIBRATION_STEPS.length);
+    if(!Number.isFinite(measurement)){
+      cameraCalibrationMeasurements = [];
+      cameraCalibrationDone = false;
+      setStartAvailability();
+      return false;
+    }
+    cameraCalibrationMeasurements.push(measurement);
+  }
+
+  const averagePpc = cameraCalibrationMeasurements.reduce((a,b)=>a+b,0) / cameraCalibrationMeasurements.length;
+  pixels_per_cm = averagePpc;
+  cameraPixelsPerCm = averagePpc;
+  cfg.ppc = averagePpc;
+  cfg.finger_cm = actualFingerCm;
+
+  const targetRadiusPx = cfg.radius_cm * pixels_per_cm;
+  const usableDx = Math.max(0, VIDEO_W/2 - cfg.edge_px - targetRadiusPx);
+  const usableDy = Math.max(0, VIDEO_H/2 - cfg.edge_px - targetRadiusPx);
+  const centerToUpperCornerCm = Math.hypot(usableDx,usableDy) / pixels_per_cm;
+
+  if(centerToUpperCornerCm <= 20){
+    cameraCalibrationDone = false;
+    beep(280,220,0.08);
+    statusLine.textContent = 'Move farther away and calibrate again';
+    setCalibrationGuide('MOVE FARTHER AWAY','More movement space is needed',`Center-to-corner space is ${centerToUpperCornerCm.toFixed(1)} cm. Move farther from the camera, then click Auto Calibration again.`,'','warning');
+    const detection = document.getElementById('calibDetectionStatus');
+    if(detection){
+      detection.textContent = 'RE-CALIBRATION REQUIRED';
+      detection.classList.remove('is-detected');
+      detection.style.display = 'block';
+    }
+    setStartAvailability();
+    return false;
+  }
+
+  cameraCalibrationDone = true;
+  beep(1100,220,0.09);
+  showCameraCalibrationFinalResult();
+  appendLog(`<div class="small-muted">Camera calibration complete — average ${pixels_per_cm.toFixed(2)} px/cm from 4 measurements.</div>`);
+  setStartAvailability();
+  return true;
+}
+
+async function prepareCameraCalibrationView(){
+  if(cameraPreparationPromise) return cameraPreparationPromise;
+  cameraCalibrationRunning = true;
+  setCalibrationGuide(
+    'CAMERA CALIBRATION',
+    'Show your open hand',
+    'Please open your palm and show your hand to the camera.',
+    ''
+  );
+  const readyStatus = document.getElementById('calibGuideStatus');
+  if(readyStatus){ readyStatus.disabled = true; readyStatus.style.display = 'none'; }
+  statusLine.textContent = 'Camera starting…';
+  const detection = document.getElementById('calibDetectionStatus');
+  if(detection){ detection.textContent = 'STARTING HAND TRACKING…'; detection.classList.remove('is-detected'); detection.style.display = 'block'; }
+  cameraPreparationPromise = (async()=>{
+    if(!camera) await startCamera();
+    if(!hands) await initHands();
+    updateHandCalibrationIndicator(lastResults);
+    statusLine.textContent = 'Camera calibration ready';
+  })();
+  try{
+    await cameraPreparationPromise;
+  }finally{
+    cameraPreparationPromise = null;
+  }
+}
+
+async function waitForOpenCalibrationHand(timeoutMs=10000){
+  const start = performance.now();
+  while(performance.now() - start < timeoutMs){
+    updateHandCalibrationIndicator(lastResults);
+    if(isOpenCalibrationHand(getDetectedHand(lastResults))){
+      return true;
+    }
+    await new Promise(r=>setTimeout(r, 100));
+  }
+  return false;
+}
+
+async function performAutomaticCameraCalibration(){
+  await prepareCameraCalibrationView();
+  try{
+    resizeCanvasBacking();
+    return await runCameraCalibrationSequence();
+  }finally{
+    calibrationCaptureRunning = false;
+  }
+}
+
+
+function stopCalibrationVoiceControl(){
+  clearTimeout(voiceRestartTimer);
+  voiceRestartTimer = null;
+  if(speechRecognition){
+    const recognition = speechRecognition;
+    speechRecognition = null;
+    try{ recognition.onend = null; recognition.stop(); }catch(e){}
+  }
+}
+
+function startCalibrationVoiceControl(){
+  return;
+  if(mode !== 'camera' || calibrationCaptureRunning || cameraCalibrationDone || speechRecognition) return;
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!Recognition){
+    updateHandCalibrationIndicator(lastResults);
+    return;
+  }
+  const recognition = new Recognition();
+  speechRecognition = recognition;
+  recognition.lang = 'en-US';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 5;
+  recognition.onresult = (event)=>{
+    for(let i=event.resultIndex;i<event.results.length;i++){
+      const alternatives = Array.from(event.results[i]).map(r=>String(r.transcript||'').trim().toLowerCase());
+      const heard = alternatives.join(' | ');
+      const readyHeard = /\bready\b|\balready\b|\breddy\b|\bred e\b|레디|준비/.test(heard);
+      if(readyHeard && !calibrationCaptureRunning && isOpenCalibrationHand(getDetectedHand(lastResults))){
+        stopCalibrationVoiceControl();
+        calibrateBtn.click();
+        break;
+      }
+    }
+  };
+  recognition.onerror = (event)=>{
+    const status = document.getElementById('calibGuideStatus');
+    if(event.error === 'not-allowed' || event.error === 'service-not-allowed'){
+      stopCalibrationVoiceControl();
+      updateHandCalibrationIndicator(lastResults);
+    }else if(status){
+      status.textContent = 'LISTENING…';
+    }
+  };
+  recognition.onend = ()=>{
+    if(speechRecognition === recognition) speechRecognition = null;
+    if(mode === 'camera' && cameraCalibrationRunning && !calibrationCaptureRunning && !cameraCalibrationDone){
+      voiceRestartTimer = setTimeout(startCalibrationVoiceControl, 500);
+    }
+  };
+  try{
+    recognition.start();
+    updateHandCalibrationIndicator(lastResults);
+  }catch(e){
+    speechRecognition = null;
+  }
+}
+
+/* Latest MediaPipe Hands result used for fingertip tracking. */
+let lastResults = null;
+let drawRequest = null;
+function onHandsResults(results){
+  lastResults = results;
+  const landmarks = getDetectedHand(results);
+  if(cameraCalibrationRunning && calibrationCaptureRunning && isOpenCalibrationHand(landmarks)){
+    handCalibrationSamples.push(indexFingerLengthPx(landmarks));
+  }
+  updateHandCalibrationIndicator(results);
+
+  if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
+}
+
+/* compute letterbox layout */
+function computeLetterboxLayout(cssW, cssH, vidW, vidH){
+  const scale = Math.min(cssW / vidW, cssH / vidH);
+  const destW = vidW * scale;
+  const destH = vidH * scale;
+  const offsetX = (cssW - destW) / 2;
+  const offsetY = (cssH - destH) / 2;
+  return { destW, destH, offsetX, offsetY, scale };
+}
+
+/* draw frame dispatcher */
+function drawFrame(){
+  if(mode === 'cursor') return drawCursorFrame();
+  return drawCameraFrame();
+}
+
+function drawCursorFrame(){
+  return drawFrameInternal();
+}
+
+function drawCameraFrame(){
+  return drawFrameInternal();
+}
+
+/* shared drawing implementation; mode-specific entry points above keep the public
+   control flow separated while preserving the proven camera drawing behavior. */
+function drawFrameInternal(){
+  drawRequest = null;
+  // CSS dims of canvas
+  const cssW = parseFloat(canvas.style.width);
+  const cssH = parseFloat(canvas.style.height);
+
+  // For camera mode we letterbox the camera feed; for cursor mode we treat canvas as full working area.
+  let layout;
+  if(mode === 'camera'){
+    layout = computeLetterboxLayout(cssW, cssH, VIDEO_W, VIDEO_H);
+    drawLayout = layout;
+    // clear canvas
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,cssW,cssH);
+    // draw mirrored video into letterbox region
+    if(video && video.readyState >= 2){
+      ctx.save();
+      ctx.translate(layout.offsetX + layout.destW, layout.offsetY);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, VIDEO_W, VIDEO_H, 0, 0, layout.destW, layout.destH);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#000"; ctx.fillRect(layout.offsetX, layout.offsetY, layout.destW, layout.destH);
+    }
+    if(calibrationFreezeImage && performance.now() < calibrationFreezeUntil && calibrationFreezeImage.complete){
+      ctx.drawImage(calibrationFreezeImage, 0, 0, cssW, cssH);
+    }
+  } else {
+    // cursor mode: canvas is blank working area (no camera). We'll treat VIDEO_W/VIDEO_H as logical working dims.
+    const vidW = cssW, vidH = cssH;
+    layout = { destW: vidW, destH: vidH, offsetX:0, offsetY:0, scale:1 };
+    drawLayout = layout;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,cssW,cssH);
+    // draw a subtle background for cursor mode
+    ctx.fillStyle = '#04121a';
+    ctx.fillRect(0,0,cssW,cssH);
+  }
+
+  if(mode === 'camera' && cameraCalibrationRunning){
+    const guideCtx = canvas.getContext('2d');
+    guideCtx.save();
+    const handLm = getDetectedHand(lastResults);
+    if(handLm){
+      const mapHand = p => ({
+        x: layout.offsetX + layout.destW - p.x*layout.destW,
+        y: layout.offsetY + p.y*layout.destH
+      });
+      guideCtx.strokeStyle = 'rgba(255,255,255,.9)';
+      guideCtx.lineWidth = 2;
+      for(const [a,b] of HAND_CONNECTIONS){
+        const p1=mapHand(handLm[a]), p2=mapHand(handLm[b]);
+        guideCtx.beginPath(); guideCtx.moveTo(p1.x,p1.y); guideCtx.lineTo(p2.x,p2.y); guideCtx.stroke();
+      }
+      // Emphasize the measured index-finger chain (5-6-7-8).
+      guideCtx.strokeStyle = '#facc15';
+      guideCtx.lineWidth = 7;
+      for(const [a,b] of [[5,6],[6,7],[7,8]]){
+        const p1=mapHand(handLm[a]), p2=mapHand(handLm[b]);
+        guideCtx.beginPath(); guideCtx.moveTo(p1.x,p1.y); guideCtx.lineTo(p2.x,p2.y); guideCtx.stroke();
+      }
+      guideCtx.fillStyle = '#38bdf8';
+      for(const p of handLm){
+        const q=mapHand(p);
+        guideCtx.beginPath();
+        guideCtx.arc(q.x,q.y,4,0,Math.PI*2);
+        guideCtx.fill();
+      }
+    }
+    guideCtx.restore();
+  }
+
+  // draw targets & trail & trial text (map coordinates depending on mode)
+  if(trialRunning && trialState){
+    // mapping function: world px coords (based on VIDEO_W/VIDEO_H) -> canvas coords
+    const mapX = (x) => (layout.offsetX + (mode === 'camera' ? (layout.destW - (x * (layout.destW/VIDEO_W))) : x * (layout.destW / VIDEO_W)));
+    const mapY = (y) => (layout.offsetY + (mode === 'camera' ? (y * (layout.destH/VIDEO_H)) : y * (layout.destH / VIDEO_H)));
+
+    const tx = trialState.target.x, ty = trialState.target.y, r_px = trialState.target.radius_px;
+    const txCanvas = mapX(tx);
+    const tyCanvas = mapY(ty);
+    const ctx = canvas.getContext('2d');
+    if(trialState.positions.length > 1){
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 0.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(mapX(trialState.positions[0].x), mapY(trialState.positions[0].y));
+      for(let i=1;i<trialState.positions.length;i++){
+        const p = trialState.positions[i], prev = trialState.positions[i-1];
+        if(p.segment !== prev.segment) ctx.moveTo(mapX(p.x),mapY(p.y));
+        else ctx.lineTo(mapX(p.x),mapY(p.y));
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = 'rgba(0,200,120,0.98)';
+    ctx.beginPath(); ctx.arc(txCanvas, tyCanvas, Math.round(r_px * (layout.destW / VIDEO_W)), 0, Math.PI*2); ctx.fill();
+    // info (text non-mirrored / drawn at top-left of working area)
+    ctx.fillStyle = "#fff"; ctx.font = '14px Inter';
+    ctx.fillText(`Trial ${trialIndex+1}/${cfg.targets}`, layout.offsetX + 12, layout.offsetY + 20);
+  }
+
+  // trail animation display (map points)
+  if(trailAnimation){
+    const now = performance.now();
+    const t = Math.min(1, (now - trailAnimation.start) / trailAnimation.duration);
+    const ease = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+    const sx = trailAnimation.startPt.x, sy = trailAnimation.startPt.y;
+    const ex = trailAnimation.endPt.x, ey = trailAnimation.endPt.y;
+    const dx_ = sx + (ex - sx)*ease;
+    const dy_ = sy + (ey - sy)*ease;
+    // map
+    const mapX = (x) => (drawLayout.offsetX + (mode === 'camera' ? (drawLayout.destW - (x * (drawLayout.destW/VIDEO_W))) : x * (drawLayout.destW / VIDEO_W)));
+    const mapY = (y) => (drawLayout.offsetY + (y * (drawLayout.destH / VIDEO_H)));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(255,255,0,0.95)';
+    ctx.beginPath(); ctx.arc(mapX(dx_), mapY(dy_), 8, 0, Math.PI*2); ctx.fill();
+    if(t >= 1) trailAnimation = null;
+  }
+
+  // Always draw the live fingertip last so it remains visible during both
+  // calibration and the test, including when it overlaps a filled target.
+  if(mode === 'camera' && lastResults?.multiHandLandmarks?.length > 0){
+    const tip = lastResults.multiHandLandmarks[0][8];
+    const cx = layout.offsetX + layout.destW - (tip.x * layout.destW);
+    const cy = layout.offsetY + (tip.y * layout.destH);
+    const frameCtx = canvas.getContext('2d');
+    frameCtx.save();
+    frameCtx.fillStyle = 'rgba(255,45,45,0.98)';
+    frameCtx.strokeStyle = '#ffffff';
+    frameCtx.lineWidth = 1.5;
+    frameCtx.beginPath();
+    frameCtx.arc(cx, cy, 7, 0, Math.PI*2);
+    frameCtx.fill();
+    frameCtx.stroke();
+    frameCtx.restore();
+  }
+
+  // handle trial logic outside of draw transforms
+  if(trialRunning && trialState){
+    if(mode === 'camera'){
+      handleFrameForTrial(lastResults);
+    } else {
+      handleFrameForTrialCursor();
+    }
+  }
+}
+
+/* coordinate conversions
+   Cursor and Camera modes keep separate conversion helpers so changes in one
+   measurement mode do not accidentally affect the other. The legacy px_to_cm
+   and cm_to_px names remain as a safe shared dispatch layer for analysis code. */
+function cursorPxToCm(px){ return px / cursorPixelsPerCm; }
+function cursorCmToPx(cm){ return Math.round(cm * cursorPixelsPerCm); }
+function cameraPxToCm(px){ return px / pixels_per_cm; }
+function cameraCmToPx(cm){ return Math.round(cm * pixels_per_cm); }
+function px_to_cm(px){ return mode === 'cursor' ? cursorPxToCm(px) : cameraPxToCm(px); }
+function cm_to_px(cm){ return mode === 'cursor' ? cursorCmToPx(cm) : cameraCmToPx(cm); }
+
+/* ============================================================
+   Dysmetria + tremor scoring (replaces the old single-metric
+   trial_sara_score / dead enhanced_sara_score). See RT_SCORING_CONFIG
+   above for the thresholds, weight, and full literature citations.
+   ============================================================ */
+
+// Dysmetria: distance (cm) from the target at the "arrival point" —
+// the moment the cursor stops reaching and starts merely holding
+// position (see findArrivalIndex). Trial-level technical/missing data remain
+// unavailable; SARA score 4 is assigned only by the five-movement rule.
+function dysmetria_score(arrival_dist_cm, missed){
+  if(missed || arrival_dist_cm === null || arrival_dist_cm === undefined || Number.isNaN(arrival_dist_cm)) return null;
+  return bucketFromCm(arrival_dist_cm, RT_SCORING_CONFIG.dysmetriaBucketsCm);
+}
+
+// Tremor: max deviation (cm) from the arrival point during the hold
+// phase (arrival -> end of trial). Null when there was no measurable
+// hold phase (e.g. arrival happened right at trial end, or trial missed).
+function tremor_score(tremor_max_dev_cm, missed){
+  if(missed) return null;
+  if(tremor_max_dev_cm === null || tremor_max_dev_cm === undefined || Number.isNaN(tremor_max_dev_cm)) return null;
+  return bucketFromCm(tremor_max_dev_cm, RT_SCORING_CONFIG.tremorBucketsCm);
+}
+
+// Combined score: weighted round of dysmetria + tremor (RT_SCORING_CONFIG.weights).
+// If tremor is unavailable for this trial, falls back to dysmetria alone
+// (weight renormalized to 1.0) rather than failing the whole trial —
+// same "score what we can, flag what we can't" philosophy used in SD.
+function combined_rt_score(dScore, tScore){
+  if(dScore === null || dScore === undefined) return null;
+  if(tScore === null || tScore === undefined){
+    return { score: dScore, tremorAvailable: false };
+  }
+  const W = RT_SCORING_CONFIG.weights;
+  const raw = dScore * W.dysmetria + tScore * W.tremor;
+  return { score: Math.min(4, Math.max(0, Math.round(raw))), tremorAvailable: true };
+}
+
+/* Find the index in trialState.positions where the cursor "arrives":
+   velocity has dropped to <= peakVelocityThresholdPct of that trial's
+   peak velocity and stayed there for >= minSustainMs. Returns null if
+   no such point was found before the movement window ended. */
+function findArrivalIndex(positions, velocities){
+  const cfg_ = RT_SCORING_CONFIG.arrival;
+  let peak = 0, peakIdx = 0;
+  for(let i=0;i<velocities.length;i++){
+    if(velocities[i] > peak){ peak = velocities[i]; peakIdx = i; }
+  }
+  if(peak <= 0) return null;
+  const thresh = peak * cfg_.peakVelocityThresholdPct;
+  let slowStartIdx = null, slowStartT = null;
+  // velocities[i] is the speed between positions[i] and positions[i+1]
+  // Search only after peak velocity; pre-movement stillness is not arrival.
+  for(let i=peakIdx+1;i<velocities.length;i++){
+    if(velocities[i] <= thresh){
+      if(slowStartIdx === null){ slowStartIdx = i; slowStartT = positions[i].t; }
+      if(positions[i+1].t - slowStartT >= cfg_.minSustainMs){
+        return slowStartIdx;
+      }
+    } else {
+      slowStartIdx = null; slowStartT = null;
+    }
+  }
+  return null;
+}
+
+function pushFrameTouch(trialIdx, frameIdx, ts, x_px, y_px, inside){
+  allTouches.push({trialIdx,frameIdx,ts,x_px,y_px,inside,hand:metaData.hand});
+}
+
+/* Remove only an isolated one-frame out-and-back tracking spike. The raw
+   MediaPipe positions remain stored separately. A point is replaced only
+   when it jumps at least 2.5 cm away, returns close to the preceding path,
+   and the full event lasts no more than 120 ms. This avoids general-purpose
+   smoothing that could erase genuine dysmetria or 3–5 Hz tremor. */
+function filterTrackingSpikes(rawPositions){
+  const filtered = rawPositions.map(p => ({...p, tracking_outlier:false}));
+  for(let i=1;i<rawPositions.length-1;i++){
+    const a = rawPositions[i-1], b = rawPositions[i], c = rawPositions[i+1];
+    const abCm = px_to_cm(Math.hypot(b.x-a.x, b.y-a.y));
+    const bcCm = px_to_cm(Math.hypot(c.x-b.x, c.y-b.y));
+    const acCm = px_to_cm(Math.hypot(c.x-a.x, c.y-a.y));
+    const eventMs = c.t - a.t;
+    if(eventMs <= 120 && abCm >= 2.5 && bcCm >= 2.5 && acCm <= Math.max(1.0, Math.min(abCm,bcCm)*0.35)){
+      const ratio = Math.max(0, Math.min(1, (b.t-a.t) / Math.max(1, c.t-a.t)));
+      filtered[i] = {
+        x: a.x + (c.x-a.x)*ratio,
+        y: a.y + (c.y-a.y)*ratio,
+        t: b.t,
+        segment: b.segment,
+        tracking_outlier: true,
+        raw_x: b.x,
+        raw_y: b.y
+      };
+    }
+  }
+  return filtered;
+}
+
+function velocitiesForPositions(positions){
+  const velocities = [];
+  for(let i=1;i<positions.length;i++){
+    const dtMs = Math.max(1, positions[i].t - positions[i-1].t);
+    velocities.push(Math.hypot(positions[i].x-positions[i-1].x, positions[i].y-positions[i-1].y) / dtMs * 1000);
+  }
+  return velocities;
+}
+
+/* Shared per-frame sample handler for both cursor and camera modes.
+   Tracks position+timestamp history (for velocity / arrival detection),
+   a frame log with real timestamps (for a fps-independent
+   percent_time_inside), and reaction_time (first radius entry, kept for
+   backward-compat/CSV continuity even though dysmetria/tremor now drive
+   the score). cx/cy null means "no fingertip/cursor detected this frame". */
+function processTrialSample(cx, cy, fingertip){
+  if(!trialRunning || !trialState) return;
+  const now = performance.now();
+  if(now >= trialState.end_time_ms){
+    finalizeTrialAndScheduleNext();
+    return;
+  }
+  const frameIdx = trialState.positions.length + trialState.missingFrames;
+  const timestamp = (new Date()).toISOString();
+
+  let inside = false;
+  if(fingertip){
+    if(trialState.lastSampleMissing) trialState.currentSegment++;
+    trialState.raw_positions.push({x:cx, y:cy, t:now, segment:trialState.currentSegment});
+    trialState.lastSampleMissing = false;
+    trialState.positions = filterTrackingSpikes(trialState.raw_positions);
+    trialState.velocities = velocitiesForPositions(trialState.positions);
+    const currentFiltered = trialState.positions[trialState.positions.length-1];
+    const dist_px = Math.hypot(currentFiltered.x - trialState.target.x, currentFiltered.y - trialState.target.y);
+    inside = dist_px <= trialState.target.radius_px;
+    pushFrameTouch(trialIndex+1, frameIdx, timestamp, cx, cy, inside);
+    if(inside && trialState.reaction_time === null){
+      trialState.reaction_time = (now - trialState.start_time_ms)/1000.0;
+    }
+  } else {
+    trialState.missingFrames++;
+    trialState.lastSampleMissing = true;
+  }
+  trialState.inside_flags.push(inside);
+  trialState.frameLog.push({t: now, inside});
+
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    const cur_dist_cm = px_to_cm(Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y));
+    statusLine.textContent = `Running — current err: ${cur_dist_cm.toFixed(2)} cm`;
+  } else {
+    statusLine.textContent = `Running — no touch yet`;
+  }
+
+  trialLine.textContent = `Trial: ${trialIndex+1}/${cfg.targets}`;
+
+  if(trialState.positions.length >= 3){
+    const detectedIdx = findArrivalIndex(trialState.positions, trialState.velocities);
+    if(detectedIdx !== null){
+      trialState.arrival_index = detectedIdx;
+    }
+  }
+  if(trialState.arrival_index !== null){
+    // The target window always ends on its scheduled two-second boundary.
+    // Everything after arrival within that same window is hold/tremor data.
+    const remaining = Math.max(0, (trialState.end_time_ms - now) / 1000);
+    statusLine.textContent = `Hold still — tremor capture ${remaining.toFixed(1)} s`;
+  }
+}
+
+function handleFrameForTrial(results){
+  let fingertip = false, cx=null, cy=null;
+  if(results && results.multiHandLandmarks && results.multiHandLandmarks.length>0){
+    const tip = results.multiHandLandmarks[0][8];
+    cx = Math.round(tip.x * VIDEO_W);
+    cy = Math.round(tip.y * VIDEO_H);
+    fingertip = true;
+  }
+  processTrialSample(cx, cy, fingertip);
+}
+
+function handleFrameForTrialCursor(){
+  let fingertip = false, cx=null, cy=null;
+  if(lastMousePos){
+    fingertip = true;
+    const canvasCssW = parseFloat(canvas.style.width), canvasCssH = parseFloat(canvas.style.height);
+    const scaleX = VIDEO_W / canvasCssW;
+    const scaleY = VIDEO_H / canvasCssH;
+    cx = Math.round(lastMousePos.x * scaleX);
+    cy = Math.round(lastMousePos.y * scaleY);
+  }
+  processTrialSample(cx, cy, fingertip);
+}
+
+function makeTrajectoryPng(positions, target, arrivalIndex, hand, runTrial){
+  const w = 1280, h = 960;
+  const plot = document.createElement('canvas');
+  plot.width = w; plot.height = h;
+  const pctx = plot.getContext('2d');
+  pctx.fillStyle = '#04121a';
+  pctx.fillRect(0, 0, w, h);
+  const sx = w / VIDEO_W, sy = h / VIDEO_H;
+  const mapX = x => mode === 'camera' ? w - x * sx : x * sx;
+  const mapY = y => y * sy;
+
+  if(positions.length > 1){
+    pctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    pctx.lineWidth = 1;
+    pctx.lineJoin = 'round';
+    pctx.lineCap = 'round';
+    pctx.beginPath();
+    pctx.moveTo(mapX(positions[0].x), mapY(positions[0].y));
+    for(let i=1;i<positions.length;i++){
+      const p = positions[i], prev = positions[i-1];
+      if(p.segment !== prev.segment) pctx.moveTo(mapX(p.x),mapY(p.y));
+      else pctx.lineTo(mapX(p.x),mapY(p.y));
+    }
+    pctx.stroke();
+  }
+
+  pctx.fillStyle = 'rgba(0,200,120,0.98)';
+  pctx.beginPath();
+  pctx.arc(mapX(target.x), mapY(target.y), Math.max(2, target.radius_px * sx), 0, Math.PI*2);
+  pctx.fill();
+
+  if(arrivalIndex !== null && positions[arrivalIndex]){
+    const a = positions[arrivalIndex];
+    pctx.fillStyle = '#ff2d2d';
+    pctx.strokeStyle = '#ffffff';
+    pctx.lineWidth = 2;
+    pctx.beginPath();
+    pctx.arc(mapX(a.x), mapY(a.y), 6, 0, Math.PI*2);
+    pctx.fill(); pctx.stroke();
+  }
+
+  pctx.fillStyle = 'rgba(255,255,255,0.9)';
+  pctx.font = '16px sans-serif';
+  pctx.fillText(`${hand === 'L' ? 'Left' : 'Right'} hand · Trial ${runTrial}`, 14, 24);
+  return plot.toDataURL('image/png');
+}
+
+function finalizeTrialAndScheduleNext(){
+  if(!trialRunning || !trialState || runFinalized) return;
+  const thisRunId = activeRunId;
+  const completedTrial = trialState;
+  trialRunning = false;
+  if(completedTrial.endTimer) clearTimeout(completedTrial.endTimer);
+  trialState.positions = filterTrackingSpikes(trialState.raw_positions);
+  trialState.velocities = velocitiesForPositions(trialState.positions);
+  trialState.arrival_index = findArrivalIndex(trialState.positions, trialState.velocities);
+  const frames_recorded = trialState.inside_flags.length;
+  // Cap analysis at the scheduled boundary so frame/timer jitter cannot
+  // lengthen one target window beyond the configured two seconds.
+  const nowEnd = Math.min(performance.now(), trialState.end_time_ms);
+  const total_duration_s = (nowEnd - trialState.start_time_ms) / 1000.0;
+
+  // fps-independent time-inside calculation (fixes the old
+  // frames/hardcoded-30fps mismatch — see TASK-DESIGN-RATIONALE.md).
+  // Each inter-frame interval's duration is attributed to the inside/
+  // outside state recorded at the start of that interval; the final
+  // interval (last sample -> trial end) is attributed the same way.
+  const log = trialState.frameLog;
+  let time_inside_ms = 0;
+  for(let i=0;i<log.length-1;i++){
+    const dt = log[i+1].t - log[i].t;
+    if(log[i].inside) time_inside_ms += dt;
+  }
+  if(log.length){
+    const lastEntry = log[log.length-1];
+    const remain = Math.max(0, nowEnd - lastEntry.t);
+    if(lastEntry.inside) time_inside_ms += remain;
+  }
+  const time_inside_s = time_inside_ms / 1000.0;
+  const percent_time_inside = total_duration_s > 0 ? 100.0 * time_inside_s / total_duration_s : 0;
+  const measured_fps = total_duration_s > 0 ? frames_recorded / total_duration_s : null;
+
+  const missed = (trialState.positions.length === 0);
+
+  // Final (last-recorded-position) distance — kept for CSV continuity.
+  let final_dist_px=null, final_dist_cm=null;
+  if(trialState.positions.length > 0){
+    const last = trialState.positions[trialState.positions.length-1];
+    final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
+    final_dist_cm = px_to_cm(final_dist_px);
+  }
+
+  // Arrival point (see findArrivalIndex). Without a detected movement
+  // offset, dysmetria is unavailable; the last frame is not substituted.
+  let arrival_dist_cm = null, arrivalDetected = false;
+  let tremor_max_dev_cm = null;
+  if(!missed){
+    const arrIdx = trialState.arrival_index;
+    const useIdx = arrIdx;
+    arrivalDetected = (arrIdx !== null);
+    if(useIdx !== null){
+      const arrivalPos = trialState.positions[useIdx];
+      arrival_dist_cm = px_to_cm(Math.hypot(arrivalPos.x - trialState.target.x, arrivalPos.y - trialState.target.y));
+
+    // Post-arrival phase: arrival point -> this target's fixed window end.
+    // P95 radial deviation is measured around the median hold position.
+      const holdCutoff = trialState.end_time_ms;
+      const holdPositions = trialState.positions.slice(useIdx + 1).filter(p => p.t <= holdCutoff);
+      if(holdPositions.length > 0){
+      const median = values => {
+        const a = values.slice().sort((x,y)=>x-y), m = Math.floor(a.length/2);
+        return a.length % 2 ? a[m] : (a[m-1]+a[m])/2;
+      };
+      const centerX = median(holdPositions.map(p=>p.x));
+      const centerY = median(holdPositions.map(p=>p.y));
+      const radial = holdPositions.map(p=>Math.hypot(p.x-centerX,p.y-centerY)).sort((a,b)=>a-b);
+      const p95 = radial[Math.min(radial.length-1, Math.ceil(radial.length*0.95)-1)];
+        tremor_max_dev_cm = px_to_cm(p95);
+      }
+    }
+  }
+
+  const dScore = dysmetria_score(arrival_dist_cm, missed);
+  const tScore = tremor_score(tremor_max_dev_cm, missed);
+  const combined = combined_rt_score(dScore, tScore);
+  const runTrial = trialIndex + 1;
+  const safeToken = value => String(value || '').replace(/[^a-z0-9_-]+/gi, '_') || 'unknown';
+  const safeParticipant = safeToken(metaData.participant || 'participant');
+  const handCode = metaData.hand === 'L' ? 'L' : 'R';
+  const trajectoryImageFile = `${safeParticipant}_${safeToken(metaData.date)}_${safeToken(metaData.session)}_${handCode}_T${runTrial}_trajectory.png`;
+  const trajectoryImagePng = makeTrajectoryPng(trialState.positions, trialState.target, trialState.arrival_index, handCode, runTrial);
+  const trackingOutliers = trialState.positions.filter(p => p.tracking_outlier).length;
+  const trackingOutlierPct = trialState.positions.length ? trackingOutliers / trialState.positions.length * 100 : 0;
+
+  // Camera-mode low-fps flag: below RT_SCORING_CONFIG.minReliableFps the
+  // Nyquist limit falls inside the cited cerebellar tremor band (3-8 Hz,
+  // see [5]) so the tremor reading for this trial is informational only.
+  const lowFpsFlag = (mode === 'camera' && measured_fps !== null && measured_fps < RT_SCORING_CONFIG.minReliableFps);
+
+  const summary = {
+    trial: allTargetSummaries.length + 1,
+    tx: trialState.target.x, ty: trialState.target.y,
+    radius_px: trialState.target.radius_px, radius_cm: cfg.radius_cm,
+    final_dist_cm: final_dist_cm !== null ? final_dist_cm : null,
+    final_dist_px: final_dist_px !== null ? final_dist_px : null,
+    arrival_dist_cm,
+    arrivalDetected,
+    tremor_cm: tremor_max_dev_cm,
+    smoothness: null,
+    time_inside_s,
+    percent_time_inside,
+    reaction_time: trialState.reaction_time,
+    frames_recorded,
+    measured_fps,
+    lowFpsFlag,
+    missed,
+    run_trial: runTrial,
+    hand: handCode,
+    trajectory_image_file: trajectoryImageFile,
+    trajectory_image_png: trajectoryImagePng,
+    tracking_outliers: trackingOutliers,
+    tracking_outlier_pct: trackingOutlierPct,
+    dysmetria_score: dScore,
+    tremor_score: tScore,
+    trial_score: dScore,
+    tremorAvailableInScore: combined ? combined.tremorAvailable : false,
+    // Legacy field kept identical to trial_score for any downstream
+    // consumer that still reads enhanced_score from earlier CSV exports.
+    enhanced_score: combined ? combined.score : null
+  };
+  allTargetSummaries.push(summary);
+
+  if(missed){
+    appendLog(`<div>⚠️ <strong>Target ${summary.trial} — Missing</strong> — no valid touch detected in ${cfg.interval_s}s<br><small>Score: (not counted)</small></div>`);
+  } else {
+    const rt_ms = summary.reaction_time !== null ? Math.round(summary.reaction_time*1000) : '-';
+    const tremorText = tScore !== null ? tScore : '—' + (summary.tremorAvailableInScore ? '' : ' (no hold phase / unavailable)');
+    const arrivalText = summary.arrival_dist_cm !== null
+      ? `${summary.arrival_dist_cm.toFixed(2)} cm (dysmetria ${dScore})`
+      : 'unavailable (no velocity-defined arrival detected)';
+    appendLog(`<div class="trial-log-entry"><div class="trial-log-text">🎯 <strong>Target ${summary.trial}</strong><br>
+      Arrival error: ${arrivalText}<br>
+      Post-arrival P95 radius: ${summary.tremor_cm !== null ? summary.tremor_cm.toFixed(2)+' cm' : 'n/a'} (experimental score ${tremorText})${lowFpsFlag ? ' <small>(low camera fps — low confidence)</small>' : ''}<br>
+      Reaction time: ${rt_ms} ms<br>
+      Percent time inside: ${summary.percent_time_inside.toFixed(1)}%<br>
+      Tracking spikes removed: ${summary.tracking_outliers} (${summary.tracking_outlier_pct.toFixed(1)}%)<br>
+      SARA-aligned dysmetria score: ${summary.trial_score}<br>
+      CeMoQu weighted score: ${summary.enhanced_score ?? 'n/a'}</div><a class="trajectory-thumb-link" href="${summary.trajectory_image_png}" download="${summary.trajectory_image_file}" title="Download ${summary.trajectory_image_file}"><img class="trajectory-thumb" src="${summary.trajectory_image_png}" alt="${handCode === 'L' ? 'Left' : 'Right'} hand trial ${runTrial} trajectory" /></a></div>`);
+  }
+
+  trialState = null;
+  activeTrialStartLog = null;
+  trialIndex++;
+  if(thisRunId !== activeRunId || runFinalized) return;
+  if(trialIndex < cfg.targets && running){
+    if(cfg.trail && allTargetSummaries.length >= 1){
+      const prev = targets[Math.max(0, trialIndex-1)];
+      const next = targets[trialIndex];
+      startTrail(prev, next);
+    }
+    // No arrival wait and no inter-trial delay: targets change on the
+    // absolute 0/2/4/6/8-second schedule.
+    startTrialInternal();
+  } else {
+    finalizeRunAndLog();
+  }
+}
+
+function startTrialInternal(){
+  if(!running || runFinalized || trialIndex >= cfg.targets) return;
+  const [tx,ty] = targets[trialIndex];
+  const radius_px = cm_to_px(cfg.radius_cm);
+  const scheduledStartMs = runTestStartMs + trialIndex * cfg.interval_s * 1000;
+  const scheduledEndMs = runTestStartMs + (trialIndex + 1) * cfg.interval_s * 1000;
+  trialState = {
+    target: {x:tx, y:ty, radius_px},
+    raw_positions: [], // unmodified MediaPipe samples retained for audit/export
+    positions: [],      // {x,y,t} — t = performance.now() ms
+    velocities: [],     // px/s, velocities[i] is between positions[i] and positions[i+1]
+    inside_flags: [],
+    frameLog: [],        // {t, inside} for every processed frame (fps-independent timing)
+    reaction_time: null,
+    arrival_index: null,
+    start_time_ms: scheduledStartMs,
+    end_time_ms: scheduledEndMs,
+    endTimer: null,
+    missingFrames: 0,
+    currentSegment: 0,
+    lastSampleMissing: false
+  };
+  trialRunning = true;
+  const thisRunId = activeRunId;
+  const thisTrialIndex = trialIndex;
+  trialState.endTimer = setTimeout(()=>{
+    if(thisRunId === activeRunId && trialRunning && trialState && trialIndex === thisTrialIndex){
+      finalizeTrialAndScheduleNext();
+    }
+  }, Math.max(0, scheduledEndMs - performance.now()));
+  activeTrialStartLog = appendLog(`<div class="small-muted">Starting trial ${trialIndex+1} (radius ${cfg.radius_cm} cm)</div>`);
+  beep(900,100,0.04);
+}
+
+async function finalizeRunAndLog(){
+  if(runFinalized) return;
+  const thisRunId = activeRunId;
+  runFinalized = true;
+  running = false;
+  trialRunning = false;
+  appendLog(`<div class="small-muted">Finalizing run...</div>`);
+  const summaries = allTargetSummaries.slice(runStartSummaryIndex);
+  const scored = summaries.filter(s=>!s.missed && (typeof s.trial_score === 'number'));
+  const scores = scored.map(s => s.trial_score).filter(v=>v!==null && v!==undefined);
+
+  let totalScoreText = 'SARA Finger Chase Score: unavailable';
+  let finalScore = null;
+  // Tracking loss or failure of the velocity detector is not the same as
+  // the clinical SARA category "unable to perform 5 pointing movements".
+  // Never manufacture score 4 from missing automated measurements.
+  const lastThree = summaries.slice(-3);
+  if(summaries.length === cfg.targets && lastThree.every(s=>!s.missed && typeof s.trial_score === 'number')){
+    const arr = lastThree.map(s=>s.trial_score);
+    const avg = arr.reduce((a,b)=>a+b,0)/arr.length;
+    finalScore = avg;
+    totalScoreText = `SARA Finger Chase Score: ${finalScore.toFixed(2)} (average of last 3 movements)`;
+  } else if(summaries.some(s=>s.missed)){
+    totalScoreText = 'SARA Finger Chase Score: unavailable (hand tracking was missing; not automatically scored as 4)';
+  } else if(summaries.length !== 5){
+    totalScoreText = 'SARA Finger Chase Score: unavailable (run incomplete)';
+  } else {
+    totalScoreText = 'SARA Finger Chase Score: unavailable (arrival could not be detected in all of the last 3 movements)';
+  }
+
+  appendLog(`<div style="margin-top:8px"><strong>✅ Test completed successfully.</strong></div>`);
+  appendLog(`<div style="margin-top:6px"><strong>${totalScoreText}</strong></div>`);
+  const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+  const mean_sara_score = finalScore;
+  const mean_enhanced_score = mean(summaries.map(s => s.enhanced_score).filter(v => typeof v === 'number'));
+  const mean_dysmetria_score = mean(summaries.map(s => s.dysmetria_score).filter(v => typeof v === 'number'));
+  const mean_tremor_score = mean(summaries.map(s => s.tremor_score).filter(v => typeof v === 'number'));
+  const mean_arrival_dist_cm = mean(summaries.map(s => s.arrival_dist_cm).filter(v => typeof v === 'number'));
+  const mean_distance_to_target_cm = mean(summaries.map(s => s.final_dist_cm).filter(v => typeof v === 'number'));
+  const mean_time_to_target_s = mean(summaries.map(s => s.reaction_time).filter(v => typeof v === 'number'));
+  const mean_percent_time_inside = mean(summaries.map(s => s.percent_time_inside).filter(v => typeof v === 'number'));
+  const mean_tremor = mean(summaries.map(s => s.tremor_cm).filter(v => typeof v === 'number'));
+  const mean_smoothness = mean(summaries.map(s => s.smoothness).filter(v => typeof v === 'number'));
+
+  const clinicianScoreEl = document.getElementById('clinicianScore');
+  const researchNotesEl = document.getElementById('researchNotes');
+
+  const runSummary = {
+    ts: new Date().toISOString(),
+    session_id: `${metaData.participant}_${metaData.date}_${metaData.session}`,
+    participant_id: metaData.participant,
+    session: metaData.session,
+    date: metaData.date,
+    hand: metaData.hand,
+    mode,
+    num_targets: cfg.targets,
+    mean_sara_score,
+    mean_enhanced_score,
+    mean_dysmetria_score,
+    mean_tremor_score,
+    mean_arrival_dist_cm,
+    mean_distance_to_target_cm,
+    mean_time_to_target_s,
+    mean_percent_time_inside,
+    mean_tremor,
+    mean_smoothness,
+    notes: metaData.notes,
+    cfg: {...cfg},
+    targets: summaries,
+    finalScore,
+    scoringConfig: {...RT_SCORING_CONFIG, weights:{...RT_SCORING_CONFIG.weights}},
+    clinicalReference: {
+      clinicianRatedSaraFingerChaseScore: (clinicianScoreEl && clinicianScoreEl.value !== '') ? Number(clinicianScoreEl.value) : null,
+      notes: researchNotesEl ? researchNotesEl.value : ''
+    }
+  };
+  window.lastRunSummary = runSummary;
+  allFinalSummaries.push(runSummary);
+  running = false;
+  firstTrialCountdownDone = false;
+
+  const completedHand = metaData.hand;
+  handSessionResults.push(runSummary);
+  await showPhaseMessage(`${completedHand === 'L' ? 'Left' : 'Right'} hand test is complete.`, 1000);
+  if(sessionHandIndex + 1 < sessionHands.length && thisRunId === activeRunId){
+    sessionHandIndex++;
+    metaData.hand = sessionHands[sessionHandIndex];
+    await beginCurrentHandRun();
+  }else if(thisRunId === activeRunId){
+    showFinalTestResult();
+  }
+}
+
+/* Cursor-mode target generator. Consecutive targets must be at least
+   minDistancePx apart. This uses the touchscreen working area and stays
+   intentionally separate from the camera-mode 30 cm path generator. */
+function generateCursorTargets(count, minDistancePx, radiusPx, width=VIDEO_W, height=VIDEO_H){
+  const margin = radiusPx + cfg.edge_px;
+  const minX = margin, maxX = width - margin;
+  const minY = margin, maxY = height - margin;
+  if(count < 1 || minX >= maxX || minY >= maxY) return null;
+
+  const randomPoint = () => [
+    minX + Math.random() * (maxX - minX),
+    minY + Math.random() * (maxY - minY)
+  ];
+
+  for(let pathAttempt = 0; pathAttempt < 120; pathAttempt++){
+    const path = [randomPoint()];
+    let failed = false;
+
+    while(path.length < count){
+      const prev = path[path.length - 1];
+      let chosen = null;
+
+      for(let candidateAttempt = 0; candidateAttempt < 500; candidateAttempt++){
+        const candidate = randomPoint();
+        const fromPrev = Math.hypot(candidate[0] - prev[0], candidate[1] - prev[1]);
+        const distinctFromPath = path.every(q =>
+          Math.hypot(candidate[0] - q[0], candidate[1] - q[1]) > Math.max(radiusPx * 2, 2)
+        );
+        if(fromPrev >= minDistancePx && distinctFromPath){
+          chosen = candidate;
+          break;
+        }
+      }
+
+      if(!chosen){
+        failed = true;
+        break;
+      }
+      path.push(chosen);
+    }
+
+    if(!failed && path.length === count) return path;
+  }
+  return null;
+}
+
+/* Camera-mode target generator wrapper. It deliberately preserves the existing
+   exact-distance camera path algorithm. */
+function generateCameraTargets(count, distancePx, radiusPx, width=VIDEO_W, height=VIDEO_H){
+  return generateExactDistanceTargets(count, distancePx, radiusPx, width, height);
+}
+
+/* Build all requested targets in one bounded search. Every consecutive pair is
+   constructed at exactly distancePx; there is no approximate/farthest fallback. */
+function generateExactDistanceTargets(count, distancePx, radiusPx, width=VIDEO_W, height=VIDEO_H){
+  const margin = radiusPx + cfg.edge_px;
+  // Only target centers are restricted to the upper 70% of the frame.
+  // Video capture and MediaPipe tracking continue over the full frame.
+  const minX=margin, maxX=width-margin, minY=margin, maxY=Math.min(height*0.70-radiusPx,height-margin);
+  if(count < 1 || minX >= maxX || minY >= maxY) return null;
+  const inside = p => p[0]>=minX && p[0]<=maxX && p[1]>=minY && p[1]<=maxY;
+  const distinct = (p,path) => path.every(q=>Math.hypot(p[0]-q[0],p[1]-q[1])>Math.max(2,radiusPx));
+  const starts = [[(minX+maxX)/2,(minY+maxY)/2],[minX,minY],[maxX,minY],[minX,maxY],[maxX,maxY]];
+  for(let i=0;i<32;i++) starts.push([minX+Math.random()*(maxX-minX),minY+Math.random()*(maxY-minY)]);
+  const phase = Math.random()*Math.PI*2;
+  const angles = Array.from({length:180},(_,i)=>phase+i*Math.PI/90);
+  function extend(path){
+    if(path.length===count) return path;
+    const prev=path[path.length-1];
+    for(const angle of angles){
+      const next=[prev[0]+distancePx*Math.cos(angle),prev[1]+distancePx*Math.sin(angle)];
+      if(inside(next) && distinct(next,path)){
+        const result=extend([...path,next]);
+        if(result) return result;
+      }
+    }
+    return null;
+  }
+  for(const start of starts){
+    const result=extend([start]);
+    if(result) return result;
+  }
+  return null;
+}
+
+function startTrail(startPt, endPt, duration=260){
+  if(!cfg.trail) return;
+  trailAnimation = {start:performance.now(), duration, startPt:{x:startPt[0],y:startPt[1]}, endPt:{x:endPt[0],y:endPt[1]}}; 
+}
+
+async function runCountdownAndCue(){
+  if(!cfg.countdown) return;
+  countdownOverlay.classList.remove('phase-message');
+  countdownOverlay.style.display = 'flex';
+  const seq = [3,2,1];
+  for(let i=0;i<seq.length;i++){
+    countdownOverlay.textContent = String(seq[i]);
+    beep(700 - i*100, 180, 0.06);
+    await new Promise(r=>setTimeout(r, 1000));
+  }
+  countdownOverlay.style.display = 'none';
+}
+
+async function showPhaseMessage(message, durationMs){
+  countdownOverlay.classList.add('phase-message');
+  countdownOverlay.textContent = message;
+  countdownOverlay.style.display = 'flex';
+  await new Promise(r=>setTimeout(r,durationMs));
+  countdownOverlay.style.display = 'none';
+  countdownOverlay.classList.remove('phase-message');
+}
+
+function scoreText(value){
+  return typeof value === 'number' ? value.toFixed(2) : 'Unavailable';
+}
+
+function showFinalTestResult(){
+  const right = handSessionResults.find(r=>r.hand==='R');
+  const left = handSessionResults.find(r=>r.hand==='L');
+  let finalScore = null;
+  if(right && left && typeof right.finalScore==='number' && typeof left.finalScore==='number'){
+    finalScore = (right.finalScore + left.finalScore) / 2;
+  }else if(handSessionResults.length===1){
+    finalScore = handSessionResults[0].finalScore;
+  }
+  const extendedValues = handSessionResults.map(r=>r.mean_enhanced_score).filter(v=>typeof v==='number');
+  const extended = extendedValues.length ? extendedValues.reduce((a,b)=>a+b,0)/extendedValues.length : null;
+  const handRows = right && left
+    ? `<div>Right Hand&nbsp;&nbsp; ${scoreText(right.finalScore)}</div><div>Left Hand&nbsp;&nbsp; ${scoreText(left.finalScore)}</div><div>Average&nbsp;&nbsp; ${scoreText(finalScore)}</div>`
+    : `<div>${handSessionResults[0]?.hand==='L'?'Left':'Right'} Hand&nbsp;&nbsp; ${scoreText(finalScore)}</div><div>Bilateral score not available</div>`;
+  testResultOverlay.innerHTML = `<div class="result-kicker">TEST COMPLETE</div><div class="result-title">RANDOM TARGET TEST SCORE</div><div class="result-score">${scoreText(finalScore)}</div><div class="result-hands">${handRows}</div><div class="result-extended">CeMoQu Extended Score&nbsp;&nbsp; ${scoreText(extended)}</div>`;
+  testResultOverlay.style.display = 'flex';
+  const bilateralSummary = {
+    ts:new Date().toISOString(),
+    session_id:`${metaData.participant}_${metaData.date}_${metaData.session}`,
+    participant_id:metaData.participant, session:metaData.session, date:metaData.date,
+    hand:right&&left?'B':(handSessionResults[0]?.hand||null), mode,
+    num_targets:cfg.targets, finalScore, mean_sara_score:finalScore,
+    mean_enhanced_score:extended,
+    right_score:right?.finalScore??null, left_score:left?.finalScore??null,
+    targets:handSessionResults.flatMap(r=>r.targets||[]), hand_runs:handSessionResults.slice(), cfg:{...cfg}
+  };
+  window.lastBilateralRunSummary = bilateralSummary;
+  window.lastRunSummary = bilateralSummary;
+}
+
+let firstTrialCountdownDone = false;
+let skipNextRunCountdown = false;
+let activeRunId = 0;
+let runStartSummaryIndex = 0;
+let runFinalized = false;
+let activeTrialStartLog = null;
+let runTestStartMs = 0;
+let sessionHands = [];
+let sessionHandIndex = 0;
+let handSessionResults = [];
+
+async function beginCurrentHandRun(){
+  if(mode === 'cursor') return beginCursorHandRun();
+  return beginCameraHandRun();
+}
+
+function resetHandRunState(){
+  runFinalized = false;
+  running = true;
+  trialRunning = false;
+  trialIndex = 0;
+  targets = [];
+  runStartSummaryIndex = allTargetSummaries.length;
+}
+
+async function startPreparedHandRun(thisRunId){
+  const handName = metaData.hand === 'L' ? 'Left' : 'Right';
+  await showPhaseMessage(`The ${handName.toLowerCase()}-hand test will begin.`, 3000);
+  if(thisRunId !== activeRunId) return;
+  await runCountdownAndCue();
+  if(thisRunId !== activeRunId) return;
+  if(mode === 'cursor') attachCursorListeners();
+  runTestStartMs = performance.now();
+  startTrialInternal();
+}
+
+async function beginCursorHandRun(){
+  const thisRunId = activeRunId;
+  resetHandRunState();
+
+  const cursorMinDistanceCm = 20;
+  const cursorMinDistancePx = cursorCmToPx(cursorMinDistanceCm);
+  const radiusPx = cursorCmToPx(cfg.radius_cm);
+  const generatedTargets = generateCursorTargets(cfg.targets, cursorMinDistancePx, radiusPx);
+
+  if(!generatedTargets){
+    running = false;
+    statusLine.textContent = `Unable to place ${cfg.targets} targets at least ${cursorMinDistanceCm} cm apart`;
+    appendLog(`<div style="color:#f88">Cursor target generation failed: the calibrated touchscreen area cannot contain the requested ${cfg.targets}-movement path with at least ${cursorMinDistanceCm} cm between consecutive targets.</div>`);
+    return;
+  }
+
+  targets = generatedTargets;
+  await startPreparedHandRun(thisRunId);
+}
+
+async function beginCameraHandRun(){
+  const thisRunId = activeRunId;
+  resetHandRunState();
+
+  const cameraDistanceCm = 30;
+  const exactDistancePx = cameraCmToPx(cameraDistanceCm);
+  const radiusPx = cameraCmToPx(cfg.radius_cm);
+  const generatedTargets = generateCameraTargets(cfg.targets, exactDistancePx, radiusPx);
+
+  if(!generatedTargets){
+    running = false;
+    statusLine.textContent = `Unable to place ${cfg.targets} targets ${cameraDistanceCm} cm apart`;
+    appendLog(`<div style="color:#f88">Target generation failed: calibrated camera view cannot contain the requested ${cfg.targets}-movement ${cameraDistanceCm} cm path.</div>`);
+    return;
+  }
+
+  targets = generatedTargets;
+  await startPreparedHandRun(thisRunId);
+}
+
+
+startBtn.addEventListener('click', async ()=>{
+  const thisRunId = ++activeRunId;
+  runFinalized = false;
+  running = false;
+  trialRunning = false;
+  saveSettingsToLocal();
+  clearPreviousResultsAndMessages();
+
+  // camera init only if in camera mode
+  if(mode === 'camera'){
+    if(!cameraCalibrationDone){
+      setCalibrationGuide('CAMERA MODE','Calibration required','Please enter your index finger length and click Auto Calibration before starting the test.','', 'warning');
+      statusLine.textContent = 'Auto calibration required before Start Test';
+      setStartAvailability();
+      return;
+    }
+    cameraCalibrationRunning = false;
+    pixels_per_cm = cameraPixelsPerCm;
+    ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+    resizeCanvasBacking();
+    const overlay = document.getElementById('calibPromptOverlay');
+    if(overlay) overlay.style.display = 'none';
+  } else {
+    if(!cursorCalibrationDone){
+      showCursorModeInstruction();
+      setCalibrationStatus('Calibration required', 'warning');
+      statusLine.textContent = 'Verify cursor calibration before starting';
+      return;
+    }
+    const overlay = document.getElementById('calibPromptOverlay');
+    if(overlay) overlay.style.display = 'none';
+    // cursor mode: set VIDEO_W/VIDEO_H to working canvas virtual pixel space (CSS pixels)
+    const viewerRect = viewer.getBoundingClientRect();
+    VIDEO_W = Math.max(1, Math.floor(viewerRect.width));
+    VIDEO_H = Math.max(1, Math.floor(viewerRect.height));
+    resizeCanvasBacking();
+    calibUI.style.display = 'flex';
+  }
+
+  sessionHands = metaData.hand === 'B' ? ['R','L'] : [metaData.hand];
+  sessionHandIndex = 0;
+  handSessionResults = [];
+  metaData.hand = sessionHands[0];
+  await beginCurrentHandRun();
+});
+
+
+cfg_finger_cm?.addEventListener('input', ()=>{
+  if(mode !== 'camera') return;
+  cameraCalibrationDone = false;
+  cameraCalibrationMeasurements = [];
+  setStartAvailability();
+  statusLine.textContent = 'Camera Mode: enter index finger length, then click Auto Calibration';
+  setCalibrationGuide('CAMERA MODE','Enter index finger length','Please enter your index finger length, then click Auto Calibration.','', '');
+});
+
+/* stop */
+stopBtn.addEventListener('click', ()=>{
+  activeRunId++;
+  runFinalized = true;
+  running = false;
+  if(trialState?.endTimer) clearTimeout(trialState.endTimer);
+  trialRunning = false;
+  trialState = null;
+  calibrationCaptureRunning = false;
+  if(activeTrialStartLog?.isConnected) activeTrialStartLog.remove();
+  activeTrialStartLog = null;
+  detachCursorListeners();
+  countdownOverlay.style.display = 'none';
+  testResultOverlay.style.display = 'none';
+  document.getElementById('calibPromptOverlay').style.display = 'none';
+  // Camera mode remains live. The unfinished trial never reaches the summary,
+  // log, export, or database payload.
+  statusLine.textContent = mode === 'camera' && camera ? 'Camera ready' : 'Ready';
+});
+
+/* Camera calibration uses the Auto Calibration button; the overlay status is not a Ready button. */
+document.getElementById('calibGuideStatus')?.addEventListener('click', ()=>{});
+
+/* calibrate button (camera or user) */
+calibrateBtn.addEventListener('click', async ()=>{
+  if(mode === 'camera'){
+    cameraCalibrationDone = false;
+    cameraCalibrationMeasurements = [];
+    setStartAvailability();
+    calibrateBtn.disabled = true;
+    try{
+      const ok = await performAutomaticCameraCalibration();
+      if(!ok){
+        calibrateBtn.disabled = false;
+      }
+    }catch(e){
+      const detection = document.getElementById('calibDetectionStatus');
+      if(detection){ detection.textContent = 'MEDIAPIPE FAILED TO START'; detection.classList.remove('is-detected'); detection.style.display = 'block'; }
+      statusLine.textContent = 'MediaPipe failed to start';
+      appendLog(`<div style="color:#f88">MediaPipe startup error: ${sanitize(e?.message || String(e))}</div>`);
+      calibrateBtn.disabled = false;
+    }
+    if(cameraCalibrationDone){
+      calibrateBtn.disabled = false;
+    }
+    return;
+  } else {
+    const measuredCm = parseFloat(measuredDistance.value);
+    if(!measuredCm || measuredCm <= 0){
+      alert('Enter the measured length of the orange calibration bar.');
+      return;
+    }
+    const barWidthPx = calibBar.getBoundingClientRect().width;
+    pixels_per_cm = barWidthPx / measuredCm;
+    cursorPixelsPerCm = pixels_per_cm;
+    cfg_ppc.value = pixels_per_cm.toFixed(2);
+    ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+    updateCalibBar();
+    cursorCalibrationDone = true;
+    showCursorCalibrationResult();
+    setStartAvailability();
+    appendLog(`<div class="small-muted">Cursor calibration verified — ${pixels_per_cm.toFixed(2)} px/cm</div>`);
+  }
+});
+
+/* export CSV (3 files) - include mode in final summary export */
+exportBtn.addEventListener('click', ()=>{
+  const sanitize = (value) => String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
+  const participant = sanitize(metaData.participant || DEFAULT_META.participant) || 'P000';
+  const sessionLabel = sanitize(metaData.session || DEFAULT_META.session) || 'S1';
+  const dateLabel = (metaData.date || DEFAULT_META.date).slice(0,10);
+  const handLabel = (metaData.hand && metaData.hand.trim()) ? sanitize(metaData.hand) : 'Unknown';
+  const sessionId = `${participant}_${dateLabel}_${sessionLabel}`;
+  const fileSuffix = `${participant}${dateLabel}${sessionLabel}`;
+
+  // touches csv
+  const touchesHeader = ['touch_id','session_id','target_id','participant_id','session','date','hand','trial_idx','frame_idx','timestamp','x_px','y_px','inside'];
+  const touchesLines = [touchesHeader.join(',')];
+  for(const t of allTouches){
+    const rowHand = t.hand === 'L' ? 'L' : 'R';
+    const targetId = `${sessionId}_${rowHand}_T${t.trialIdx}`;
+    const touchId = `${targetId}_F${t.frameIdx}`;
+    touchesLines.push([
+      touchId,
+      sessionId,
+      targetId,
+      participant,
+      sessionLabel,
+      dateLabel,
+      rowHand,
+      t.trialIdx,
+      t.frameIdx,
+      t.ts,
+      t.x_px===undefined?'':t.x_px,
+      t.y_px===undefined?'':t.y_px,
+      t.inside?1:0
+    ].join(','));
+  }
+  downloadBlob(touchesLines.join('\n'), `RT_touches_${fileSuffix}.csv`);
+
+  // targets summary csv
+  const targHeader = ['target_id','session_id','participant_id','session','date','hand','trial_global_index','run_trial','trajectory_image_file','tracking_spikes_removed','tracking_spike_pct','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','arrival_dist_cm','arrival_detected','tremor_cm','tremor_available_in_score','dysmetria_score','tremor_score','time_to_target_s','percent_time_inside','frames_recorded','measured_fps','low_fps_flag','missed','valid','sara_score','enhanced_score'];
+  const targLines = [targHeader.join(',')];
+  for(const s of allTargetSummaries){
+    const rowHand = s.hand === 'L' ? 'L' : 'R';
+    const targetId = `${sessionId}_${rowHand}_T${s.run_trial}`;
+    const valid = s.missed ? 0 : 1;
+    targLines.push([
+      targetId,
+      sessionId,
+      participant,
+      sessionLabel,
+      dateLabel,
+      rowHand,
+      s.trial,
+      s.run_trial || '',
+      s.trajectory_image_file || '',
+      s.tracking_outliers || 0,
+      Number.isFinite(s.tracking_outlier_pct) ? s.tracking_outlier_pct.toFixed(2) : '',
+      s.tx,
+      s.ty,
+      s.radius_cm,
+      s.radius_px,
+      s.final_dist_cm!==null ? s.final_dist_cm.toFixed(3):'',
+      s.arrival_dist_cm!==null && s.arrival_dist_cm!==undefined ? s.arrival_dist_cm.toFixed(3):'',
+      s.arrivalDetected?1:0,
+      s.tremor_cm!==null && s.tremor_cm!==undefined ? s.tremor_cm.toFixed(3):'',
+      s.tremorAvailableInScore?1:0,
+      s.dysmetria_score!==null && s.dysmetria_score!==undefined ? s.dysmetria_score : '',
+      s.tremor_score!==null && s.tremor_score!==undefined ? s.tremor_score : '',
+      s.reaction_time!==null ? s.reaction_time.toFixed(3):'',
+      s.percent_time_inside.toFixed(2),
+      s.frames_recorded,
+      s.measured_fps!==null && s.measured_fps!==undefined ? s.measured_fps.toFixed(1) : '',
+      s.lowFpsFlag?1:0,
+      s.missed?1:0,
+      valid,
+      s.trial_score!==null ? s.trial_score.toFixed(3) : '',
+      s.enhanced_score!==null ? s.enhanced_score.toFixed(3) : ''
+    ].join(','));
+  }
+  downloadBlob(targLines.join('\n'), `RT_targets_summary_${fileSuffix}.csv`);
+
+  // final summary
+  const clinicianScoreEl = document.getElementById('clinicianScore');
+  const researchNotesEl = document.getElementById('researchNotes');
+  const clinicianScoreVal = (clinicianScoreEl && clinicianScoreEl.value !== '') ? clinicianScoreEl.value : '';
+  const researcherNotesVal = researchNotesEl ? researchNotesEl.value.replace(/[\r\n,]+/g,' ') : '';
+  const finalHeader = ['session_id','participant_id','session','trial','date','hand','mode','num_targets','trajectory_image_file','tracking_spikes_removed','tracking_spike_pct','sara_score','enhanced_score','dysmetria_score','tremor_score','distance_to_target_cm','arrival_dist_cm','tremor_cm','time_to_target_s','percent_time_inside','clinician_sara_finger_chase_score','researcher_notes','notes'];
+  const finalLines = [finalHeader.join(',')];
+  for(const f of allFinalSummaries){
+    for(const s of f.targets){
+      finalLines.push([
+        f.session_id,
+        f.participant_id,
+        f.session,
+        s.trial,
+        f.date,
+        f.hand,
+        f.mode,
+        f.num_targets,
+        s.trajectory_image_file || '',
+        s.tracking_outliers || 0,
+        Number.isFinite(s.tracking_outlier_pct) ? s.tracking_outlier_pct.toFixed(2) : '',
+        s.trial_score !== null ? s.trial_score.toFixed(3) : '',
+        s.enhanced_score !== null ? s.enhanced_score.toFixed(3) : '',
+        s.dysmetria_score !== null && s.dysmetria_score !== undefined ? s.dysmetria_score : '',
+        s.tremor_score !== null && s.tremor_score !== undefined ? s.tremor_score : '',
+        s.final_dist_cm !== null ? s.final_dist_cm.toFixed(3) : '',
+        s.arrival_dist_cm !== null && s.arrival_dist_cm !== undefined ? s.arrival_dist_cm.toFixed(3) : '',
+        s.tremor_cm !== null && s.tremor_cm !== undefined ? s.tremor_cm.toFixed(3) : '',
+        s.reaction_time !== null ? s.reaction_time.toFixed(3) : '',
+        s.percent_time_inside.toFixed(2),
+        clinicianScoreVal,
+        researcherNotesVal,
+        f.notes || ''
+      ].join(','));
+    }
+  }
+  downloadBlob(finalLines.join('\n'), `RT_final_summary_${fileSuffix}.csv`);
+  appendLog(`<div class="small-muted">Exported CSVs</div>`);
+});
+
+/* helper download */
+function downloadBlob(text, filename){
+  const blob = new Blob([text], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* clear log */
+clearLogBtn.addEventListener('click', ()=>{ clearLog(); });
+
+/* save/apply settings */
+saveSettingsBtn.addEventListener('click', ()=>{
+  saveSettingsToLocal();
+  if(settingsSavedMsg){
+    settingsSavedMsg.textContent = '✓ Settings saved';
+    clearTimeout(settingsSavedMsg._hideTimer);
+    settingsSavedMsg._hideTimer = setTimeout(()=>{ settingsSavedMsg.textContent = ''; }, 3000);
+  }
+});
+resetSettingsBtn.addEventListener('click', ()=>{ resetSettings(); });
+
+/* attach/detach cursor listeners */
+function attachCursorListeners(){
+  canvas.style.cursor = 'crosshair';
+  canvas.addEventListener('mousemove', onCanvasMouseMove);
+  canvas.addEventListener('mousedown', onCanvasMouseDown);
+  canvas.addEventListener('mouseup', onCanvasMouseUp);
+  canvas.addEventListener('mouseleave', onCanvasMouseLeave);
+}
+function detachCursorListeners(){
+  canvas.style.cursor = 'default';
+  canvas.removeEventListener('mousemove', onCanvasMouseMove);
+  canvas.removeEventListener('mousedown', onCanvasMouseDown);
+  canvas.removeEventListener('mouseup', onCanvasMouseUp);
+  canvas.removeEventListener('mouseleave', onCanvasMouseLeave);
+  lastMousePos = null;
+}
+
+/* mouse handlers store last position in CSS pixels (relative to canvas) */
+function onCanvasMouseMove(e){
+  const rect = canvas.getBoundingClientRect();
+  lastMousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+function onCanvasMouseDown(e){
+  cursorIsDown = true;
+  onCanvasMouseMove(e);
+}
+function onCanvasMouseUp(e){
+  cursorIsDown = false;
+  onCanvasMouseMove(e);
+}
+function onCanvasMouseLeave(e){
+  lastMousePos = null;
+}
+
+/* update calibration bar width according to pixels_per_cm and current canvas scale
+   ensure bar doesn't overflow viewer area — cap to viewer width - margins
+*/
+function updateCalibBar(){
+  const viewerRect = viewer.getBoundingClientRect();
+  const pxFor8_5cm = Math.round(pixels_per_cm * 8.5);
+  const maxWidth = Math.max(24, Math.floor(viewerRect.width - 48)); // leave margins
+  const w = Math.min(pxFor8_5cm, maxWidth);
+  calibBar.style.width = w + 'px';
+}
+
+/* Mode toggle click handlers */
+modeCursor.addEventListener('click', ()=>{
+  setMode('cursor');
+});
+modeCamera.addEventListener('click', ()=>{
+  setMode('camera');
+});
+function setMode(m){
+  if(m === mode){
+    return;
+  }
+  mode = m;
+  clearPreviousResultsAndMessages();
+  clearCalibrationStatus();
+  
+  if(mode === 'cursor'){
+    modeCursor.classList.add('active');
+    modeCamera.classList.remove('active');
+    pixels_per_cm = cursorPixelsPerCm;
+    ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+    // stop camera if running; keep session calibration value in memory.
+    stopCalibrationVoiceControl();
+    stopCamera();
+    calibUI.style.display = 'flex';
+    if(calibInputs) calibInputs.style.display = 'flex';
+    if(barLengthField) barLengthField.style.display = 'block';
+    if(fingerLengthField) fingerLengthField.style.display = 'none';
+    calibrateBtn.textContent = 'Verify Calibration';
+    calibrateBtn.disabled = false;
+    if(cursorCalibrationDone){
+      showCursorCalibrationResult();
+    }else{
+      calibInstr.textContent = 'Measure the orange bar with a physical ruler and enter its length in centimeters.';
+      showCursorModeInstruction();
+    }
+  } else {
+    modeCamera.classList.add('active');
+    modeCursor.classList.remove('active');
+    pixels_per_cm = cameraPixelsPerCm;
+    ppcLabel.textContent = `Pixels/cm: ${pixels_per_cm.toFixed(2)}`;
+    if(calibUI) calibUI.style.display = 'none';
+    if(calibInputs) calibInputs.style.display = 'flex';
+    if(barLengthField) barLengthField.style.display = 'none';
+    if(fingerLengthField) fingerLengthField.style.display = 'block';
+    calibrateBtn.textContent = 'Auto Calibration';
+    calibrateBtn.disabled = false;
+    statusLine.textContent = 'Camera Mode: enter index finger length, then click Auto Calibration';
+    if(cameraCalibrationDone){
+      showCameraCalibrationFinalResult();
+    }else{
+      setCalibrationGuide('CAMERA MODE','Enter index finger length','Please enter your index finger length, then click Auto Calibration.','', '');
+    }
+  }
+  setStartAvailability();
+}
+
+/* Run initialization */
+/* ============================================================
+   RESEARCH tab: dysmetria/tremor weight bar (reuses the SD module's
+   weight-bar drag pattern per the CeMoQu design principle 2026-09-08).
+   Single handle: 0% = all-dysmetria, 100% = all-tremor, snaps to 10%.
+   ============================================================ */
+(function wireWeightBar(){
+  const weightBar = document.getElementById('weightBar');
+  const wHandle1 = document.getElementById('wHandle1');
+  const wLabelDysmetria = document.getElementById('wLabelDysmetria');
+  const wLabelTremor = document.getElementById('wLabelTremor');
+  const showScoringBtn = document.getElementById('showScoringBtn');
+  const scoringDetails = document.getElementById('scoringDetails');
+  if(!weightBar || !wHandle1) return;
+
+  function renderWeightBar(){
+    const tPct = Math.round(RT_SCORING_CONFIG.weights.tremor * 100);
+    wHandle1.style.left = (100 - tPct) + '%';
+    if(wLabelDysmetria) wLabelDysmetria.textContent = `Dysmetria ${Math.round(RT_SCORING_CONFIG.weights.dysmetria*100)}%`;
+    if(wLabelTremor) wLabelTremor.textContent = `Tremor ${tPct}%`;
+  }
+
+  function applyHandlePct(pct){
+    const tremorPct = Math.max(0, Math.min(100, Math.round(pct/10)*10));
+    RT_SCORING_CONFIG.weights = { dysmetria: (100-tremorPct)/100, tremor: tremorPct/100 };
+    renderWeightBar();
+  }
+
+  function pctFromClientX(clientX){
+    const rect = weightBar.getBoundingClientRect();
+    const dysPct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    return 100 - dysPct; // handle position = dysmetria%, we want tremor%
+  }
+
+  let dragging = false;
+  wHandle1.addEventListener('pointerdown', (e)=>{ dragging = true; e.preventDefault(); });
+  window.addEventListener('pointermove', (e)=>{
+    if(!dragging) return;
+    applyHandlePct(pctFromClientX(e.clientX));
+  });
+  window.addEventListener('pointerup', ()=>{ dragging = false; });
+  wHandle1.addEventListener('keydown', (e)=>{
+    const cur = Math.round(RT_SCORING_CONFIG.weights.tremor*100);
+    if(e.key === 'ArrowLeft') applyHandlePct(cur - 10);
+    else if(e.key === 'ArrowRight') applyHandlePct(cur + 10);
+  });
+
+  if(showScoringBtn && scoringDetails){
+    showScoringBtn.addEventListener('click', ()=>{
+      const hidden = scoringDetails.hidden;
+      scoringDetails.hidden = !hidden;
+      if(hidden){
+        scoringDetails.textContent =
+`Dysmetria bucket boundaries (cm, arrival-point error): ${RT_SCORING_CONFIG.dysmetriaBucketsCm.join(', ')}
+Tremor bucket boundaries (cm, max hold-phase deviation): ${RT_SCORING_CONFIG.tremorBucketsCm.join(', ')}
+Arrival = velocity <= ${Math.round(RT_SCORING_CONFIG.arrival.peakVelocityThresholdPct*100)}% of this trial's peak velocity, sustained >= ${RT_SCORING_CONFIG.arrival.minSustainMs} ms.
+Combined score = round(dysmetria_score * ${RT_SCORING_CONFIG.weights.dysmetria.toFixed(2)} + tremor_score * ${RT_SCORING_CONFIG.weights.tremor.toFixed(2)}), clamped 0-4.
+If no measurable hold phase, falls back to dysmetria score alone.
+Config version: ${RT_SCORING_CONFIG.version}. See TASK-DESIGN-RATIONALE.md for full literature citations.`;
+      }
     });
   }
-  bindWeightHandle(els.wHandle1,true);bindWeightHandle(els.wHandle2,false);renderWeightBar();
-  renderTaskList();renderResearch();
+
+  renderWeightBar();
+})();
+
+function init(){
+  loadSettingsFromLocal();
+  if(fingerLengthField) fingerLengthField.style.display = 'none';
+  resizeCanvasBacking();
+  showCursorModeInstruction();
+  setStartAvailability();
+  appendLog('<div class="small-muted">App ready. Verify settings. Use Cursor Mode for mouse-based runs; Camera Mode for a webcam.</div>');
+}
+init();
+
+/* observe viewer size changes */
+new ResizeObserver(()=>{ resizeCanvasBacking(); }).observe(document.getElementById('viewer'));
+
+/* Ensure page draws continuously when running/receiving data */
+(function tick(){
+  if(!drawRequest) drawRequest = requestAnimationFrame(drawFrame);
+  requestAnimationFrame(tick);
 })();

@@ -1,191 +1,268 @@
-# SD — Speech Disturbance Test
+# CeMoQu RT — Random Target Touch Test
 
-Part of **CeMoQu** (Cerebellar Motor Quantification), a browser-based platform that measures motor
-and speech symptoms of cerebellar ataxia using only a standard computer camera, microphone, and web
-browser — no special hardware.
+**Module:** RT (Random Target Touch / Digital Finger Chase)  
+**Project:** CeMoQu — Cerebellar Motor Quantification  
+**Current build reviewed:** `RT091226`  
+**Main files:** `index.html`, `styles.css`, `app.js`
 
-This module (**SD**) is a short, guided speech test that runs in about two minutes. It produces an
-**Estimated SARA Speech Score (0–6)** alongside the individual measurements it was calculated from,
-so a clinician or researcher can see not just the number but exactly how it was reached.
+CeMoQu RT is a browser-based upper-limb coordination test designed to collect quantitative movement data from a point-to-target task. The module supports two measurement modes:
 
-> **This is a research prototype, not a diagnostic tool.** It does not replace a clinician's
-> judgment or the official SARA examination. Every score it produces is explicitly labeled
-> "provisional research estimate — not clinically validated." See [Limitations](#limitations) below.
+1. **Cursor Mode** — direct touch, mouse, or trackpad input on the screen.
+2. **Camera Mode** — webcam-based index-finger tracking using MediaPipe Hands.
+
+The two modes use separate calibration and measurement pipelines, then share the same analysis pipeline for reaction time, dysmetria, tremor/hold instability, scoring, result display, and CSV export.
+
+![Screenshot needed: RT main screen with Cursor Mode selected](./docs/screenshots/rt-main-cursor-mode.png)
 
 ---
 
-## What SARA Speech normally measures
+## 1. Main Purpose
 
-SARA (Scale for the Assessment and Rating of Ataxia) is the standard clinical scale for cerebellar
-ataxia. Its Speech Disturbance item is scored 0–6 by a clinician **while listening to the patient
-talk in normal conversation**:
+The RT module measures how accurately and quickly a participant moves toward visual targets. It is inspired by the SARA Finger Chase task, but implemented digitally so that repeated, remote, and quantitative testing is possible.
 
-| Score | Meaning |
-|---|---|
-| 0 | Normal |
-| 1 | Suggestion of speech disturbance |
-| 2 | Impaired, but easy to understand |
-| 3 | Occasional words hard to understand |
-| 4 | Many words hard to understand |
-| 5 | Only single words understandable |
-| 6 | Speech unintelligible |
+The module records:
 
-SD does **not** replicate that conversational exam. Instead, it asks the person to do three short,
-standardized tasks that a browser can record and measure automatically and consistently, and
-combines the results into an estimate on the same 0–6 scale. This trades the richness of a real
-conversation for standardized quantitative measurements designed for comparison across repeated
-assessments and research cohorts. Their test–retest reliability and comparability across devices,
-browsers, and visits still require validation.
+- target location
+- cursor or fingertip trajectory
+- reaction time
+- final error
+- arrival-point error
+- time inside target
+- post-arrival instability / tremor estimate
+- right-hand and left-hand summaries
+- final SARA-like RT score
 
-## The three tasks
+---
 
-Each task shows on-screen instructions, a 3‑2‑1‑Go countdown, and a live microphone level meter so
-the person can see they're being heard clearly before and during recording. All three can be done in
-any order, and any of them can be re-recorded — only the most recent recording of each task counts
-toward the final score.
+## 2. File Structure
 
-### 1. Sustained vowel ("Ah") — 5 seconds
-The person takes a breath and holds a steady "ah" sound for 5 seconds. This checks whether they have
-enough breath support and vocal-cord control to produce a steady sound — and, importantly for
-ataxia, whether their **pitch stays steady** while they do it. Unsteady pitch during a held vowel is
-one of the more consistently reported acoustic signs of ataxic speech in the research literature.
-
-### 2. Pa-ta-ka repetition — 10 seconds
-The person repeats "pa-ta-ka" as fast and evenly as they can for 10 seconds. This is a classic
-"diadochokinetic" (DDK) task used across motor-speech assessment: it tests how quickly and how
-*regularly* someone can move their lips, tongue tip, and tongue back in rapid alternation — exactly
-the kind of fine motor timing that cerebellar damage disrupts. Pauses or breakdowns partway through
-are treated as part of the result, not as noise to ignore (see [Scoring](#how-scoring-works)).
-
-### 3. Reading passage — up to 30 seconds
-The person reads a short passage aloud at a normal pace. One of **three original passages** is
-picked at random each time this task is started, so repeated attempts (or repeated demos) don't
-always use identical text. All three were written to have an energizing, motivational tone and were
-checked against the CMU Pronouncing Dictionary to make sure that, between the three of them, every
-phoneme (individual speech sound) of General American English appears at least once. The full design
-rationale and the actual coverage numbers are in
-[`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md), which also covers why all three tasks and
-their weights were chosen.
-
-This task is the closest proxy to real intelligibility: it's scored on how accurately a
-speech-recognition engine can transcribe what was said, and how fast the person spoke.
-
-![Reading passage task, with two prior tasks already scored in the Result Summary panel](docs/screenshots/reading-task-summary.png)
-
-## What data comes out of a recording, and what it means
-
-Nothing here is a black box — every number below is visible in the app's **RESEARCH** tab, next to a
-plain-language note about its limitations, right after each task is finished (not only at the end).
-
-| Task | What's measured | In plain terms |
-|---|---|---|
-| Sustained vowel | Valid phonation time | How much of the 5 seconds had detectable, sustained voice |
-| | Pitch variability (F0 CV) | How much the pitch wobbled while holding the note |
-| | Dropout count | How many separate times the voice cut out and restarted |
-| Pa-ta-ka | Overall rate (incl. pauses) | Repetitions per second across the *whole* 10 seconds, pauses included |
-| | Rhythm variability | How evenly spaced the repetitions were |
-| | Pause ratio | What share of the 10 seconds had no speech at all |
-| Reading | Word error rate | How much the spoken words differed from the passage, per a standard alignment algorithm |
-| | Speaking rate | Words per minute |
-
-All of these are **derived measurements**. The original browser-recorded audio file for each
-accepted attempt is retained during the session and can be downloaded from the RESEARCH tab
-(AH / PA-TA-KA / READING buttons) for direct listening or later re-analysis. Depending on browser
-support, this file may be compressed WebM/Opus or another browser-selected format; it is not
-uncompressed acquisition-grade raw audio and is not persisted after the page is closed unless it is
-downloaded.
-
-## How scoring works
-
-Each task's measurements are converted into a **severity score from 0 (normal) to 6 (most severe)**
-using a set of threshold tables — the same direction as the official SARA scale, where higher always
-means worse. For example, a slower-than-normal pa-ta-ka rate pushes that task's score up; a longer,
-steadier sustained vowel pushes it down.
-
-The three task scores are then combined into one overall estimate using adjustable weights:
-
-```
-Reading 50%  +  Pa-ta-ka 40%  +  Sustained vowel 10%
+```text
+RT/
+├── index.html                 # RT user interface and page structure
+├── styles.css                 # RT-only visual layout and styling
+├── app.js                     # RT logic: modes, calibration, testing, scoring, export
+├── test_scoring.js            # Scoring-related test helper file
+├── README.md                  # User/developer overview
+├── METHODOLOGY.md             # Calculation and analysis method
+├── TASK-DESIGN-RATIONALE.md   # Design decisions and why they were made
+└── VERIFICATION-REPORT.md     # Manual QA and verification checklist
 ```
 
-![Final results screen showing the Estimated SARA Speech Score, the three component scores and weights, and the calculation breakdown](docs/screenshots/final-results.png)
+The RT page also loads shared CeMoQu assets:
 
-These particular numbers are a starting point, not a fixed rule — the reading task keeps the largest
-share because SARA's own definition centers on intelligibility, but pa-ta-ka's weight was raised from
-an earlier default of 30% after Grobe-Einsler et al. (2023) found that pa-ta-ka-derived features were
-the single strongest predictor of SARA speech severity in their automated-scoring study (5 of the top
-10 most predictive features came from that task alone). **Anyone using the tool can drag the weight
-bar in the RESEARCH tab to try different splits** (it snaps to 10% steps and always adds up to 100%);
-the score recalculates immediately. *(Full rationale for all three tasks and this weighting:
-[`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md).)*
+```html
+../shared/common.css
+../shared/header.css
+../shared/header.js
+```
 
-![The RESEARCH tab's Scoring section: a draggable weight bar plus the raw per-metric measurements for one task, each labeled scoring/quality_control/exploratory](docs/screenshots/research-weight-bar.png)
+These shared files should not be changed from inside the RT module unless the change is intentionally meant to affect other CeMoQu modules.
 
-One additional rule protects against a specific failure mode: if the reading task alone scores 4, 5,
-or 6, the final estimate can never come out lower than that — a person who is severely hard to
-understand doesn't get "averaged up" to a better score just because their pa-ta-ka or vowel task
-happened to go well.
+---
 
-*(For the exact per-metric thresholds and step-by-step worked examples, see
-[`METHODOLOGY.md`](./METHODOLOGY.md).)*
+## 3. Core Design Principle
 
-### Data quality isn't a pass/fail gate
+Cursor Mode and Camera Mode are intentionally separated at the measurement level.
 
-Every recording is checked for problems — background noise, a quiet or clipped microphone signal, low
-confidence in the speech-recognition transcript, and so on. Historically, tools like this often
-**block** scoring or force a re-recording when a quality check fails. This one deliberately does not:
-if a recording contains *any* usable signal, it gets scored, and any quality concerns are shown
-alongside the score as a note rather than a wall. Scoring is only skipped entirely when there is
-truly nothing to measure (e.g., a recording with no detected speech at all, or a total
-speech-recognition failure on the reading task). The reasoning: this is a measurement tool for a
-population whose speech is, by definition, sometimes hard to record cleanly — auto-rejecting the
-hardest cases would bias the tool away from exactly the people it's meant to study.
+```text
+Cursor Mode measurement
+  ├── screen-based calibration
+  ├── direct pointer input
+  ├── cursor cm↔px conversion
+  └── cursor target generation
 
-### Plain-language feedback
+Camera Mode measurement
+  ├── webcam-based hand tracking
+  ├── finger-length calibration
+  ├── camera cm↔px conversion
+  └── camera target generation
 
-Right after each task is accepted, the app shows the score for that task **and a short, specific
-explanation in everyday language** (e.g. "There were a few brief interruptions" or "Your pitch was
-noticeably unstable while holding the sound") instead of just the raw numbers — so a participant
-gets feedback they can act on, and someone reviewing results later doesn't have to reverse-engineer
-what went wrong from a threshold table.
+Both modes
+  └── shared analysis pipeline
+      ├── reaction time
+      ├── arrival detection
+      ├── dysmetria
+      ├── tremor / hold instability
+      ├── scoring
+      ├── result display
+      └── CSV export
+```
 
-![Task Result screen after accepting the Pa-ta-ka task: a large score plus three plain-language reasons for it](docs/screenshots/task-result.png)
+This separation prevents a Cursor Mode change from accidentally breaking Camera Mode, while keeping the final analysis consistent across both input methods.
 
-## Exports
+---
 
-- **Download accepted audio** for any completed task (RESEARCH tab)
-- **Export CSV** of the full session's measurements
-- **Submit Data** currently packages the data but is not yet wired to a real submission
-  endpoint — this needs the actual CeMoQu submission mechanism used by the other modules
+## 4. Default Protocol
 
-## Limitations
+| Setting | Current default / behavior |
+|---|---:|
+| Movements per hand | 5 |
+| Target interval | 2.0 seconds |
+| Target diameter | 3.0 cm |
+| Target radius used internally | 1.5 cm |
+| Cursor Mode target spacing | At least 20 cm between consecutive targets |
+| Camera Mode target spacing | 30 cm movement distance |
+| Hands tested | Right and left by default |
+| Right/left start message duration | 3 seconds |
+| Right/left start message font size | 13px |
+| Countdown | 3, 2, 1 |
 
-- **Not clinically validated.** All thresholds and weights are engineering placeholders pending
-  comparison against real clinician-rated SARA scores. Every result is labeled accordingly.
-- **Browser speech recognition** powers the reading task's word-error-rate and speed measurements. It
-  varies by browser, OS, accent, and network conditions, and — because it's trained mostly on fluent
-  speech — may register unclear speech as recognition errors it made, not errors the speaker made.
-- **Pitch estimation** uses a basic, browser-friendly algorithm (autocorrelation), not a
-  clinical-grade tool like Praat. It's good enough to be useful but not precise enough for fine-grained
-  voice-quality research on its own.
-- **No jitter/shimmer/HNR** (classical voice-quality measures) are currently implemented; they were
-  judged technically hard to do reliably at this level of audio quality and window size, though they
-  could be added later, clearly labeled as exploratory, if needed.
-- Needs healthy-control data, test–retest data, and same-day clinician-rated comparisons before any
-  of the above can move from "provisional" to "validated."
+![Screenshot needed: Settings panel showing 5 movements, 2s interval, 3cm target diameter, right and left hands](./docs/screenshots/settings-defaults.png)
 
-## Where to look next
+---
 
-This module follows the standard four-document structure intended to apply across all CeMoQu
-modules, not just this one:
+## 5. Cursor Mode User Flow
 
-- [`METHODOLOGY.md`](./METHODOLOGY.md) — every method used to go from raw audio to the final score:
-  voice-activity detection, pitch tracking, event detection, transcript alignment, and the scoring
-  formulas, with worked examples
-- [`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md) — why these three tasks, why their
-  durations and reading-passage content, and why the scoring weights are split the way they are,
-  with citations
-- [`VERIFICATION-REPORT.md`](./VERIFICATION-REPORT.md) — what has been checked automatically and
-  manually, what remains unverified, and the conditions required before clinical validation
+Cursor Mode uses a physical on-screen calibration bar. The user measures the orange calibration bar with a ruler and enters the measured length in centimeters.
 
-**Current versions:** protocol `sd-protocol-v2`, scoring config `sd-provisional-v1.8`.
+```text
+Select Cursor Mode
+→ Previous results/messages are cleared
+→ Cursor calibration instruction appears
+→ User measures the orange calibration bar
+→ User enters bar length
+→ User clicks Verify Calibration
+→ Calibration result is shown
+→ Start Test becomes available
+→ Right-hand test begins
+→ 3, 2, 1 countdown
+→ Right-hand movements
+→ Left-hand test begins
+→ 3, 2, 1 countdown
+→ Left-hand movements
+→ Final result is displayed
+```
+
+Cursor Mode must not begin a test until calibration has been verified.
+
+![Screenshot needed: Cursor Mode calibration bar before verification](./docs/screenshots/cursor-calibration-before-verify.png)
+
+![Screenshot needed: Cursor Mode calibration verified result](./docs/screenshots/cursor-calibration-verified.png)
+
+---
+
+## 6. Camera Mode User Flow
+
+Camera Mode uses webcam hand tracking. The participant enters the actual index finger length in centimeters, then runs Auto Calibration.
+
+```text
+Select Camera Mode
+→ Previous results/messages are cleared
+→ User enters actual index finger length
+→ User clicks Auto Calibration
+→ Program asks user to open palm and show hand to camera
+→ Calibration 1: Right hand
+→ Calibration 2: Left hand
+→ Calibration 3: Right hand
+→ Calibration 4: Left hand
+→ Average pixels/cm is calculated from the 4 measurements
+→ Final calibration result is shown
+→ Start Test becomes available
+→ Right-hand test begins
+→ 3, 2, 1 countdown
+→ Right-hand movements
+→ Left-hand test begins
+→ 3, 2, 1 countdown
+→ Left-hand movements
+→ Final result is displayed
+```
+
+During the four calibration captures, intermediate raw calibration values are logged for verification but the user-facing flow should remain simple. The final average is used as the Camera Mode scale.
+
+![Screenshot needed: Camera Mode selected with actual index finger length input](./docs/screenshots/camera-mode-enter-finger-length.png)
+
+![Screenshot needed: Camera Auto Calibration hand-open instruction](./docs/screenshots/camera-auto-calibration-open-palm.png)
+
+![Screenshot needed: Camera calibration final average result](./docs/screenshots/camera-calibration-average-result.png)
+
+---
+
+## 7. Calibration Storage Rule
+
+Calibration results should be treated as session-specific values.
+
+- A newly opened RT page should require calibration again.
+- Within the same open page/session, calibration values may remain available while switching between Cursor Mode and Camera Mode.
+- Calibration should not be trusted across browser reloads, monitor changes, browser zoom changes, camera position changes, or window-size changes.
+
+This is especially important for Cursor Mode because the physical centimeter scale depends on screen size, display scaling, and browser zoom.
+
+---
+
+## 8. Target Generation
+
+Target locations are generated at the beginning of each hand run.
+
+```text
+Start Test
+→ new right-hand target set is generated
+→ right-hand test runs
+→ new left-hand target set is generated
+→ left-hand test runs
+```
+
+Cursor Mode and Camera Mode use different target generation rules:
+
+- **Cursor Mode:** consecutive targets must be at least 20 cm apart.
+- **Camera Mode:** consecutive targets use a 30 cm movement distance.
+
+![Screenshot needed: Running target test with visible target and trajectory](./docs/screenshots/rt-running-target-test.png)
+
+---
+
+## 9. Results and Export
+
+At the end of the session, the module displays the final result and stores a summary for export.
+
+Results may include:
+
+- right-hand score
+- left-hand score
+- final score
+- reaction time
+- final error
+- arrival-point error
+- tremor / hold instability
+- time inside target
+- smoothness
+- missed trials
+- mode and configuration values
+
+![Screenshot needed: Final result overlay after right and left hand tests](./docs/screenshots/final-result-overlay.png)
+
+The page includes an **Export CSV** button. The module also includes a **Submit Data** flow intended to upload de-identified summary metrics only.
+
+---
+
+## 10. Required Screenshots
+
+Capture these screenshots for the repository documentation:
+
+1. `rt-main-cursor-mode.png` — full RT screen with Cursor Mode selected.
+2. `settings-defaults.png` — Settings panel with 5 movements, 2s interval, 3cm target diameter.
+3. `cursor-calibration-before-verify.png` — Cursor calibration bar before verification.
+4. `cursor-calibration-verified.png` — Cursor calibration result after Verify Calibration.
+5. `camera-mode-enter-finger-length.png` — Camera Mode after selection, showing finger-length input.
+6. `camera-auto-calibration-open-palm.png` — Auto Calibration instruction asking user to show open palm.
+7. `camera-calibration-average-result.png` — final averaged Camera calibration result.
+8. `rt-phase-message-right.png` — “The right-hand test will begin.” message.
+9. `rt-countdown.png` — 3, 2, 1 countdown overlay.
+10. `rt-running-target-test.png` — active target test screen.
+11. `final-result-overlay.png` — final score display.
+12. `log-camera-calibration-values.png` — log showing the four Camera calibration measurements and average.
+
+---
+
+## 11. Development Notes
+
+Current important implementation boundaries:
+
+- `beginCurrentHandRun()` routes execution to mode-specific hand-run functions.
+- `beginCursorHandRun()` handles Cursor Mode target generation.
+- `beginCameraHandRun()` handles Camera Mode target generation.
+- `generateCursorTargets()` applies the Cursor Mode spacing rule.
+- `generateCameraTargets()` preserves the Camera Mode 30 cm movement rule.
+- `runCameraCalibrationSequence()` performs the four-step Camera Auto Calibration.
+- `processTrialSample()` is part of the shared analysis pipeline.
+
+Do not merge Cursor and Camera measurement logic back into one pathway. Camera Mode is sensitive and should be modified conservatively.
