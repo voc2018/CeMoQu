@@ -1,604 +1,387 @@
 <!doctype html>
 <html lang="en">
-
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>CeMoQu – Ataxia Diagnostic Suite</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="../shared/header.css">
-    
-    <script src="../shared/header.js" defer></script>
-
+    <meta name="google" content="notranslate" />
+    <meta name="description" content="CeMoQu is a browser-based research platform for quantitative assessment of movement, speech, and coordination in cerebellar ataxia." />
+    <title>CeMoQu · Cerebellar Motor Quantification</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./shared/common.css">
+    <link rel="stylesheet" href="./shared/header.css">
+    <script src="./shared/header.js" defer></script>
     <style>
+        /* ===================================================================
+           CeMoQu homepage — instrument-panel concept.
+           Fully self-contained under the .cq- namespace so it does not
+           inherit or fight .card/.chip/.badge/.test-link rules that live
+           in shared/common.css. The header bar above this is untouched
+           and still styled by shared/header.css.
+           =================================================================== */
+
         :root {
-            --bg: #020617;
-            --panel: #02091b;
-            --panel-soft: #020b21;
-            --accent: #203fdb;
-            --accent-soft: rgba(16, 185, 129, 0.16);
-            --muted: #94a3b8;
-            --muted-soft: #1f2937;
-            --text: #e5e7eb;
-            --danger: #ef4444;
+            --cq-ink-950: #12151a;
+            --cq-ink-900: #171b22;
+            --cq-ink-800: #1f2530;
+            --cq-hairline: #2a303c;
+            --cq-paper: #ece9e2;
+            --cq-muted: #8a8f99;
+            --cq-ch-speech: #e8654a;
+            --cq-ch-target: #4fa8e0;
+            --cq-ch-line: #9fd356;
+            --cq-ch-sit: #9b7fe0;
         }
 
-        * {
-            box-sizing: border-box;
-        }
-
-        html,
         body {
-            height: 100%;
-            margin: 0;
-            font-family: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-            background: radial-gradient(circle at top, #020b21 0, #020617 45%, #000 100%);
-            color: var(--text);
+            background: var(--cq-ink-950);
+            color: var(--cq-paper);
+            font-family: 'IBM Plex Sans', system-ui, sans-serif;
         }
 
-        /* Adjusted padding for new modular header */
-        body {
-            display: flex;
-            justify-content: center;
-            padding: 16px;
-            align-items: flex-start;
-            min-height: 100vh;
-            overflow-y: auto;
-            padding-top: 130px;
+        .cq-shell {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 8px 24px 32px;
         }
 
-        .shell {
-            width: 100%;
-            max-width: 1024px;
-            border-radius: 24px;
-            background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.92));
-            border: 1px solid #111827;
-            padding: 20px 20px 22px;
-            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+        /* ---------- Hero (kept short so everything fits without scrolling) ---------- */
+
+        .cq-hero h1 {
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            font-weight: 600;
+            font-size: clamp(24px, 3vw, 32px);
+            line-height: 1.2;
+            letter-spacing: -0.01em;
+            margin: 0 0 4px;
+            color: var(--cq-paper);
         }
 
-        /* Internal Page Header (Title Block) */
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 16px;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-        }
-
-        
-        .topbar{
-            display:flex;
-            justify-content:flex-start;
-            align-items:center;
-            gap:12px;
-            flex-wrap:wrap;
-            margin-bottom:4px;
-        }
-
-        .title-block h1{
-            margin:0;
-            font-size:22px;
-            letter-spacing:0.02em;
-        }
-
-        .small-muted{
-            font-size:13px;
-            color:var(--muted);
-            margin-top:4px;
-        }
-
-        /* .title-block h1 {
-            margin: 0;
-            font-size: 24px;
-            letter-spacing: 0.02em;
-        } */
-
-        .title-block p {
-            margin: 6px 0 0;
+        .cq-hero .cq-sub {
             font-size: 14px;
-            color: var(--muted);
+            color: var(--cq-muted);
+            margin: 0 0 22px;
         }
 
-        .tag-pill {
-            border-radius: 999px;
-            padding: 6px 10px;
-            font-size: 11px;
-            border: 1px solid rgba(148, 163, 184, 0.4);
-            color: var(--muted);
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            white-space: nowrap;
-        }
+        /* ---------- Section 1: four cards in a row (title / description / Open) ---------- */
 
-        .tag-pill span.led {
-            width: 8px;
-            height: 8px;
-            border-radius: 999px;
-            background: var(--accent);
-            box-shadow: 0 0 10px rgba(16, 185, 174, 0.7);
-        }
-
-        main {
+        .cq-cards {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 28px;
         }
 
-        @media(max-width:900px) {
-            main {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
-        @media(max-width:640px) {
-            main {
-                grid-template-columns: minmax(0, 1fr);
-            }
-        }
-
-        /* Card Styles */
-        .card {
-            position: relative;
-            border-radius: 18px;
-            padding: 16px 14px 14px;
-            background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.95), var(--panel-soft));
-            border: 1px solid rgba(30, 64, 175, 0.35);
-            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.9);
+        .cq-card {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            min-height: 160px;
-            overflow: hidden;
-        }
-
-        .card::before {
-            content: "";
-            position: absolute;
-            inset: -80%;
-            background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.08), transparent 55%);
-            opacity: 0.9;
-            pointer-events: none;
-        }
-
-        .card h2 {
-            margin: 0;
-            font-size: 16px;
-        }
-
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 11px;
-            padding: 3px 8px;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.9);
-            border: 1px solid rgba(148, 163, 184, 0.35);
-            color: var(--muted);
-        }
-
-        .badge-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 999px;
-            background: var(--accent);
-        }
-
-        .card p {
-            margin: 0;
-            font-size: 13px;
-            color: var(--muted);
-            line-height: 1.4;
-        }
-
-        .meta-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: auto;
-            margin-bottom: 6px;
-            font-size: 11px;
-            color: var(--muted);
-        }
-
-        .chip {
-            padding: 3px 8px;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.9);
-            border: 1px solid rgba(31, 41, 55, 0.9);
-        }
-
-        a.test-link {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 8px 10px;
-            border-radius: 999px;
-            border: 0;
-            outline: none;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            text-decoration: none;
-            background: linear-gradient(135deg, var(--accent), #21c1fb);
-            color: #052012;
-            transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.08s ease;
-            white-space: nowrap;
-        }
-
-        a.test-link:hover {
-            transform: translateY(-1px);
-            filter: brightness(1.03);
-        }
-
-        footer {
-            margin-top: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            font-size: 11px;
-            color: var(--muted);
-        }
-
-        footer .left {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        footer .dot {
-            width: 4px;
-            height: 4px;
-            border-radius: 999px;
-            background: rgba(148, 163, 184, 0.7);
-        }
-
-        /* --- Participant Metadata styles (match card) --- */
-        .metadata-card {
-            padding: 14px;
-            border-radius: 14px;
-        }
-
-        .metadata-form {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px 12px;
-            align-items: start;
-        }
-
-        @media(max-width:640px) {
-            .metadata-form {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .form-row {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        label {
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        input[type="text"],
-        input[type="number"],
-        select,
-        textarea {
-            background: rgba(10, 12, 20, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.08);
-            color: var(--text);
-            padding: 10px 12px;
-            border-radius: 10px;
-            outline: none;
-            font-size: 14px;
-            min-height: 36px;
-        }
-
-        input[readonly] {
-            opacity: 0.85;
-            background: rgba(10, 12, 20, 0.35);
-        }
-
-        textarea {
-            min-height: 84px;
-            resize: vertical;
-            padding-top: 10px;
-        }
-
-        .muted-hint {
-            font-size: 12px;
-            color: var(--muted);
-        }
-
-        .form-actions {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-top: 6px;
-        }
-
-        .btn {
-            padding: 8px 12px;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            background: linear-gradient(135deg, var(--accent), #21c1fb);
-            color: #052012;
-            border: none;
-            box-shadow: none;
-            outline: none;
-        }
-
-        .btn.ghost {
-            background: transparent;
-            border: 1px solid rgba(148, 163, 184, 0.12);
-            color: var(--muted);
-            font-weight: 600;
-        }
-
-        .small-note {
-            font-size: 12px;
-            color: var(--muted);
-            margin-left: auto;
-        }
-
-        /* keep form visually light */
-        .field-grid {
-            display: flex;
             gap: 8px;
+            padding: 16px 16px 14px;
+            border: 1px solid var(--cq-hairline);
+            border-top: 3px solid var(--cq-hairline);
+            border-radius: 8px;
+            background: var(--cq-ink-900);
+            text-decoration: none;
+            color: inherit;
+            transition: border-color 0.15s ease, transform 0.15s ease;
+        }
+        .cq-card:hover { transform: translateY(-2px); }
+        .cq-card:focus-visible {
+            outline: 2px solid var(--cq-paper);
+            outline-offset: 3px;
+        }
+        .cq-card.speech { border-top-color: var(--cq-ch-speech); }
+        .cq-card.target { border-top-color: var(--cq-ch-target); }
+        .cq-card.line   { border-top-color: var(--cq-ch-line); }
+        .cq-card.sit    { border-top-color: var(--cq-ch-sit); }
+
+        .cq-card h2 {
+            font-family: 'Space Grotesk', system-ui, sans-serif;
+            font-weight: 600;
+            font-size: 15.5px;
+            line-height: 1.3;
+            margin: 0;
+            color: var(--cq-paper);
         }
 
-        .field-grid>* {
+        .cq-card p {
+            font-size: 12.5px;
+            line-height: 1.5;
+            color: #b7b4ac;
+            margin: 0;
             flex: 1;
+        }
+
+        .cq-card .cq-input {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 10.5px;
+            color: var(--cq-muted);
+        }
+
+        .cq-card .cq-open {
+            font-size: 12.5px;
+            font-weight: 500;
+            color: var(--cq-paper);
+            border-bottom: 1px solid var(--cq-hairline);
+            padding-bottom: 2px;
+            align-self: flex-start;
+            transition: border-color 0.15s ease, color 0.15s ease;
+        }
+        .cq-card:hover .cq-open { color: #fff; border-bottom-color: currentColor; }
+
+        .cq-card-graphic {
+            margin-top: auto;
+            padding-top: 10px;
+            border-top: 1px solid var(--cq-hairline);
+            aspect-ratio: 1 / 1;
+            width: 100%;
+        }
+
+        .cq-card-graphic svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+        }
+
+        .cq-target {
+            opacity: 0;
+            transform-box: fill-box;
+            transform-origin: center;
+            transform: scale(0.5);
+            animation: cq-target-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        .cq-trace {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: miter;
+            stroke-dasharray: 2000;
+            stroke-dashoffset: 2000;
+            animation: cq-draw 1.4s ease-out forwards;
+        }
+
+        @keyframes cq-draw { to { stroke-dashoffset: 0; } }
+        @keyframes cq-target-pop { to { opacity: 1; transform: scale(1); } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .cq-trace { animation: none; stroke-dashoffset: 0; }
+            .cq-target { animation: none; opacity: 1; transform: scale(1); }
+        }
+
+        @media (max-width: 860px) {
+            .cq-cards { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 480px) {
+            .cq-cards { grid-template-columns: 1fr; }
+        }
+
+        /* ---------- Footer ---------- */
+
+        .cq-footer-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-top: 18px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .cq-footer-org {
+            font-size: 12px;
+            color: var(--cq-muted);
+            line-height: 1.5;
+        }
+
+        .cq-footer-org strong {
+            color: var(--cq-paper);
+            font-weight: 600;
+        }
+
+        .cq-footer-disclaimer {
+            font-size: 11px;
+            color: var(--cq-muted);
+            opacity: 0.75;
+        }
+
+        .cq-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--cq-muted);
+        }
+
+        .cq-footer nav { display: flex; gap: 18px; flex-wrap: wrap; }
+
+        .cq-footer a {
+            color: var(--cq-muted);
+            text-decoration: none;
+        }
+        .cq-footer a:hover { color: var(--cq-paper); }
+        .cq-footer a:focus-visible {
+            outline: 2px solid var(--cq-paper);
+            outline-offset: 3px;
+        }
+
+        .cq-footer .cq-version {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
         }
     </style>
 </head>
-
 <body>
-    <div id="header-container"></div>
-    <div class="shell">
-        <header>
-            <div class="title-block">
-                <h1>CeMoQu · Cerebral Motion Quantitative </h1>
-                <p>Select a test to launch. </p>
-            </div>
-            <div class="tag-pill">
-                <span class="led"></span>
-                Homepage
-            </div>
-        </header>
+    <div id="header-container" data-base="./"></div>
 
-        <main>
-            <section class="card">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                    <div>
-                        <h2>Speech Disturbance Test</h2>
-                        <div class="badge"><span class="badge-dot"></span> SARA-4 compatible</div>
-                    </div>
-                </div>
-                <p>
-                    Guided 5-sentence reading task that records audio, tracks loudness and pitch stability,
-                    and maps variability to a 0–6 stability score.
-                </p>
-                <div class="meta-row">
-                    <div class="chip">Input: Microphone</div>
-                    <a class="test-link" href="../SD/index.html">
-                        Open Speech Test
-                    </a>
-                </div>
-            </section>
+    <div class="cq-shell">
 
-            <section class="card">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                    <div>
-                        <h2>Random Target Touch Test</h2>
-                        <div class="badge"><span class="badge-dot"></span> Cursor &amp; Camera modes</div>
-                    </div>
-                </div>
-                <p>
-                    Point-to-target task for upper-limb control. Measures error distance, tremor, smoothness,
-                    and time-in-target; exports trial-by-trial metrics to CSV.
-                </p>
-                <div class="meta-row">
-                    <div class="chip">Input: Mouse / Finger Tracking</div>
-                    <a class="test-link" href="../RT/index.html">
-                        Open Target Test
-                    </a>
-                </div>
-            </section>
-
-            <section class="card">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                    <div>
-                        <h2>Line Drawing Test</h2>
-                        <div class="badge"><span class="badge-dot"></span> CeMoQu Line Task</div>
-                    </div>
-                </div>
-                <p>
-                    Start–finish line tracing (horizontal, vertical, diagonal). Tracks deviation, turns,
-                    off-line segments, and maps them to a SARA-style subscore.
-                </p>
-                <div class="meta-row">
-                    <div class="chip">Input: Mouse / Touch</div>
-                    <a class="test-link" href="../LD/index.html">
-                        Open Line Test
-                    </a>
-                </div>
-            </section>
-
-            <section class="card">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                    <div>
-                        <h2>Sitting Balance Test</h2>
-                        <div class="badge"><span class="badge-dot"></span> SARA Item 3</div>
-                    </div>
-                </div>
-                <p>
-                    10-second sitting balance assessment using webcam pose detection.
-                    Tracks shoulder midpoint sway and scores 0–4 per SARA criteria.
-                </p>
-                <div class="meta-row">
-                    <div class="chip">Input: Webcam (MediaPipe Pose)</div>
-                    <a class="test-link" href="./ST/index.html">
-                        Open Sitting Test
-                    </a>
-                </div>
-            </section>
-        </main>
-
-        <section class="card metadata-card" aria-labelledby="metadata-title" style="margin-top:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                <div>
-                    <h2 id="metadata-title">Participant Metadata Input Panel</h2>
-                    <div class="badge"><span class="badge-dot"></span> Local Metadata</div>
-                </div>
-            </div>
-
-            <form id="metadata-form" class="metadata-form" onsubmit="return false;" aria-describedby="metadata-note">
-                <div class="form-row">
-                    <label for="participant-id">Participant ID / Name</label>
-                    <input id="participant-id" name="participantId" type="text" placeholder="e.g., P-001 or Jane Doe" />
-                </div>
-
-                <div class="form-row">
-                    <label for="session-id">Session ID <span class="muted-hint">(auto-generated)</span></label>
-                    <input id="session-id" name="sessionId" type="text" readonly />
-                </div>
-
-                <div class="form-row">
-                    <label for="age">Age</label>
-                    <input id="age" name="age" type="number" min="0" max="120" placeholder="years" />
-                </div>
-
-                <div class="form-row">
-                    <label for="gender">Gender</label>
-                    <select id="gender" name="gender">
-                        <option value="" selected>Prefer not to answer</option>
-                        <option value="female">Female</option>
-                        <option value="male">Male</option>
-                        <option value="nonbinary">Non-binary</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-
-                <div class="form-row">
-                    <label for="dominant-hand">Dominant Hand <span class="muted-hint">(optional — used by Random Target
-                            Touch Test)</span></label>
-                    <div id="dominant-hand" class="field-grid" aria-describedby="dominant-hand-hint">
-                        <select name="dominantHand">
-                            <option value="">(not specified)</option>
-                            <option value="right">Right</option>
-                            <option value="left">Left</option>
-                            <option value="ambidextrous">Ambidextrous</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-row" style="grid-column: 1 / -1;">
-                    <label for="notes">Notes (clinician)</label>
-                    <textarea id="notes" name="notes"
-                        placeholder="Clinician notes, conditions, reminders..."></textarea>
-                </div>
-
-                <div class="form-row" style="grid-column: 1 / -1;">
-                    <div class="form-actions">
-                        <button id="save-btn" class="btn" type="button">Save Locally (Download JSON)</button>
-                        <button id="clear-btn" class="btn ghost" type="button">Clear</button>
-                        <div class="small-note" id="metadata-note">This information is stored locally and is included in
-                            exported CSVs.</div>
-                    </div>
-                </div>
-            </form>
+        <section class="cq-hero">
+            <h1>CeMoQu: Cerebellar Motor Quantification</h1>
+            <p class="cq-sub">Four browser-based tasks, no specialized hardware — each produces a continuous, quantitative trace that supplements (not replaces) clinical rating scales.</p>
         </section>
 
-        <footer>
-            <div class="left">
-                <span>Local processing only. No data is uploaded.</span>
-                <span class="dot"></span>
-                <a href="https://github.com/voc2018/CeMoQu" target="_blank" rel="noopener"
-                    style="color: var(--muted); text-decoration: none;">
-                    Documentation link
-                </a>
-                <span class="dot"></span>
-                <a href="https://github.com/voc2018/CeMoQu" target="_blank" rel="noopener"
-                    style="color: var(--muted); text-decoration: none;">
-                    Contact link
-                </a>
+        <div class="cq-cards">
+            <a class="cq-card speech" href="./SD/index.html">
+                <h2>Speech Disturbance Test</h2>
+                <p>Reads guided passages, repeats "pa-ta-ka" rapidly, and sustains an "Ah" vowel. Extracts voice duration, loudness stability, pause ratio, and pitch (F0) variation to quantify dysarthric speech changes over time.</p>
+                <span class="cq-input">Microphone</span>
+                <span class="cq-open">Open</span>
+                <div class="cq-card-graphic" aria-hidden="true">
+                    <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+                        <path class="cq-trace" stroke="var(--cq-ch-speech)" d="M0,100 Q9.5,50 19,100 T38,100 T57,100 T76,100 T95,100 T114,100" />
+                        <rect x="163" y="62" width="24" height="46" rx="12" fill="none" stroke="var(--cq-ch-speech)" stroke-width="3"/>
+                        <path d="M153,97 a22,22 0 0 0 44,0" fill="none" stroke="var(--cq-ch-speech)" stroke-width="3"/>
+                        <line x1="175" y1="119" x2="175" y2="137" stroke="var(--cq-ch-speech)" stroke-width="3"/>
+                        <line x1="160" y1="137" x2="190" y2="137" stroke="var(--cq-ch-speech)" stroke-width="3" stroke-linecap="round"/>
+                    </svg>
+                </div>
+            </a>
+
+            <a class="cq-card target" href="./RT/index.html">
+                <h2>Random Target Touch Test</h2>
+                <p>Reach and tap targets that appear at random screen positions using mouse, touch, or webcam-tracked movement. Captures reaction time, final positional error, tremor, and time spent within the target zone.</p>
+                <span class="cq-input">Mouse · Touch · Camera</span>
+                <span class="cq-open">Open</span>
+                <div class="cq-card-graphic" aria-hidden="true">
+                    <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+                        <g class="cq-target" style="animation-delay:0.1s">
+                            <circle cx="35" cy="45" r="16" fill="none" stroke="var(--cq-ch-target)" stroke-width="2.2"/>
+                            <circle cx="35" cy="45" r="4" fill="var(--cq-ch-target)"/>
+                        </g>
+                        <g class="cq-target" style="animation-delay:0.35s">
+                            <circle cx="155" cy="30" r="16" fill="none" stroke="var(--cq-ch-target)" stroke-width="2.2"/>
+                            <circle cx="157" cy="27" r="4" fill="var(--cq-ch-target)"/>
+                        </g>
+                        <g class="cq-target" style="animation-delay:0.6s">
+                            <circle cx="70" cy="110" r="16" fill="none" stroke="var(--cq-ch-target)" stroke-width="2.2"/>
+                            <circle cx="67" cy="113" r="4" fill="var(--cq-ch-target)"/>
+                        </g>
+                        <g class="cq-target" style="animation-delay:0.85s">
+                            <circle cx="165" cy="140" r="16" fill="none" stroke="var(--cq-ch-target)" stroke-width="2.2"/>
+                            <circle cx="168" cy="137" r="4" fill="var(--cq-ch-target)"/>
+                        </g>
+                        <g class="cq-target" style="animation-delay:1.1s">
+                            <circle cx="30" cy="155" r="16" fill="none" stroke="var(--cq-ch-target)" stroke-width="2.2"/>
+                            <circle cx="27" cy="158" r="4" fill="var(--cq-ch-target)"/>
+                        </g>
+                        <g class="cq-target" style="animation-delay:1.35s">
+                            <circle cx="105" cy="175" r="16" fill="none" stroke="var(--cq-ch-target)" stroke-width="2.2"/>
+                            <circle cx="108" cy="172" r="4" fill="var(--cq-ch-target)"/>
+                        </g>
+                    </svg>
+                </div>
+            </a>
+
+            <a class="cq-card line" href="./LD/index.html">
+                <h2>Line Drawing Test</h2>
+                <p>Traces horizontal, vertical, and diagonal guide lines with the mouse or a touchscreen. Measures completion time, path deviation from the guide, discontinuities, corrective turns, and time spent outside the drawing bounds.</p>
+                <span class="cq-input">Mouse · Touch</span>
+                <span class="cq-open">Open</span>
+                <div class="cq-card-graphic" aria-hidden="true">
+                    <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+                        <line x1="25" y1="175" x2="175" y2="25" stroke="var(--cq-muted)" stroke-width="1.5" stroke-dasharray="3 5"/>
+                        <g transform="rotate(-45 100 100)">
+                            <path class="cq-trace" stroke="var(--cq-ch-line)" d="M0,100 L18,72 L34,118 L52,80 L70,125 L90,70 L108,120 L128,78 L148,122 L168,85 L185,110 L200,100" />
+                        </g>
+                    </svg>
+                </div>
+            </a>
+
+            <a class="cq-card sit" href="./ST/index.html">
+                <h2>Sitting Balance Test</h2>
+                <p>Sits facing a webcam while pose tracking follows shoulder position over time. Measures upper-body sway and how level the shoulders stay, without any wearable sensors.</p>
+                <span class="cq-input">Webcam</span>
+                <span class="cq-open">Open</span>
+                <div class="cq-card-graphic" aria-hidden="true">
+                    <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+                        <g class="cq-target" style="animation-delay:0.1s">
+                            <line x1="23" y1="47" x2="67" y2="47" stroke="var(--cq-muted)" stroke-width="1.3" stroke-dasharray="3 4"/>
+                            <g transform="rotate(-11 45 77)">
+                                <line x1="23" y1="77" x2="67" y2="77" stroke="var(--cq-ch-sit)" stroke-width="2.4"/>
+                                <circle cx="23" cy="77" r="3.2" fill="var(--cq-ch-sit)"/>
+                                <circle cx="67" cy="77" r="3.2" fill="var(--cq-ch-sit)"/>
+                            </g>
+                        </g>
+                        <g class="cq-target" style="animation-delay:0.3s">
+                            <line x1="78" y1="47" x2="122" y2="47" stroke="var(--cq-muted)" stroke-width="1.3" stroke-dasharray="3 4"/>
+                            <g transform="rotate(7 100 77)">
+                                <line x1="78" y1="77" x2="122" y2="77" stroke="var(--cq-ch-sit)" stroke-width="2.4"/>
+                                <circle cx="78" cy="77" r="3.2" fill="var(--cq-ch-sit)"/>
+                                <circle cx="122" cy="77" r="3.2" fill="var(--cq-ch-sit)"/>
+                            </g>
+                        </g>
+                        <g class="cq-target" style="animation-delay:0.5s">
+                            <line x1="133" y1="47" x2="177" y2="47" stroke="var(--cq-muted)" stroke-width="1.3" stroke-dasharray="3 4"/>
+                            <g transform="rotate(-5 155 77)">
+                                <line x1="133" y1="77" x2="177" y2="77" stroke="var(--cq-ch-sit)" stroke-width="2.4"/>
+                                <circle cx="133" cy="77" r="3.2" fill="var(--cq-ch-sit)"/>
+                                <circle cx="177" cy="77" r="3.2" fill="var(--cq-ch-sit)"/>
+                            </g>
+                        </g>
+                        <g class="cq-target" style="animation-delay:0.7s">
+                            <line x1="45" y1="127" x2="89" y2="127" stroke="var(--cq-muted)" stroke-width="1.3" stroke-dasharray="3 4"/>
+                            <g transform="rotate(9 67 157)">
+                                <line x1="45" y1="157" x2="89" y2="157" stroke="var(--cq-ch-sit)" stroke-width="2.4"/>
+                                <circle cx="45" cy="157" r="3.2" fill="var(--cq-ch-sit)"/>
+                                <circle cx="89" cy="157" r="3.2" fill="var(--cq-ch-sit)"/>
+                            </g>
+                        </g>
+                        <g class="cq-target" style="animation-delay:0.9s">
+                            <line x1="111" y1="127" x2="155" y2="127" stroke="var(--cq-muted)" stroke-width="1.3" stroke-dasharray="3 4"/>
+                            <g transform="rotate(-3 133 157)">
+                                <line x1="111" y1="157" x2="155" y2="157" stroke="var(--cq-ch-sit)" stroke-width="2.4"/>
+                                <circle cx="111" cy="157" r="3.2" fill="var(--cq-ch-sit)"/>
+                                <circle cx="155" cy="157" r="3.2" fill="var(--cq-ch-sit)"/>
+                            </g>
+                        </g>
+                    </svg>
+                </div>
+            </a>
+        </div>
+
+        <div class="cq-footer-wrap">
+            <div class="cq-footer-org">
+                <strong>Voice of Calling NPO</strong> · Life and Research Center<br>
+                AtaxiaV Project — Cohort 5
             </div>
+            <div class="cq-footer-disclaimer">
+                CeMoQu is a research tool and does not replace clinical diagnosis.
+            </div>
+            <footer class="cq-footer">
+                <nav aria-label="Footer links">
+                    <a href="https://ataxiav.com" target="_blank" rel="noopener">ataxiav.com</a>
+                    <span aria-hidden="true" style="opacity:0.5">Contact us (coming soon)</span>
+                    <a href="https://github.com/voc2018/CeMoQu" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.linkedin.com/company/ataxiav/" target="_blank" rel="noopener">LinkedIn</a>
+                </nav>
+                <span class="cq-version">v0.2</span>
+            </footer>
+        </div>
 
-            <div>CeMoQu · v0.1</div>
-        </footer>
-
-        <script>
-            (function () {
-                // Simple session id generator: ISO timestamp + random 4-char hex
-                function generateSessionId() {
-                    const ts = new Date().toISOString().replace(/[:.]/g, '-');
-                    const rand = Math.floor(Math.random() * 0xFFFF).toString(16).padStart(4, '0');
-                    return 'S-' + ts + '-' + rand;
-                }
-
-                const sessionField = document.getElementById('session-id');
-                if (sessionField) {
-                    sessionField.value = generateSessionId();
-                }
-
-                // Save locally button -> creates a JSON file and triggers download
-                const saveBtn = document.getElementById('save-btn');
-                const clearBtn = document.getElementById('clear-btn');
-
-                function collectFormData() {
-                    const fm = document.getElementById('metadata-form');
-                    const data = {
-                        participantId: fm.participantId.value || '',
-                        sessionId: fm.sessionId.value || '',
-                        age: fm.age.value || '',
-                        gender: fm.gender.value || '',
-                        dominantHand: fm.dominantHand ? fm.dominantHand.value : '',
-                        notes: fm.notes.value || '',
-                        savedAt: new Date().toISOString()
-                    };
-                    return data;
-                }
-
-                function downloadObjectAsJson(obj, filename) {
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(obj, null, 2));
-                    const dlAnchor = document.createElement('a');
-                    dlAnchor.setAttribute("href", dataStr);
-                    dlAnchor.setAttribute("download", filename);
-                    document.body.appendChild(dlAnchor);
-                    dlAnchor.click();
-                    dlAnchor.remove();
-                }
-
-                if (saveBtn) {
-                    saveBtn.addEventListener('click', function () {
-                        const data = collectFormData();
-                        const filename = (data.participantId ? data.participantId : 'participant') + '_' + (data.sessionId ? data.sessionId : 'session') + '.json';
-                        downloadObjectAsJson(data, filename);
-                    });
-                }
-
-                if (clearBtn) {
-                    clearBtn.addEventListener('click', function () {
-                        const fm = document.getElementById('metadata-form');
-                        fm.reset();
-                        // regenerate session id after clearing
-                        if (sessionField) sessionField.value = generateSessionId();
-                    });
-                }
-            })();
-        </script>
+    </div>
 </body>
-
 </html>
