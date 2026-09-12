@@ -135,8 +135,6 @@ Select Cursor Mode
 
 Cursor Mode must not begin a test until calibration has been verified.
 
-![Screenshot needed: Cursor Mode calibration bar before verification](./docs/screenshots/cursor-calibration-before-verify.png)
-
 ![Screenshot needed: Cursor Mode calibration verified result](./docs/screenshots/cursor-calibration-verified.png)
 
 ---
@@ -169,7 +167,7 @@ Select Camera Mode
 
 During the four calibration captures, intermediate raw calibration values are logged for verification but the user-facing flow should remain simple. The final average is used as the Camera Mode scale.
 
-![Screenshot needed: Camera Mode selected with actual index finger length input](./docs/screenshots/camera-mode-enter-finger-length.png)
+![Screenshot needed: Camera Mode selected with actual index finger length input](./docs/screenshots/camera-mode-finger-length)
 
 ![Screenshot needed: Camera Auto Calibration hand-open instruction](./docs/screenshots/camera-auto-calibration-open-palm.png)
 
