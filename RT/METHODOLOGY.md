@@ -1,71 +1,56 @@
-# CeMoQu RT — Methodology
+# RT Methodology
 
-**Module:** RT — Random Target Touch / Digital Finger Chase  
-**Build reviewed:** `RT091226`  
-**Scope:** Measurement, calibration, target generation, trial timing, and scoring methodology
+This document specifies **how RT turns cursor or camera movement into numerical measurements and scores**.
 
----
+It is organized in two parts:
 
-## 1. Measurement Overview
+- **Part A** — how raw cursor/camera samples become movement measurements
+- **Part B** — how those measurements become the provisional SARA Finger Chase estimate
 
-The RT module measures point-to-target upper-limb movement using either direct pointer input or webcam-based finger tracking.
-
-The module has two measurement pipelines:
-
-1. **Cursor Mode** — measures screen pointer movement.
-2. **Camera Mode** — measures webcam-tracked index fingertip movement.
-
-After each mode produces standardized `x, y, t` movement samples, both modes use the same analysis pipeline.
-
-```text
-Mode-specific measurement
-→ standardized movement samples
-→ trial-level analysis
-→ hand-level summary
-→ final right/left combined result
-```
+> **These thresholds and weights are engineering placeholders, not clinically validated cutoffs.** Current scoring configuration: `rt-scoring-v1`.
 
 ---
 
-## 2. Cursor Mode Calibration
+## Part A — from movement input to measurements
 
-Cursor Mode converts screen pixels to centimeters using the physical calibration bar displayed on screen.
+### A1. Mode-specific measurement pipelines
 
-The user measures the orange calibration bar with a physical ruler and enters the measured length in centimeters.
+RT supports Cursor Mode and Camera Mode. They do not use the same measurement pipeline.
 
-The program calculates:
+| Stage | Cursor Mode | Camera Mode |
+|---|---|---|
+| Input source | Mouse, trackpad, touchscreen pointer | Webcam fingertip tracking |
+| Calibration source | On-screen calibration bar | Actual index-finger length |
+| Coordinate source | Screen/canvas coordinates | Camera frame / MediaPipe landmarks |
+| Movement distance | At least 20 cm between consecutive targets | Exactly 30 cm between consecutive targets |
+| Target generation | Cursor-specific generator | Camera-specific exact-distance generator |
 
-```text
-cursor pixels/cm = calibration bar pixel width ÷ measured bar length in cm
-```
+After either mode produces standardized `(x, y, timestamp)` samples, the same analysis functions are used.
 
-This value is then used for:
+### A2. Cursor Mode calibration
 
-- target diameter conversion
-- target spacing conversion
-- movement distance calculations
-- trajectory analysis
-- score-related centimeter measurements
+Cursor Mode uses a visible calibration bar on the screen.
 
-Cursor Mode calibration must be verified before the test can begin.
-
-![Screenshot needed: Cursor calibration bar and input](./docs/screenshots/cursor-calibration-before-verify.png)
-
----
-
-## 3. Camera Mode Calibration
-
-Camera Mode uses MediaPipe Hands to detect hand landmarks. The participant enters the actual index finger length in centimeters.
-
-The index finger is measured in image pixels using MediaPipe landmarks for the index finger chain. The pixel length is divided by the actual finger length.
+1. The user measures the calibration bar with a physical ruler.
+2. The user enters the measured value in centimeters.
+3. The app calculates the screen scale:
 
 ```text
-camera pixels/cm = measured index finger length in px ÷ actual index finger length in cm
+cursorPixelsPerCm = calibrationBarPixelWidth / enteredBarLengthCm
 ```
 
-### 3.1 Four-step Auto Calibration
+4. The value is used to convert all Cursor Mode distances between pixels and centimeters.
 
-A single camera measurement can be unstable because hand distance, angle, landmark detection, and frame noise can affect the measured pixel length. Therefore Camera Mode uses four calibration captures:
+The verified Cursor Mode calibration is retained only during the current browser session. It is not intended to be trusted across a reopened page, changed browser zoom, changed monitor, changed window size, or changed display scaling.
+
+### A3. Camera Mode calibration
+
+Camera Mode uses the participant's actual index-finger length.
+
+1. The user enters the actual index-finger length in centimeters.
+2. The user clicks **Auto Calibration**.
+3. The app asks the participant to open the palm and show the hand to the camera.
+4. The app performs four calibration captures:
 
 ```text
 1. Right hand
@@ -74,222 +59,279 @@ A single camera measurement can be unstable because hand distance, angle, landma
 4. Left hand
 ```
 
-Each capture produces one `pixels/cm` value. The final camera calibration value is the arithmetic mean of the four values.
+For each calibration capture, the app collects MediaPipe hand-landmark samples and estimates the index-finger length in pixels. The capture returns a pixels-per-centimeter value:
 
 ```text
-average camera pixels/cm = (cal1 + cal2 + cal3 + cal4) ÷ 4
+pixelsPerCmForCapture = measuredIndexFingerLengthPx / actualIndexFingerLengthCm
 ```
 
-Only the final averaged calibration value should be used for the test. Intermediate values are useful for verification logs.
+The four capture values are then averaged:
 
-![Screenshot needed: Camera Auto Calibration open-palm instruction](./docs/screenshots/camera-auto-calibration-open-palm.png)
+```text
+cameraPixelsPerCm = (capture1 + capture2 + capture3 + capture4) / 4
+```
 
-![Screenshot needed: Log showing four calibration values and final average](./docs/screenshots/log-camera-calibration-values.png)
+Only the final average is shown to the user. Intermediate values are logged for development/debugging but are not intended to be the user-facing calibration result.
 
-### 3.2 Camera Calibration Quality Check
+### A4. Target size
 
-After the average pixels/cm value is calculated, the program checks whether the camera view has enough usable movement space for the target task. If the participant is too close to the camera, the view may not contain enough real-world movement distance.
+The setting labeled **Target diameter (cm)** is converted internally into a radius:
 
-When the usable space is insufficient, the user should move farther away and repeat Auto Calibration.
+```text
+targetRadiusCm = targetDiameterCm / 2
+```
+
+At runtime, the target radius is converted to pixels using the active mode's calibration scale:
+
+```text
+Cursor Mode: targetRadiusPx = targetRadiusCm × cursorPixelsPerCm
+Camera Mode: targetRadiusPx = targetRadiusCm × cameraPixelsPerCm
+```
+
+The displayed circle should therefore reflect the current calibration and the selected target diameter.
+
+### A5. Target generation
+
+Targets are generated at the start of each hand run.
+
+```text
+Start Test
+→ generate right-hand targets
+→ run right-hand test
+→ generate left-hand targets
+→ run left-hand test
+```
+
+Targets are not meant to be reused across a new hand run.
+
+#### Cursor Mode target generation
+
+Cursor Mode uses `generateCursorTargets(...)`.
+
+- Consecutive targets must be at least 20 cm apart.
+- The algorithm uses the cursor/touchscreen working area.
+- If the requested number of targets cannot fit at the required spacing, target generation fails instead of silently accepting shorter distances.
+
+```text
+minimumCursorDistancePx = 20 cm × cursorPixelsPerCm
+```
+
+#### Camera Mode target generation
+
+Camera Mode uses `generateCameraTargets(...)`, which wraps the existing exact-distance target generator.
+
+- Consecutive targets are generated at exactly 30 cm.
+- Camera Mode preserves the original camera target-generation behavior as much as possible.
+- Target centers are restricted to the upper portion of the frame so that the task remains visible and reachable within the camera layout.
+
+```text
+cameraDistancePx = 30 cm × cameraPixelsPerCm
+```
+
+### A6. Sampling and trial windows
+
+Each target is active for the configured target interval, usually 2 seconds.
+
+During each target window, the app records frame-level information:
+
+```text
+timestamp
+x position
+y position
+inside target or outside target
+hand
+trial index
+```
+
+The target window is capped at the scheduled end time so that frame/timer jitter does not lengthen a trial beyond the configured interval.
+
+### A7. Time inside target
+
+Time inside target is calculated from actual frame timestamps, not by assuming a fixed frame rate.
+
+For each interval between two samples:
+
+```text
+if the starting sample is inside the target:
+    add that interval duration to timeInside
+```
+
+The final interval from the last sample to the scheduled end of the target window is handled the same way.
+
+```text
+percentTimeInside = timeInsideSeconds / totalTrialSeconds × 100
+```
+
+This is exported as a research metric. It is not currently part of the final SARA Finger Chase score.
+
+### A8. Reaction time
+
+Reaction time is the time from target onset to the first valid sample inside the target.
+
+```text
+reactionTime = firstInsideTimestamp - targetStartTimestamp
+```
+
+If the pointer/fingertip never enters the target during the target window, reaction time is unavailable.
+
+Reaction time is exported and displayed, but it is not currently part of the final SARA Finger Chase score.
+
+### A9. Arrival detection
+
+The scoring pipeline does not use the last frame as the primary dysmetria point. Instead, it estimates an **arrival point**: the moment when the movement stops reaching toward the target and enters the hold phase.
+
+The current implementation finds arrival by velocity:
+
+```text
+arrival = first point after peak velocity where velocity falls to <= 8% of peak velocity
+          and stays low for at least 100 ms
+```
+
+If no such point is detected, arrival-based dysmetria is unavailable for that target.
+
+### A10. Dysmetria measurement
+
+Dysmetria is measured at the arrival point:
+
+```text
+arrivalDistanceCm = distance(arrivalPoint, targetCenter) converted to cm
+```
+
+This value is the primary SARA-aligned Finger Chase metric in the current scoring configuration.
+
+### A11. Post-arrival tremor measurement
+
+After arrival is detected, the app analyzes the hold phase from the arrival point to the scheduled end of the target window.
+
+The current tremor-related measure is the P95 radial deviation from the median hold position:
+
+1. Collect post-arrival hold positions.
+2. Compute the median hold `x` and median hold `y`.
+3. Compute radial distance of each hold sample from that median hold position.
+4. Use the 95th percentile radial distance.
+5. Convert that pixel distance to centimeters.
+
+This is exported as `tremor_cm` and contributes to the experimental weighted CeMoQu score when available.
+
+### A12. Tracking-spike filtering
+
+Raw positions are retained for audit/export, but a filtered position sequence is used for measurement. Tracking spikes are removed before velocity, arrival, and tremor calculations.
+
+The export records how many tracking outliers were removed and what percent of the usable sequence they represent.
+
+### A13. Low-FPS flag in Camera Mode
+
+Camera Mode records the measured frame rate. If measured camera FPS falls below the configured reliability threshold, tremor-related values are flagged as lower confidence rather than hidden.
+
+Current threshold:
+
+```text
+minReliableFps = 20
+```
 
 ---
 
-## 4. Target Generation
+## Part B — from measurements to the score
 
-Target sets are generated before each hand run.
+### B1. Current scoring configuration
 
-```text
-Right hand run starts → generate right-hand targets
-Left hand run starts  → generate left-hand targets
-```
-
-The module does not reuse the same target set across hands. Each hand run receives its own newly generated target sequence.
-
-### 4.1 Cursor Mode Target Rule
-
-Cursor Mode uses the calibrated screen scale and requires consecutive targets to be at least 20 cm apart.
+Current configuration:
 
 ```text
-minimum cursor target spacing = 20 cm
+version: rt-scoring-v1
+arrival velocity threshold: 8% of peak velocity
+arrival sustain time: 100 ms
+dysmetria weight: 60%
+tremor weight: 40%
+minimum reliable camera FPS: 20
 ```
 
-This avoids target placements that are too close together on a touchscreen or mouse-based test.
+### B2. Dysmetria severity conversion
 
-### 4.2 Camera Mode Target Rule
+Arrival distance in centimeters is converted to a 0–3 dysmetria score.
 
-Camera Mode preserves the camera movement rule:
+| Arrival distance | Dysmetria score |
+|---|---:|
+| < 1 cm | 0 |
+| 1 to < 5 cm | 1 |
+| 5 to < 15 cm | 2 |
+| ≥ 15 cm | 3 |
+| Missing / no arrival detected | Unavailable |
+
+### B3. Tremor severity conversion
+
+Post-arrival P95 radial deviation is converted to a 0–3 tremor score.
+
+| P95 radial deviation | Tremor score |
+|---|---:|
+| < 1 cm | 0 |
+| 1 to < 2 cm | 1 |
+| 2 to < 5 cm | 2 |
+| ≥ 5 cm | 3 |
+| Missing hold phase | Unavailable |
+
+### B4. Experimental CeMoQu weighted target score
+
+When both dysmetria and tremor are available:
 
 ```text
-camera target movement distance = 30 cm
+weightedTargetScore = round(dysmetriaScore × 0.60 + tremorScore × 0.40)
 ```
 
-Camera target generation should be changed only carefully, because this mode depends on the webcam frame, MediaPipe coordinate mapping, and calibration.
+If tremor is unavailable but dysmetria is available, the target can still retain the dysmetria score rather than failing the entire target.
 
----
+### B5. SARA-aligned Finger Chase score
 
-## 5. Trial Timing
-
-Each target is displayed for the configured target interval. The current default is:
+The current SARA-aligned Finger Chase score is based on dysmetria from the last three valid movements.
 
 ```text
-target interval = 2.0 seconds
+SARA Finger Chase Score = average(lastThreeDysmetriaScores)
 ```
 
-The target window does not wait for the participant to arrive. The program advances according to the schedule.
+The run is marked unavailable if:
 
-Default sequence:
+- the run is incomplete,
+- hand tracking is missing,
+- or arrival cannot be detected for all required final movements.
+
+Missing automated measurements are **not** automatically converted into SARA score 4. That category should not be assigned by the browser solely because tracking failed.
+
+### B6. Worked example
+
+Assume the final three valid movements have arrival distances:
 
 ```text
-Right-hand start message: 3 seconds
-Countdown: 3, 2, 1
-Target 1: 2 seconds
-Target 2: 2 seconds
-Target 3: 2 seconds
-Target 4: 2 seconds
-Target 5: 2 seconds
-Left-hand start message: 3 seconds
-Countdown: 3, 2, 1
-Target 1: 2 seconds
-...
-Final result
+Movement 3: 0.8 cm → dysmetria score 0
+Movement 4: 3.2 cm → dysmetria score 1
+Movement 5: 6.5 cm → dysmetria score 2
 ```
 
-![Screenshot needed: Right-hand start message](./docs/screenshots/rt-phase-message-right.png)
-
-![Screenshot needed: Countdown overlay](./docs/screenshots/rt-countdown.png)
-
----
-
-## 6. Recorded Data
-
-For each frame/sample, the module can record:
-
-- timestamp
-- x coordinate
-- y coordinate
-- target index
-- whether the point is inside the target
-- missing-frame state for camera tracking
-
-For each target trial, the module calculates or stores:
-
-- final distance from target
-- reaction time
-- percent time inside target
-- arrival point
-- arrival-point distance from target
-- post-arrival hold instability / tremor estimate
-- measured frame rate
-- missed trial status
-
----
-
-## 7. Arrival Detection
-
-The module attempts to distinguish the reaching phase from the post-arrival hold phase.
-
-Arrival is detected by looking for the point after peak movement velocity where velocity drops below a small fraction of peak velocity and remains low for a minimum duration.
-
-This avoids using the final frame as the arrival point when the participant continues moving after reaching the target area.
-
-Conceptually:
+Then:
 
 ```text
-movement starts
-→ velocity rises
-→ peak velocity
-→ velocity drops and stays low
-→ arrival point
-→ hold phase / tremor capture
+SARA Finger Chase Score = (0 + 1 + 2) / 3 = 1.00
 ```
 
----
-
-## 8. Dysmetria Measurement
-
-Dysmetria is measured as the distance from the target center at the detected arrival point.
+If the same movements have tremor scores:
 
 ```text
-dysmetria = distance(target center, arrival point)
+Movement 3: tremor score 0
+Movement 4: tremor score 1
+Movement 5: tremor score 2
 ```
 
-If no reliable arrival point is detected, dysmetria may be unavailable for that trial rather than substituting an arbitrary endpoint.
-
----
-
-## 9. Tremor / Hold Instability Measurement
-
-After arrival, the remaining portion of the target window is treated as the hold phase.
-
-The module estimates instability during this phase by measuring movement around the held position. This is a CeMoQu extension beyond the original SARA Finger Chase item.
-
-This measure should be reported separately from the SARA-aligned dysmetria score.
-
----
-
-## 10. Scoring
-
-The code keeps scoring thresholds in `RT_SCORING_CONFIG` inside `app.js`.
-
-Current scoring components include:
-
-- dysmetria score
-- tremor / hold instability score
-- weighted combined RT score
-
-The module also keeps a Research UI weight control so the optional tremor component can be reduced or excluded.
-
-Important principle:
+Then the experimental weighted scores for each target are:
 
 ```text
-SARA-aligned interpretation = dysmetria-centered
-CeMoQu research extension = dysmetria + tremor / hold instability
+Movement 3: round(0×0.60 + 0×0.40) = 0
+Movement 4: round(1×0.60 + 1×0.40) = 1
+Movement 5: round(2×0.60 + 2×0.40) = 2
 ```
 
----
+These weighted scores are useful for research comparison but must not be presented as clinically validated SARA scoring.
 
-## 11. Right and Left Hand Summary
+### B7. Quality flags are not clinical validation
 
-The module supports right hand, left hand, or both hands. The current default is both hands.
+The module can detect technical conditions such as low FPS, missing tracking, and tracking spikes. These checks improve transparency, but they do not establish clinical validity.
 
-When both hands are tested:
-
-```text
-right-hand result
-left-hand result
-final combined result
-```
-
-The right and left hand tests should be kept visually and procedurally consistent.
-
----
-
-## 12. Limitations
-
-Current limitations:
-
-- Camera Mode depends on lighting, camera angle, hand visibility, and MediaPipe landmark stability.
-- Cursor Mode depends on screen size, browser zoom, and accurate physical measurement of the calibration bar.
-- Camera calibration can vary when the hand is placed closer or farther from the camera.
-- The current scoring system is provisional and should be clinically validated before being treated as a diagnostic tool.
-- The module is intended for research and development, not independent clinical diagnosis.
-
----
-
-## 13. Screenshot Locations Needed
-
-Screenshots should be added at the placeholders above and stored in:
-
-```text
-RT/docs/screenshots/
-```
-
-Minimum methodology screenshots:
-
-1. Cursor calibration bar and measurement input.
-2. Camera Auto Calibration hand-open instruction.
-3. Four camera calibration values in the log.
-4. Right-hand start message.
-5. Countdown overlay.
-6. Active target screen.
-7. Final result screen.
+Clinical validation still requires comparison with blinded clinician-rated SARA Finger Chase scores and repeated testing across participants, devices, and sessions.
