@@ -19,6 +19,10 @@
   --st-font-mono: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
 
+body {
+  margin: 0;
+}
+
 /* ============================= */
 /* LAYOUT OVERRIDE               */
 /* ============================= */
@@ -31,10 +35,14 @@
   padding: 12px 16px;
 }
 
+.st-app .topbar {
+  margin-bottom: 12px;
+}
+
 .st-main {
   display: grid;
-  grid-template-columns: 1fr 380px;
-  height: calc(100vh - 200px);
+  grid-template-columns: minmax(0,7fr) minmax(0,3fr);
+  height: calc(100vh - 330px);
   min-height: 500px;
   overflow: hidden;
   border-radius: 12px;

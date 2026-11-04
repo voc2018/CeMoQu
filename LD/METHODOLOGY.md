@@ -186,94 +186,76 @@ Current outputs:
 
 These values are currently research/export only.
 
-### A10. Start fails, discontinuities, and out-of-bounds
+### A10. Start fails, discontinuities, out-of-bounds, and ending a trial
 
-The app records three task-quality or motor-control events:
+- **Start fail:** a press outside S before the trial begins.
+- **Discontinuity:** a press after a lift during the trial. Each stroke is measured on its own for scoring.
+- **Out-of-bounds:** the hand leaves the canvas while pressed. A lift or a released mouse leaving the canvas is not counted.
+- **Rejoin:** after a lift or after leaving the canvas, drawing continues from the new touch. No attempt is voided.
+- **Rejoin jump:** the distance from the end of one stroke to the start of the next is stored in `rejoin_jumps_cm` and `rejoin_jump_max_cm`. It is not used in the score. It is not scored and the same test runs again. Voids are stored in `voided_attempts`.
+- **End boundary:** the dashed line across the guide line at the near edge of the F box. Crossing it anywhere ends the trial, so the path does not need to enter F.
+- **Clock:** the horizontal test starts timing at GO. Other modes start timing when S is pressed.
 
-| Event | How it is counted |
-|---|---|
-| Start fail | Pointer press occurs outside **S** before the trial is active |
-| Discontinuity | New pointer press occurs after drawing has already started |
-| Out-of-bounds | Pointer leaves the canvas during an active, unfinished trial |
+### A11. Raw data
 
-These values are displayed and exported but do not currently affect the score.
+Each trial keeps `t_ms`, `x`, `y` and `event` (`down`, `move`, `up`, `leave`) in canvas units. **Export Raw** downloads them with `test_mode`, start and finish positions, `pixels_per_cm`, tolerance and scoring version, which is enough to recalculate the score.
 
 ---
 
 ## Part B — from measurements to the provisional 0–4 LD score
 
-### B1. Current scoring basis
+Scoring lives in `scoring.js` (`ld-scoring-v3`) and is tested by `test_scoring.js`.
 
-The current LD score is calculated from:
+### B1. Scoring basis
 
-```text
-p95DeviationCm
-```
+The score uses **turn amplitude** only, which is the closest digital measure to the tremor size a clinician judges in SARA Nose-Finger. SARA defines the 2 cm and 5 cm cut-offs. It does not define a turn amplitude, so this mapping is a CeMoQu adaptation to be compared with clinician scores.
 
-Only P95 deviation is used because it reflects sustained tracing error while reducing the effect of a single extreme outlier.
+A distance from the guide line was not used because a path that runs steadily beside the line shows distance without tremor.
 
-### B2. Score mapping
+### B2. Turn amplitude
 
-```text
-if trial incomplete or calibration not verified:
-    score = 4
-else if p95DeviationCm < 0.5:
-    score = 0
-else if p95DeviationCm < 2.0:
-    score = 1
-else if p95DeviationCm <= 5.0:
-    score = 2
-else:
-    score = 3
-```
+1. Each point becomes a signed distance across the guide line.
+2. A turn is a reversal of that distance by at least the Tolerance. Smaller movements are not turns.
+3. Each stroke is measured on its own, so a jump after a lift is never an amplitude. Amplitude is the height from one turn to the next. With one turn, the two legs on each side of it are used, keeping those that reach the Tolerance.
+4. With 3 or more amplitudes, the largest 5% are removed, rounded up.
+5. Mean and median are both stored. The mean sets the score.
 
-| P95 deviation | Score | Label |
-|---:|---:|---|
-| `< 0.5 cm` | 0 | Normal |
-| `0.5–<2.0 cm` | 1 | Mild |
-| `2.0–5.0 cm` | 2 | Moderate |
-| `> 5.0 cm` | 3 | Severe |
-| Incomplete trial or unverified calibration | 4 | Unable to perform |
+Tolerance is held for the whole trial and stored with it.
 
-### B3. Worked examples
-
-**Example 1 — accurate tracing**
+### B3. Score mapping
 
 ```text
-p95DeviationCm = 0.32
-score = 0 — Normal
+if a reason code applies:  score = 4
+else if no turn:           score = 0
+else if mean < 2 cm:       score = 1
+else if mean < 5 cm:       score = 2
+else:                      score = 3
 ```
 
-**Example 2 — moderate deviation**
+| Code | Meaning | Limit |
+|---|---|---|
+| SF | Start Fail | 3 failed presses in a row |
+| TO | Time Out | End boundary not crossed in 30 s |
+| OB | Out of Bounds | 3 or more |
+| DC | Discontinuity | 10 or more |
 
-```text
-p95DeviationCm = 3.40
-score = 2 — Moderate
-```
+A trial ends only at the end boundary or at the 30 s limit. SF, OB and DC do not end it, so every reason that applies is recorded together, for example `OB, DC`.
 
-**Example 3 — incomplete or uncalibrated trial**
+The Tolerance and the limits in this table are provisional, to be set by a clinician. DC can also appear with small tremor, so those trials need review. Forward-and-back tremor cannot be measured on a flat screen; lifts are recorded so it can enter the score if depth becomes measurable.
 
-```text
-success = false
-or calibrationVerified = false
-score = 4 — Unable to perform
-```
+Calibration is required before Start Test, so a missing calibration cannot produce a score.
 
-### B4. Metrics not currently used in scoring
+### B4. Metrics not used in scoring
 
-The following values are displayed and exported but do not currently change the score:
+These are calculated and stored for later comparison with clinician ratings:
 
-- max deviation
-- mean deviation
+- P95, mean and max deviation
 - deviation area
-- discontinuities
-- vertical turns
-- horizontal reverses
-- out-of-bounds count
-- start fails
+- turn amplitude median
+- vertical turns and horizontal reverses
+- discontinuity, out-of-bounds and start fail counts below their limits
+- rejoin jump distances
 - duration
-
-This is an intentional prototype design decision. These metrics may later be added to a multi-metric LD score after validation against clinician-reviewed data.
 
 ### B5. Data export
 
@@ -292,7 +274,8 @@ The CSV export includes:
 - start fails
 - max/mean/P95 deviation in px and cm
 - deviation area in px² and cm²
-- LD score and label
+- CMQ score and label
 - success flag
+- scoring version, tolerance, turn count, turn amplitude mean and median, reason code, rejoin jumps, start and end times
 
-The current `Submit Data` path packages the current trial in a Google-Sheets-compatible payload using the configured Google Apps Script URL.
+`Submit Data` sends every completed trial through `shared/upload.js`. Each trial becomes one row in the `LD_v2` tab, with its raw CSV and trajectory PNG stored in Google Drive.

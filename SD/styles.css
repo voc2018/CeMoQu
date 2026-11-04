@@ -20,3 +20,9 @@
 .detection-viz{position:relative;height:42px;margin:8px 0 10px;border:1px solid #1d3a4a;border-radius:5px;background:linear-gradient(180deg,#07131c,#0c2230);overflow:hidden}.detection-viz:before{content:"";position:absolute;left:0;right:0;top:16px;height:1px;background:#34505e}.detection-viz i{position:absolute;top:7px;width:1px;height:19px;background:#21c1fb;opacity:.88}.detection-viz span{position:absolute;left:6px;bottom:3px;color:#668793;font-size:8px}
 @media(max-width:900px){body{padding-left:10px;padding-right:10px}.sd-shell{padding:10px}.sd-workspace{grid-template-columns:1fr;height:auto;min-height:0;overflow:visible}.experiment{min-height:600px;padding:28px 22px}.side-panel{border-left:0;border-top:1px solid var(--sd-border);max-height:none}.tab-panel{max-height:none}.stage{min-height:500px}.top-status{margin-left:0}.stimulus.passage{padding:18px}.quality-strip{grid-template-columns:1fr}.quality-strip>div{border-right:0;border-bottom:1px solid var(--sd-border)}.sd-topbar{flex-wrap:wrap}.top-actions{order:3;width:100%}}
 @media(max-width:520px){.experiment{padding:24px 15px}.stage h2{font-size:23px}.component-grid{grid-template-columns:1fr}.sd-topbar .top-status{width:100%;justify-content:center}.form-grid{grid-template-columns:1fr}.form-grid label:last-child{grid-column:auto}.research-actions{grid-template-columns:1fr}.research-actions button:first-child{grid-column:auto}}
+
+/* Controls large enough for a shaking hand */
+.side-section select,
+#checkMicBtn {
+  min-height: 44px;
+}

@@ -4,7 +4,7 @@ This document specifies **every method used to turn a recording into a number**,
 
 - **Part A** — how raw audio becomes measurements (voice-activity detection, pitch tracking, event
   detection, transcript alignment)
-- **Part B** — how those measurements become the 0–6 Estimated SARA Speech Score
+- **Part B** — how those measurements become the 0–6 SD CMQ Score
 
 Everything here is also visible live in the app: RESEARCH → `View calculation details` shows the
 exact config object, and each task's Detailed Measurements panel shows every raw value with its

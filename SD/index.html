@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Speech Disturbance Test — CeMoQu</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../shared/common.css">
-  <link rel="stylesheet" href="../shared/header.css">
-  <link rel="stylesheet" href="./styles.css">
-  <script src="../shared/header.js" defer></script>
-  <script src="./app.js" defer></script>
+  <link rel="stylesheet" href="../shared/common.css?v=20261103-1">
+  <link rel="stylesheet" href="../shared/header.css?v=20261103-3">
+  <link rel="stylesheet" href="./styles.css?v=20261103-2">
+  <script src="../shared/header.js?v=20261103-3" defer></script>
+  <script src="../shared/upload.js?v=20261103-1" defer></script>
+  <script src="./app.js?v=20261103-1" defer></script>
 </head>
 <body>
   <div id="header-container"></div>
@@ -56,7 +57,7 @@
           <div class="stage-actions"><button id="viewFinalResultsBtn" class="primary-action" hidden>View Final Results</button></div>
         </section>
         <section class="stage" id="resultsStage">
-          <div class="result-hero"><span>Estimated SARA Speech Score</span><strong id="estimatedScore">—</strong><p>Provisional research estimate — not clinically validated</p></div><div class="component-grid" id="componentGrid"></div><div class="calculation-line" id="calculationLine"></div><div class="quality-banner" id="overallWarning"></div>
+          <div class="result-hero"><span>SD CMQ Score</span><strong id="estimatedScore">—</strong><p>Provisional research estimate — not clinically validated</p></div><div class="component-grid" id="componentGrid"></div><div class="calculation-line" id="calculationLine"></div><div class="quality-banner" id="overallWarning"></div>
           <div class="stage-actions"><button id="restartBtn" class="secondary">Start New Assessment</button></div>
         </section>
       </main>
@@ -64,11 +65,11 @@
         <div class="tab-bar" role="tablist"><button class="side-tab active" data-tab="test" role="tab" aria-selected="true">TEST</button><button class="side-tab" data-tab="research" role="tab" aria-selected="false">RESEARCH</button></div>
         <div class="tab-panel active" id="testPanel">
           <section class="side-section" id="testSection"><h3>Test</h3><div class="task-list" id="taskList"></div></section>
-          <section class="side-section" id="summaryPanel" hidden><h3>Result Summary</h3><div class="side-score"><span>Estimated score</span><strong id="sideScore">—</strong><small>0–6</small></div><div class="summary-list" id="summaryList"></div><p class="caution">This standardized browser protocol is not the official conversational SARA examination.</p></section>
+          <section class="side-section" id="summaryPanel" hidden><h3>Result Summary</h3><div class="side-score"><span>SD CMQ Score</span><strong id="sideScore">—</strong><small>0–6</small></div><div class="summary-list" id="summaryList"></div><p class="caution">This standardized browser protocol is not the official conversational SARA examination.</p></section>
           <section class="side-section" id="setupPanel"><h3>Settings</h3><label for="micSelect">Microphone</label><select id="micSelect"><option value="">Default microphone</option></select><div class="meter"><span id="sideMeter"></span></div><p id="micGuidance">Check your microphone before beginning.</p><div class="form-grid"><label>Sound cue<select id="soundCue"><option value="on">On</option><option value="off">Off</option></select></label><label>Test language<select id="language"><option value="en-US">English (US)</option></select></label><label>Mic distance (cm)<input id="micDistance" type="number" min="1" step="1" value="18"></label></div></section>
         </div>
         <div class="tab-panel" id="researchPanel">
-          <section class="side-section"><h3>Clinical Reference</h3><label for="clinicianScore">Clinician-rated SARA Speech score (0–6)</label><select id="clinicianScore"><option value="">Not entered</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select><label for="researchNotes">Clinician / researcher notes</label><textarea id="researchNotes" rows="4" placeholder="Optional same-day reference notes"></textarea></section>
+          <section class="side-section"><h3>Clinical Reference</h3><label for="clinicianScore">Clinician-rated SARA Score (0–6)</label><select id="clinicianScore"><option value="">Not entered</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select><label for="researchNotes">Clinician / researcher notes</label><textarea id="researchNotes" rows="4" placeholder="Optional same-day reference notes"></textarea></section>
           <section class="side-section"><h3>Scoring</h3>
             <div class="weight-bar" id="weightBar">
               <div class="weight-handle" id="wHandle1" tabindex="0" role="slider" aria-label="Reading / Pa-ta-ka boundary"></div>

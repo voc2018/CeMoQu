@@ -121,7 +121,7 @@ The two modes should not be assumed equivalent until direct comparison data are 
 
 The default five-movement structure follows the logic of the SARA Finger Chase item, where repeated pointing movements are observed and the final score is based on performance across the later movements.
 
-RT uses five target windows per hand by default and computes the current SARA-aligned score from the last three valid movements. This is intended to reduce the influence of early adjustment while still keeping the test short.
+RT uses five target windows per hand by default and computes the current SARA-aligned score from the last three tracked movements. This is intended to reduce the influence of early adjustment while still keeping the test short.
 
 This is an engineering interpretation of the SARA-style task structure and requires clinical comparison before being treated as a validated replacement.
 
@@ -157,15 +157,7 @@ Final-frame distance is still exported for transparency, but it is not the main 
 
 SARA Finger Chase primarily describes dysmetria. However, after the participant reaches a target, the post-arrival hold phase may contain clinically relevant instability, drift, or tremor-like movement.
 
-RT therefore exports an experimental post-arrival P95 radial deviation and converts it into a tremor severity bucket. This is used in the experimental CeMoQu weighted score but should be clearly separated from the SARA-aligned dysmetria score.
-
-Current default experimental weight:
-
-```text
-Dysmetria 60% + Tremor 40%
-```
-
-This weighting is a provisional engineering choice. It is adjustable in the RESEARCH tab and must be validated before clinical use.
+RT therefore stores hold turns, whether the target was found, and the post-arrival P95 radial deviation. These values are not scored, because SARA Finger Chase scores only under- and overshooting.
 
 ---
 
@@ -173,7 +165,7 @@ This weighting is a provisional engineering choice. It is adjustable in the RESE
 
 Reaction time and time inside the target are useful quantitative measures. They may reflect attention, motor planning, response initiation, accuracy maintenance, or device/input differences.
 
-However, they are not part of the current SARA Finger Chase score estimate because their relationship to clinician-rated SARA Finger Chase severity has not yet been calibrated.
+However, they are not part of the RT CMQ Score because their relationship to clinician-rated SARA Finger Chase severity has not yet been calibrated.
 
 They are therefore exported as research metrics rather than included in the current final score.
 
@@ -183,7 +175,7 @@ They are therefore exported as research metrics rather than included in the curr
 
 Tracking failure, missing samples, or low camera FPS are technical problems. They should not automatically become high clinical severity.
 
-For example, if Camera Mode loses the hand, the app should not automatically assign SARA score 4. It should mark the automated score as unavailable or low-confidence and require review or retesting.
+A finished run scores from the last three tracked movements. If 50% or more of the movements were not tracked, the app assigns score 4 and records `missed_count`. This can also be caused by the camera losing the hand, so these runs need review.
 
 This distinction protects the research dataset from confusing device failure with patient impairment.
 

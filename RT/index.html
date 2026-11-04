@@ -6,10 +6,10 @@
   <title>Random Target Touch Test — CeMoQu</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../shared/common.css">
-  <link rel="stylesheet" href="../shared/header.css">
-  <link rel="stylesheet" href="styles.css">
-  <script src="../shared/header.js" defer></script>
+  <link rel="stylesheet" href="../shared/common.css?v=20261103-1">
+  <link rel="stylesheet" href="../shared/header.css?v=20261103-3">
+  <link rel="stylesheet" href="styles.css?v=20261103-3">
+  <script src="../shared/header.js?v=20261103-3" defer></script>
 
 </head>
 <body>
@@ -44,6 +44,7 @@
           </div>
 
           <div class="viewer-toolbar">
+            <select id="meta_hand" aria-label="Hand(s)"><option value="B" selected>Right and Left</option><option value="R">Right only</option><option value="L">Left only</option></select>
             <button id="startBtn" class="primary">Start Test</button>
             <button id="stopBtn">Stop Test</button>
             <button id="uploadBtn">Submit Data</button>
@@ -60,6 +61,12 @@
           <div id="countdownOverlay" class="overlay-countdown initially-hidden"></div>
           <div id="calibSuccessOverlay" class="overlay-success initially-hidden"></div>
           <div id="testResultOverlay" class="test-result-overlay initially-hidden"></div>
+          <div id="screenGate" class="rt-screen-gate">
+            <div class="calibration-guide-kicker">DISPLAY</div>
+            <div class="calibration-guide-title" id="screenGateTitle">FULL SCREEN</div>
+            <div class="calibration-guide-body">The test runs in full screen only. The test area size is fixed when full screen starts and does not change afterward.</div>
+            <button type="button" id="enterFullscreenBtn" class="calibration-guide-status">Enter Full Screen</button>
+          </div>
           <div id="calibPromptOverlay" class="calibration-guide-card initially-hidden">
             <div class="calibration-guide-kicker" id="calibGuideKicker">CAMERA CALIBRATION</div>
             <div class="calibration-guide-title" id="calibGuideTitle">Show your open hand</div>
@@ -80,15 +87,6 @@
 
       <!-- Side panels -->
       <aside class="side-stack">
-        <section class="card panel info-without-heading info-panel">
-          <div class="panel-body">
-            <div class="small-muted">
-              Digital Finger Chase task aligned as closely as possible with SARA: five pointing movements are performed and the last three dysmetria scores are averaged.
-              Within each fixed two-second target window, CeMoQu additionally records movement after the detected arrival point to quantify target-position instability. This optional research measure is reported separately and can be excluded by setting its weight to 0%.
-            </div>
-          </div>
-        </section>
-
         <section class="card panel cursor-calibration-panel min-h-0">
           <div class="panel-header">
             <h2>Calibration</h2>
@@ -118,6 +116,32 @@
           </div>
         </section>
 
+        <section class="card panel results-panel min-h-0" id="resultsPanel">
+          <div class="panel-header">
+            <h2>Results</h2>
+          </div>
+          <div class="panel-body">
+            <table class="rt-results-table">
+              <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+              <tbody>
+                <tr><td><span class="metric-label" data-def="hand" tabindex="0">Current Hand</span></td><td id="rtResHand">—</td></tr>
+                <tr><td><span class="metric-label" data-def="target" tabindex="0">Target</span></td><td id="rtResTarget">—</td></tr>
+                <tr><td><span class="metric-label sara-label" data-def="trialScore" tabindex="0">RT CMQ Score (trial)</span></td><td id="rtResSara" class="score-value">—</td></tr>
+                <tr><td><span class="metric-label sara-label" data-def="handScore" tabindex="0">RT CMQ Score Right</span></td><td id="rtResR" class="score-value">—</td></tr>
+                <tr><td><span class="metric-label sara-label" data-def="handScore" tabindex="0">RT CMQ Score Left</span></td><td id="rtResL" class="score-value">—</td></tr>
+                <tr><td><span class="metric-label sara-label" data-def="itemScore" tabindex="0">RT CMQ Score Item (R+L)/2</span></td><td id="rtResItem" class="score-value">—</td></tr>
+                <tr><td><span class="metric-label" data-def="arrival" tabindex="0">Arrival Error</span></td><td id="rtResArrival">—</td></tr>
+                <tr><td><span class="metric-label" data-def="holdTurns" tabindex="0">Hold Turns</span></td><td id="rtResHoldTurns">—</td></tr>
+                <tr><td><span class="metric-label" data-def="targetFound" tabindex="0">Target Found</span></td><td id="rtResFound">—</td></tr>
+                <tr><td><span class="metric-label" data-def="tremor" tabindex="0">Post-arrival P95 Radius</span></td><td id="rtResTremor">—</td></tr>
+                <tr><td><span class="metric-label" data-def="reaction" tabindex="0">Reaction Time</span></td><td id="rtResRt">—</td></tr>
+                <tr><td><span class="metric-label" data-def="inside" tabindex="0">Time Inside</span></td><td id="rtResInside">—</td></tr>
+                <tr><td><span class="metric-label" data-def="spikes" tabindex="0">Tracking Spikes Removed</span></td><td id="rtResSpikes">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <div hidden aria-hidden="true">
           <span id="statusLineTop">Idle</span>
           <span id="trialLine">Trial: —</span>
@@ -139,9 +163,8 @@
             <div class="col">
               <div class="settings-primary-grid">
                 <div><label>Target interval (s)</label><input id="cfg_interval" type="number" value="2.0" step="0.1" min="0.1" /></div>
-                <div><label>Target diameter (cm)</label><input id="cfg_diameter_cm" type="number" value="3.0" min="1" max="10" step="0.5" /><input id="cfg_radius_cm" type="hidden" value="1.5" /></div>
+                <div><label>Target diameter (cm)</label><input id="cfg_diameter_cm" type="number" value="2.0" min="1" max="10" step="0.5" /><input id="cfg_radius_cm" type="hidden" value="1.0" /></div>
                 <div><label>Movements per hand</label><input id="cfg_targets" type="number" value="5" min="3" max="20" step="1" /></div>
-                <div><label>Hand(s)</label><select id="meta_hand"><option value="B" selected>Right and Left</option><option value="R">Right only</option><option value="L">Left only</option></select></div>
               </div>
               <input id="cfg_edge_px" type="hidden" value="20" />
               <input id="cfg_ppc" type="hidden" value="30.0" />
@@ -154,28 +177,35 @@
       <section class="card panel min-h-0" id="clinicalPanel">
         <div class="panel-header"><h2>Clinical Reference</h2></div>
         <div class="panel-body">
-          <label for="clinicianScore">Clinician-rated SARA Finger Chase score (0–4)</label>
-          <select id="clinicianScore">
-            <option value="">Not entered</option>
-            <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option>
-          </select>
+          <div class="clinician-score-grid">
+            <div>
+              <label for="clinicianScoreR">Clinician-rated SARA Score Right (0–4)</label>
+              <select id="clinicianScoreR">
+                <option value="">Not entered</option>
+                <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option>
+              </select>
+            </div>
+            <div>
+              <label for="clinicianScoreL">Clinician-rated SARA Score Left (0–4)</label>
+              <select id="clinicianScoreL">
+                <option value="">Not entered</option>
+                <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option>
+              </select>
+            </div>
+          </div>
+          <div class="clinician-mean">Clinician-rated SARA Score Item (R + L) / 2: <strong id="clinicianScoreMean">—</strong></div>
           <label for="researchNotes">Clinician / researcher notes</label>
           <textarea id="researchNotes" rows="4" placeholder="Optional same-day reference notes"></textarea>
         </div>
       </section>
 
-      <!-- Dysmetria / tremor weighting (research tab) -->
+      <!-- Score rules (research tab) -->
       <section class="card panel min-h-0" id="scoringPanel">
-        <div class="panel-header"><h2>SARA + Tremor Weighting</h2></div>
+        <div class="panel-header"><h2>Score Rules</h2></div>
         <div class="panel-body">
-          <div class="weight-bar" id="weightBar">
-            <div class="weight-handle" id="wHandle1" tabindex="0" role="slider" aria-label="Dysmetria / Tremor boundary"></div>
-          </div>
-          <div class="weight-labels"><span id="wLabelDysmetria"></span><span id="wLabelTremor"></span></div>
           <p class="small-muted scoring-note">
-            Dysmetria = distance from target when the cursor first stops moving (arrival point).
-            Tremor = the 95th-percentile oscillation radius around the median held position during the 2 seconds after arrival.
-            Original SARA Finger Chase uses dysmetria only. Drag the bar to control how much the optional CeMoQu tremor measure contributes (0% excludes it; snaps to 10%).
+            The score uses only the distance from the target at the arrival point, matching SARA Finger Chase.
+            Hold turns, target found and P95 radius are stored and not scored.
           </p>
           <button id="showScoringBtn" class="text-button">View calculation details</button>
           <div id="scoringDetails" class="details-box" hidden></div>
@@ -213,62 +243,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.6.1629159505/control_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
-  <script src="app.js?v=20260909-26"></script>
+  <script src="../shared/upload.js?v=20261103-1"></script>
+  <script src="app.js?v=20261103-7"></script>
 
-  <script>
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzC8TVgW7KQGKXgIK6bRz-FIzN_im-oFcSD4UsWEHGwOAGr1vJUhBcCClIFMYpmCfXFPw/exec";
-
-    async function uploadDeidentifiedResults() {
-      if (!GOOGLE_SCRIPT_URL) { alert("Upload endpoint not configured."); return; }
-      if (!window.lastRunSummary) { alert("Please complete a test before uploading."); return; }
-
-      const payload = {
-        session_id: "unknown",
-        test_type: "RT",
-        timestamp: new Date().toISOString(),
-        metrics: (() => {
-          const run = window.lastRunSummary;
-          if (!run) return null;
-          const summaries = run.targets || [];
-          const valid = summaries.filter(s => !s.missed);
-          const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : null;
-          return {
-            final_score: run.finalScore ?? null,
-            mean_final_error_cm: mean(valid.map(s => s.final_dist_cm)),
-            mean_reaction_time_s: mean(valid.map(s => s.reaction_time)),
-            mean_tremor_cm: mean(valid.map(s => s.tremor_cm)),
-            mean_smoothness: mean(valid.map(s => s.smoothness)),
-            mean_percent_time_inside: mean(valid.map(s => s.percent_time_inside)),
-            missed_rate: summaries.length ? summaries.filter(s => s.missed).length / summaries.length : null,
-            num_targets: summaries.length,
-            mode: run.mode,
-            target_radius_cm: run.cfg?.radius_cm ?? null,
-            interval_s: run.cfg?.interval_s ?? null,
-            pixels_per_cm: run.cfg?.ppc ?? null
-          };
-        })()
-      };
-
-      try {
-        const res = await fetch(GOOGLE_SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error("Upload failed");
-        await res.json();
-        alert("De-identified results uploaded successfully.");
-      } catch (err) {
-        console.error("Upload Error Details:", err);
-        alert("Upload failed. Data remains local.");
-      }
-    }
-
-    document.getElementById("uploadBtn")?.addEventListener("click", () => {
-      const ok = confirm("Upload de-identified summary metrics only?\n\nNo names, no audio, no raw trajectories.");
-      if (ok) uploadDeidentifiedResults();
-    });
-  </script>
 
   <script>
     (function(){
@@ -294,6 +271,11 @@
       }
     })();
   </script>
+
+  <div id="rtDefTip" class="def-tip" role="tooltip" hidden>
+    <h3 id="rtDefTitle">Title</h3>
+    <p id="rtDefText">Definition.</p>
+  </div>
 
   <script>
     /* ST-style two-panel layout. Existing test elements and IDs are preserved. */

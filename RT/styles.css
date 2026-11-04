@@ -42,7 +42,10 @@ canvas{display:block;width:100%;height:100%;background:#000;image-rendering:opti
 .settings-collapsed {display:none}
 .badge {background:#05232a;padding:6px 8px;border-radius:8px;font-weight:600}
 .overlay-countdown {position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:96px;font-weight:700;color:rgba(255,255,255,0.95);pointer-events:none}
-.overlay-countdown.phase-message{padding:32px;text-align:center;font-size:13px;line-height:1.35;white-space:pre-line;background:#000!important;z-index:30}
+/* Hand phase message: same card as the LD prompt, centred on the canvas. */
+.overlay-countdown.phase-message{inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);z-index:30;flex-direction:column;width:min(360px,86%);padding:22px 22px 20px;box-sizing:border-box;text-align:center;background:rgba(11,26,36,0.96)!important;border:1px solid #1e3a50;border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.7);font-size:12px;font-weight:400;color:#a8c5d0;line-height:1.55}
+.overlay-countdown.phase-message .phase-kicker{font-size:10px;font-weight:600;letter-spacing:2px;color:var(--rt-accent2)}
+.overlay-countdown.phase-message .phase-title{margin:8px 0;font-size:26px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1.2}
 .test-result-overlay{position:absolute;inset:0;z-index:35;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:28px;background:#000;color:#fff}
 .test-result-overlay .result-kicker{font-size:clamp(16px,2vw,24px);letter-spacing:.18em;color:#38bdf8;font-weight:700}
 .test-result-overlay .result-title{margin-top:14px;font-size:clamp(24px,4vw,44px);font-weight:700}
@@ -217,6 +220,7 @@ canvas{display:block;width:100%;height:100%;background:#000;image-rendering:opti
 }
 .rt-st-viewer .top-right-info{top:12px!important;right:12px!important;background:rgba(6,14,21,.82)!important;border-color:var(--rt-border)!important}
 .rt-st-viewer .overlay-countdown{font-size:150px!important;color:var(--rt-accent2);background:#000!important;backdrop-filter:none}
+.rt-st-viewer .overlay-countdown.phase-message{font-size:12px!important;color:#a8c5d0;background:rgba(11,26,36,0.96)!important;text-shadow:none}
 .rt-st-viewer .overlay-success{background:rgba(2,6,23,.72);backdrop-filter:blur(5px)}
 
 .rt-st-side{
@@ -715,108 +719,108 @@ canvas{display:block;width:100%;height:100%;background:#000;image-rendering:opti
    Camera calibration guide overlay
    Moved from index.html so HTML stays structural only.
    ========================================================= */
+/* Message card — same look as the LD on-canvas prompt card (thin border,
+   dark panel, small uppercase kicker, bold white title, muted body,
+   gradient button) so every CeMoQu module shows messages the same way.
+   Position stays top-right so the card never covers the hand in camera
+   mode. */
 .calibration-guide-card {
   position: absolute;
   top: 18px;
   right: 18px;
   left: auto;
   z-index: 12;
-  width: min(310px, 30%);
-  padding: 18px 20px;
+  width: min(340px, 34%);
+  padding: 22px 22px 20px;
   box-sizing: border-box;
   text-align: center;
-  color: #17212b;
-  background: linear-gradient(135deg, rgba(255, 255, 255, .58), rgba(235, 246, 250, .48));
-  border: 1px solid rgba(255, 255, 255, .82);
-  border-top: 5px solid #38bdf8;
-  border-radius: 15px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, .32);
+  color: #fff;
+  background: rgba(11, 26, 36, 0.96);
+  border: 1px solid #1e3a50;
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .7);
   transform: none;
-  backdrop-filter: blur(10px);
   pointer-events: none;
 }
 
 .calibration-guide-kicker {
-  color: #126f91;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 1.8px;
+  color: var(--rt-accent2);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
 }
 
 .calibration-guide-title {
-  margin-top: 7px;
-  color: #101820;
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1.25;
+  margin-top: 8px;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1.2;
 }
 
 .calibration-guide-body {
-  margin-top: 10px;
-  color: #293b48;
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.5;
+  margin-top: 8px;
+  color: #a8c5d0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
 }
 
 .calibration-detection-status {
   margin-top: 12px;
-  color: #9a3412;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: .5px;
+  color: #f5c26b;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
 }
 
 .calibration-detection-status.is-detected {
-  color: #047857;
+  color: #4ade80;
 }
 
 .calibration-guide-status {
   display: inline-flex;
-  margin-top: 14px;
-  padding: 7px 14px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  min-width: 120px;
+  height: 34px;
+  padding: 6px 18px;
+  box-sizing: border-box;
   color: #fff;
-  background: #12607d;
+  background: linear-gradient(135deg, var(--rt-accent), var(--rt-accent2));
   border: 0;
-  border-radius: 999px;
-  font: 800 14px Inter, sans-serif;
+  border-radius: 6px;
+  font: 400 13px Inter, system-ui, sans-serif;
+  letter-spacing: .025em;
   cursor: pointer;
   pointer-events: auto;
-  transition: background .15s ease, transform .15s ease, box-shadow .15s ease;
 }
 
-.calibration-guide-status:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 5px 14px rgba(18, 96, 125, .3);
+.calibration-guide-status:disabled {
+  cursor: default;
+  color: #fff !important;
+  opacity: 1 !important;
+  filter: none !important;
 }
 
-.calibration-guide-card.is-accepted .calibration-guide-status {
-  background: #16a34a;
-  transform: scale(1.05);
-}
-
-.calibration-guide-card.is-warning {
-  border-top-color: #fb923c;
-}
-
-.calibration-guide-card.is-warning .calibration-guide-kicker {
-  color: #9a3412;
-}
-
-.calibration-guide-card.is-warning .calibration-guide-status {
-  background: #c2410c;
-}
-
-.calibration-guide-card.is-success {
-  border-top-color: #34d399;
+/* States: only the kicker / button colour changes; card stays the same. */
+.calibration-guide-card.is-accepted .calibration-guide-status,
+.calibration-guide-card.is-success .calibration-guide-status {
+  background: linear-gradient(135deg, #15803d, #22c55e);
 }
 
 .calibration-guide-card.is-success .calibration-guide-kicker {
-  color: #047857;
+  color: #4ade80;
 }
 
-.calibration-guide-card.is-success .calibration-guide-status {
-  background: #047857;
+.calibration-guide-card.is-warning .calibration-guide-kicker {
+  color: #f5c26b;
+}
+
+.calibration-guide-card.is-warning .calibration-guide-status {
+  background: linear-gradient(135deg, #b45309, #f59e0b);
 }
 
 .settings-saved-msg {
@@ -867,16 +871,12 @@ canvas{display:block;width:100%;height:100%;background:#000;image-rendering:opti
   .calibration-guide-card {
     top: 10px;
     right: 10px;
-    width: min(300px, 45%);
-    padding: 14px;
+    width: min(300px, 60%);
+    padding: 16px;
   }
 
   .calibration-guide-title {
-    font-size: 18px;
-  }
-
-  .calibration-guide-body {
-    font-size: 13px;
+    font-size: 20px;
   }
 
   .trajectory-thumb-link,
@@ -889,3 +889,161 @@ canvas{display:block;width:100%;height:100%;background:#000;image-rendering:opti
     flex-basis: 160px;
   }
 }
+
+/* Hand(s) selector in the top toolbar (moved from Settings; same position
+   as LD: "what to test" controls sit next to Start Test). */
+.rt-st-shell .rt-toolbar-top .viewer-toolbar #meta_hand{
+height:32px!important;
+min-height:auto!important;
+box-sizing:border-box;
+padding:4px 28px 4px 10px;
+border-radius:6px;
+font-size:12px;
+font-weight:400;
+letter-spacing:.025em;
+background-color:#0a1e2a;
+color:var(--text);
+border:1px solid rgba(148,163,184,0.18);
+cursor:pointer;
+}
+.rt-st-shell .rt-toolbar-top .viewer-toolbar #meta_hand:disabled{
+opacity:.55;
+cursor:not-allowed;
+}
+
+/* TEST-tab Results table — same look as the LD Results table. */
+.rt-results-table{
+width:100%;
+table-layout:fixed;
+border-collapse:collapse;
+font-size:11px;
+font-variant-numeric:tabular-nums;
+font-family:Inter,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+.rt-results-table th{
+padding:4px 8px;
+font-size:9px;
+font-weight:400;
+letter-spacing:1.4px;
+text-transform:uppercase;
+text-align:left;
+color:var(--muted);
+background:#071520;
+border-bottom:1px solid #1e3a50;
+}
+.rt-results-table td{
+padding:4px 8px;
+border-bottom:1px solid var(--rt-border);
+color:#b9d0d9;
+overflow-wrap:anywhere;
+}
+.rt-results-table th:first-child,
+.rt-results-table td:first-child{
+width:48%;
+}
+.rt-results-table td.sara-row,
+.rt-results-table td.score-value{
+color:#ffe600!important;
+}
+
+/* Full-screen gate card — centred, same card look as LD / other RT cards. */
+.rt-screen-gate{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+z-index:40;
+width:min(360px,86%);
+padding:22px 22px 20px;
+box-sizing:border-box;
+text-align:center;
+color:#fff;
+background:rgba(11,26,36,0.96);
+border:1px solid #1e3a50;
+border-radius:12px;
+box-shadow:0 18px 50px rgba(0,0,0,.7);
+}
+.rt-screen-gate[hidden]{
+display:none;
+}
+.rt-st-shell .rt-screen-gate #enterFullscreenBtn{
+display:inline-flex!important;
+align-items:center;
+justify-content:center;
+margin-top:16px;
+min-width:120px;
+height:34px!important;
+min-height:auto!important;
+padding:6px 18px!important;
+border:0!important;
+border-radius:6px!important;
+background:linear-gradient(135deg,var(--rt-accent),var(--rt-accent2))!important;
+color:#fff!important;
+font:400 13px Inter,system-ui,sans-serif!important;
+letter-spacing:.025em;
+box-shadow:none!important;
+cursor:pointer;
+}
+
+/* Metric names + hover definition tooltip (card look matches LD popup). */
+.rt-results-table .metric-label{
+cursor:help;
+border-bottom:1px dotted rgba(148,163,184,0.5);
+}
+.rt-results-table .metric-label:hover,
+.rt-results-table .metric-label:focus{
+color:#60a5fa;
+outline:none;
+}
+.rt-results-table .metric-label.sara-label{
+color:#ffe600;
+}
+.def-tip{
+position:fixed;
+z-index:10000;
+width:340px;
+max-width:calc(100vw - 16px);
+padding:14px 16px;
+box-sizing:border-box;
+border-radius:10px;
+background:var(--rt-panel);
+border:1px solid #1e3a50;
+box-shadow:0 24px 60px rgba(0,0,0,0.7);
+pointer-events:none;
+}
+.def-tip[hidden]{
+display:none;
+}
+.def-tip h3{
+margin:0 0 8px;
+font-size:14px;
+color:#fff;
+}
+.def-tip p{
+margin:0;
+font-size:12px;
+color:var(--muted);
+line-height:1.55;
+}
+
+/* Clinician scores, one per hand (same layout as LD) */
+.clinician-score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.clinician-score-grid > div { min-width: 0; }
+.clinician-mean { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.clinician-mean strong { color: var(--text); }
+
+/* Controls large enough for a shaking hand */
+.rt-st-shell .rt-toolbar-top .viewer-toolbar button,
+.rt-st-shell .rt-toolbar-top .viewer-toolbar #meta_hand,
+.mode-btn,
+#enterFullscreenBtn {
+  min-height: 44px !important;
+  height: auto !important;
+}
+.rt-st-shell .rt-toolbar-top .mode-toggle button {
+  min-height: 44px !important;
+  height: 44px !important;
+}
+.rt-st-shell .rt-toolbar-top .viewer-toolbar #meta_hand { height: 44px !important; }
+.rt-st-shell .rt-toolbar-top .viewer-toolbar button { flex: 0 0 auto !important; width: auto !important; padding-inline: 14px !important; }
+.rt-st-shell .rt-toolbar-top .viewer-toolbar #meta_hand { flex: 0 1 auto !important; width: auto !important; min-width: 130px; }

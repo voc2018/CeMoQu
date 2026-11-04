@@ -9,11 +9,11 @@
 <title>Line Drawing Test — CeMoQu</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/common.css">
-<link rel="stylesheet" href="../shared/header.css">
-<script src="../shared/header.js" defer></script>
+<link rel="stylesheet" href="../shared/common.css?v=20261103-1">
+<link rel="stylesheet" href="../shared/header.css?v=20261103-3">
+<script src="../shared/header.js?v=20261103-3" defer></script>
 
-<link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./styles.css?v=20261103-2">
 
 </head>
 
@@ -29,7 +29,7 @@
     <a href="../index.html" class="btn-pill back-link" style="font-size:12px;padding:6px 12px;">← Back</a>
     <div class="title-block">
       <h1>Line Drawing Test</h1>
-      <div class="small-muted">SARA-3 compatible · P95 deviation scoring</div>
+      <div class="small-muted">Turn amplitude scoring</div>
     </div>
     <!-- Test controls aligned with the subtitle -->
     <div class="controls test-controls">
@@ -42,10 +42,16 @@
         <option value="diagonal1">Diagonal Test 1</option>
         <option value="diagonal2">Diagonal Test 2</option>
       </select>
-      <button id="startSequenceBtn" onclick="startTestSequence()">Start Test</button>
+      <select id="handSelector" aria-label="Hand(s)">
+        <option value="B" selected>Right and Left</option>
+        <option value="R">Right only</option>
+        <option value="L">Left only</option>
+      </select>
+      <button id="startSequenceBtn" onclick="startTestSequence()" disabled>Start Test</button>
       <button onclick="stopTest()">Stop Test</button>
       <button id="exportTrialBtn" onclick="exportData()">Submit Data</button>
       <button id="exportCsvBtn" onclick="exportCsv()">Export CSV</button>
+      <button id="exportRawBtn" onclick="exportRawCsv()">Export Raw</button>
       <span id="exportStatus" class="small-muted"></span>
     </div>
   </div>
@@ -56,11 +62,29 @@
       <div class="card canvas-card">
         <div id="canvas-container">
           <canvas id="testCanvas"></canvas>
+          <div id="handPrompt" class="hand-prompt" hidden>
+            <div class="hand-prompt-kicker" id="handPromptKicker">HAND</div>
+            <div class="hand-prompt-title" id="handPromptTitle">RIGHT HAND</div>
+            <div class="hand-prompt-body" id="handPromptBody"></div>
+            <button type="button" id="handReadyBtn" class="hand-ready-btn">Ready</button>
+          </div>
+          <div id="screenGate" class="hand-prompt screen-gate">
+            <div class="hand-prompt-kicker">DISPLAY</div>
+            <div class="hand-prompt-title" id="screenGateTitle">FULL SCREEN</div>
+            <div class="hand-prompt-body" id="screenGateBody">The test runs in full screen only. The canvas size is fixed when full screen starts and does not change afterward.</div>
+            <button type="button" id="enterFullscreenBtn" class="hand-ready-btn">Enter Full Screen</button>
+          </div>
         </div>
       </div>
     </main>
 
     <aside class="side-column">
+      <div class="ld-tab-bar" role="tablist">
+        <button class="ld-tab active" data-panel="test" role="tab">TEST</button>
+        <button class="ld-tab" data-panel="research" role="tab">RESEARCH</button>
+      </div>
+
+      <div class="ld-side-panel active" data-panel="test">
       <!-- Calibration -->
       <section class="card calibration-panel">
         <div class="panel-header">
@@ -97,22 +121,88 @@
             <tr><th>Metric</th><th>Value</th></tr>
           </thead>
           <tbody>
-            <tr><td><span class="metric-label sara-label" onclick="showDefinition('sara')">SARA Score</span></td><td id="saraScoreValue" class="score-value">—</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('p95')">P95 Deviation</span></td><td id="p95DeviationValue">0 px / 0 cm</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('max')">Max Deviation</span></td><td id="maxDeviationValue">0 px / 0 cm</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('discont')">Discontinuities</span></td><td id="discontValue">0</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('vturns')">Vertical Turns</span></td><td id="verticalTurnValue">0</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('hturns')">Horizontal Reverses</span></td><td id="horizontalTurnValue">0</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('oob')">Out-of-Bounds</span></td><td id="outOfBoundsValue">0</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('startfails')">Start Fails</span></td><td id="startFailsValue">0</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('mean')">Mean Deviation</span></td><td id="meanDeviationValue">0 px / 0 cm</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('area')">Deviation Area</span></td><td id="deviationAreaValue">0 px² / 0 cm²</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('calibration')">Calibration</span></td><td id="calibrationUsed">0 canvas px/cm</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('cmpx')">cm/px</span></td><td id="cmPerPixelValue">0</td></tr>
-            <tr><td><span class="metric-label" onclick="showDefinition('calstatus')">Cal. Status</span></td><td id="calibrationResult">Not Verified</td></tr>
+            <tr><td><span class="metric-label" data-def="hand" tabindex="0">Current Hand</span></td><td id="currentHandValue">Right</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="cmq" tabindex="0">LD CMQ Score (trial)</span></td><td id="cmqScoreValue" class="score-value">—</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="trialscores" tabindex="0">Trial Scores (1–5)</span></td><td id="trialScoresValue" class="score-value">–  |  –  |  –  |  –  |  –</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="handscore" tabindex="0">LD CMQ Score Right</span></td><td id="handScoreRValue" class="score-value">—</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="handscore" tabindex="0">LD CMQ Score Left</span></td><td id="handScoreLValue" class="score-value">—</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="itemscore" tabindex="0">LD CMQ Score Item (R+L)/2</span></td><td id="itemScoreValue" class="score-value">—</td></tr>
+            <tr><td><span class="metric-label" data-def="ampmean" tabindex="0">Turn Amplitude Mean</span></td><td id="turnAmpMeanValue">—</td></tr>
+            <tr><td><span class="metric-label" data-def="ampmedian" tabindex="0">Turn Amplitude Median</span></td><td id="turnAmpMedianValue">—</td></tr>
+            <tr><td><span class="metric-label" data-def="rejoin" tabindex="0">Max Rejoin Jump</span></td><td id="rejoinJumpValue">—</td></tr>
+            <tr><td><span class="metric-label" data-def="turns" tabindex="0">Turn Count</span></td><td id="turnCountValue">—</td></tr>
+            <tr><td><span class="metric-label" data-def="p95" tabindex="0">P95 Deviation</span></td><td id="p95DeviationValue">0 px / 0 cm</td></tr>
+            <tr><td><span class="metric-label" data-def="max" tabindex="0">Max Deviation</span></td><td id="maxDeviationValue">0 px / 0 cm</td></tr>
+            <tr><td><span class="metric-label" data-def="discont" tabindex="0">Discontinuities</span></td><td id="discontValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="vturns" tabindex="0">Vertical Turns</span></td><td id="verticalTurnValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="hturns" tabindex="0">Horizontal Reverses</span></td><td id="horizontalTurnValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="oob" tabindex="0">Out-of-Bounds</span></td><td id="outOfBoundsValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="startfails" tabindex="0">Start Fails</span></td><td id="startFailsValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="mean" tabindex="0">Mean Deviation</span></td><td id="meanDeviationValue">0 px / 0 cm</td></tr>
+            <tr><td><span class="metric-label" data-def="area" tabindex="0">Deviation Area</span></td><td id="deviationAreaValue">0 px² / 0 cm²</td></tr>
+            <tr><td><span class="metric-label" data-def="calibration" tabindex="0">Calibration</span></td><td id="calibrationUsed">0 canvas px/cm</td></tr>
+            <tr><td><span class="metric-label" data-def="cmpx" tabindex="0">cm/px</span></td><td id="cmPerPixelValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="calstatus" tabindex="0">Cal. Status</span></td><td id="calibrationResult">Not Verified</td></tr>
           </tbody>
         </table>
+        <dl class="fail-codes" aria-label="Reason codes for a score of 4">
+          <div><dt>SF</dt><dd>Start Fail: 3 failed presses in a row at the start point</dd></div>
+          <div><dt>TO</dt><dd>Time Out: end boundary not crossed within 30 seconds</dd></div>
+          <div><dt>OB</dt><dd>Out of Bounds: left the canvas 3 or more times</dd></div>
+          <div><dt>DC</dt><dd>Discontinuity: 10 or more lifts. This can also appear with small tremor, so review these trials.</dd></div>
+          <div><dt>+</dt><dd>All reasons that apply are listed together, for example OB, DC.</dd></div>
+        </dl>
       </section>
+      </div>
+
+      <div class="ld-side-panel" data-panel="research">
+        <!-- Clinical reference (research tab) -->
+        <section class="card research-card" id="clinicalPanel">
+          <div class="panel-header"><h2>Clinical Reference</h2></div>
+          <div class="clinician-score-grid">
+            <div id="clinicianScoreRField">
+              <label for="clinicianScoreR">Clinician-rated SARA Score Right (0–4)</label>
+              <select id="clinicianScoreR">
+                <option value="">Not entered</option>
+                <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option>
+              </select>
+            </div>
+            <div id="clinicianScoreLField">
+              <label for="clinicianScoreL">Clinician-rated SARA Score Left (0–4)</label>
+              <select id="clinicianScoreL">
+                <option value="">Not entered</option>
+                <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option>
+              </select>
+            </div>
+          </div>
+          <div class="clinician-mean">Clinician-rated SARA Score Item (R + L) / 2: <strong id="clinicianScoreMean">—</strong></div>
+          <label for="researchNotes">Clinician / researcher notes</label>
+          <textarea id="researchNotes" rows="4" placeholder="Optional same-day reference notes"></textarea>
+        </section>
+
+        <!-- Scoring rules (research tab) -->
+        <section class="card research-card" id="scoringPanel">
+          <div class="panel-header"><h2>LD CMQ Score Rules</h2></div>
+          <p class="small-muted scoring-note">
+            The score uses turn amplitude only. Time, discontinuities, reverses, deviation area and P95 deviation are calculated and stored for later comparison with clinician ratings.
+            Forward-and-back tremor cannot be measured on a flat screen, so lifts are recorded as discontinuities.
+          </p>
+          <button id="showScoringBtn" class="text-button" type="button">View calculation details</button>
+          <div id="scoringDetails" class="details-box" hidden></div>
+        </section>
+
+        <!-- Log -->
+        <section class="card research-card log-card" id="logPanel">
+          <div class="panel-header">
+            <div>
+              <h2>Log</h2>
+              <div class="small-muted log-subtitle">Run history and summary messages.</div>
+            </div>
+            <div class="header-actions"><button id="clearLogBtn" type="button">Clear Log</button></div>
+          </div>
+          <div id="logArea" class="log" role="log" aria-live="polite"></div>
+        </section>
+      </div>
     </aside>
   </div>
 
@@ -120,15 +210,14 @@
 </div>
 
 <!-- Metric definition popup -->
-<div id="defOverlay" class="def-overlay" onclick="if(event.target===this)closeDefinition()">
-  <div class="def-modal">
-    <button class="def-close" onclick="closeDefinition()">✕</button>
-    <h3 id="defTitle">Title</h3>
-    <p id="defText">Definition.</p>
-  </div>
+<div id="defTip" class="def-tip" role="tooltip" hidden>
+  <h3 id="defTitle">Title</h3>
+  <p id="defText">Definition.</p>
 </div>
 
-<script src="./app.js"></script>
+<script src="../shared/upload.js?v=20261103-1"></script>
+<script src="./scoring.js?v=20261104-1"></script>
+<script src="./app.js?v=20261104-1"></script>
 
 </body>
 </html>

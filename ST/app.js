@@ -1141,6 +1141,27 @@
   // SECTION 13: BOOT
   // ══════════════════════════════════════════════════════════════
 
+  function fitStMain(){
+    var stMain = document.querySelector('.st-main');
+    if (!stMain) return;
+    var top = stMain.getBoundingClientRect().top;
+    var footer = document.querySelector('.st-app > footer');
+    var footerH = 0;
+    if (footer) {
+      var fr = footer.getBoundingClientRect();
+      var fcs = getComputedStyle(footer);
+      footerH = fr.height + (parseFloat(fcs.marginTop) || 0) + (parseFloat(fcs.marginBottom) || 0);
+    }
+    var bottomBreathingRoom = 28;
+    var available = window.innerHeight - top - footerH - bottomBreathingRoom;
+    stMain.style.height = Math.max(500, available) + 'px';
+  }
+
+  window.addEventListener('resize', fitStMain);
+  window.addEventListener('load', fitStMain);
+  fitStMain();
+  setTimeout(fitStMain, 300); /* re-measure once shared header/fonts finish loading */
+
   resizeOv();
   estimatePpc();
   (function tick() {

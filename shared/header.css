@@ -17,56 +17,90 @@
     top: 0;
     left: 0;
     width: 100%;
-    height: 100px;
     background: var(--header-bg);
     border-bottom: 1px solid var(--header-border);
 
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    padding: 0 24px;
     z-index: 9999;
 
     font-family: 'Inter', sans-serif;
 }
 
 /* ============================= */
-/* BRANDING */
+/* BRANDING                                                               */
+/* Positioned independently in the left gutter (fixed 24px from the      */
+/* viewport edge) so it never pushes .gh-inner's content — that's what   */
+/* keeps the Patient box's left edge locked to the page content's left    */
+/* edge regardless of how wide "AtaxiaV 2.0 / CeMoQu V. 0.2" is.          */
 /* ============================= */
 .gh-brand {
+    position: absolute;
+    left: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+
     display: flex;
     flex-direction: column;
-    margin-right: 30px;
-    flex-shrink: 0;
+    justify-content: center;
+    gap: 1px;
 }
 
 .gh-title {
     font-size: 20px;
     font-weight: 700;
     color: #fff;
+    line-height: 1.1;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.gh-title:hover {
+    color: var(--header-accent);
 }
 
 .gh-subtitle {
     font-size: 13px;
     color: #60a5fa;
     font-weight: 700;
+    line-height: 1.1;
     letter-spacing: 0.5px;
     text-shadow: 0 0 6px rgba(96,165,250,0.4);
+    white-space: nowrap;
 }
 
 /* ============================= */
-/* DATA PANEL */
+/* INNER WRAPPER                                                          */
+/* Mirrors the page content's .cq-shell (max-width:1080px, margin:0 auto, */
+/* 24px side padding) so the header's Patient box lines up with the       */
+/* cards below it at every viewport width, not just pinned to the left    */
+/* edge of the screen.                                                    */
+/* ============================= */
+.gh-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 14px 24px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* ============================= */
+/* DATA PANEL                                                             */
+/* Width is pinned to 3 of the 4 card columns below (75% of the shared    */
+/* content column, minus half a card-grid gap) so its right edge lines    */
+/* up with the "Line Drawing Test" card, the 3rd of 4 cards.              */
 /* ============================= */
 .gh-data-panel {
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     gap: 6px;
 
-    flex-grow: 1;
-    max-width: 700px;
-
-    margin-right: 24px;
+    flex: 0 0 auto;
+    width: calc(75% - 3.5px);
+    min-width: 0; /* allow this flex item to actually shrink below content width */
 }
 
 /* ============================= */
@@ -79,6 +113,7 @@
 
     height: 34px;
     padding: 0 12px;
+    min-width: 0;
 
     background: rgba(15, 23, 42, 0.85);
     border: 1px solid rgba(59, 130, 246, 0.25);
@@ -137,25 +172,35 @@
 /* INPUT SIZING (핵심) */
 /* ============================= */
 
-/* 고정 */
-.inp-id { width: 90px; flex-shrink: 0; }
-.inp-age { width: 70px; flex-shrink: 0; text-align: center; }
-.inp-sex { width: 80px; flex-shrink: 0; text-align: center; }
-.inp-dob { width: 110px; flex-shrink: 0; }
+/* 비율 기반: flex-basis를 목표 크기로 쓰고, min-width로 최소 가독폭만 보장.
+   화면이 좁아지면 전부 같이 비례해서 줄어듦 (한쪽만 잘리지 않음). */
+.inp-id   { flex: 1 1 70px;  min-width: 40px; }
+.inp-age  { flex: 1 1 55px;  min-width: 32px; text-align: center; }
+.inp-sex  { flex: 1 1 86px;  min-width: 80px; text-align: center; }
+.inp-dob  { flex: 1 1 85px;  min-width: 48px; }
+.inp-hand { flex: 1 1 120px; min-width: 112px; }
+
+select.gh-input { cursor: pointer; }
+select.gh-input option { color: #0b1a24; background: #fff; }
+input[type="number"].gh-input { appearance: textfield; -moz-appearance: textfield; }
+input[type="number"].gh-input::-webkit-outer-spin-button,
+input[type="number"].gh-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* 유연하지만 제한 */
 .inp-name {
-    flex: 1;
-    max-width: 140px; /* 🔥 폭주 방지 */
+    flex: 2 1 90px;
+    min-width: 48px;
+    max-width: 180px; /* 🔥 폭주 방지 */
 }
 
 .inp-op {
-    flex: 1;
-    max-width: 140px;
+    flex: 2 1 90px;
+    min-width: 48px;
+    max-width: 180px;
 }
 
-.inp-sess { width: 90px; flex-shrink: 0; }
-.inp-date { width: 120px; flex-shrink: 0; }
+.inp-sess { flex: 1 1 70px; min-width: 40px; }
+.inp-date { flex: 1 1 95px; min-width: 58px; }
 
 /* ============================= */
 /* DIVIDER */
@@ -172,15 +217,17 @@
 .gh-nav {
     display: flex;
     align-items: center;
-    gap: 15px;
-    margin: 0 24px;
+    gap: clamp(8px, 1.2vw, 15px);
+    margin-left: clamp(10px, 2vw, 24px);
+    flex-shrink: 0;
 }
 
 .nav-btn {
     text-decoration: none;
     color: #64748b;
-    font-size: 13px;
+    font-size: clamp(11px, 1vw, 13px);
     font-weight: 600;
+    white-space: nowrap;
     transition: 0.2s;
 }
 
@@ -196,35 +243,106 @@
 }
 
 /* ============================= */
-/* STATUS */
+/* NARROW VIEWPORT FALLBACK       */
+/* Proportional shrinking above has a floor (min-widths for               */
+/* readability). Below that, wrap onto multiple lines instead of          */
+/* clipping. Header height becomes auto here — header.js measures the     */
+/* real rendered height and updates --header-offset so body content       */
+/* never overlaps it, at any width.                                       */
 /* ============================= */
-.gh-status {
-    display: flex;
-    gap: 12px;
+@media (max-width: 1300px) {
+    .global-header {
+        display: flex;
+        flex-direction: column;
+    }
+    .gh-brand {
+        position: static;
+        transform: none;
+        flex-direction: row;
+        align-items: baseline;
+        justify-content: flex-start;
+        gap: 10px;
+        padding: 10px 24px 0;
+    }
+    .gh-inner {
+        flex-wrap: wrap;
+        padding: 10px 24px;
+        justify-content: flex-start;
+        row-gap: 8px;
+    }
+    .gh-data-panel {
+        flex-basis: 100%;
+        width: 100%;
+    }
+    .gh-nav {
+        flex-basis: 100%;
+        margin-left: 0;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+}
 
-    padding: 5px 15px;
-    border-radius: 20px;
+@media (max-width: 460px) {
+    .data-bar {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 6px 10px;
+        row-gap: 4px;
+    }
+    .inp-id, .inp-age, .inp-sex, .inp-hand, .inp-dob, .inp-name, .inp-op, .inp-sess, .inp-date {
+        flex: 1 1 70px;
+    }
+}
 
-    border: 1px solid var(--header-border);
+/* Upload status, shown beside the session fields */
+.gh-upload-status {
+    flex: 0 1 auto;
+    margin-left: 8px;
+    align-self: center;
+    padding: 2px 8px;
+    border-radius: 999px;
     font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: #fde68a;
+    background: rgba(245, 158, 11, .14);
 }
+.gh-upload-status[data-state="saved"] { color: #86efac; background: rgba(34, 197, 94, .14); }
+.gh-upload-status[data-state="error"] { color: #fca5a5; background: rgba(239, 68, 68, .16); }
 
-.status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #ef4444;
-    display: inline-block;
-    margin-right: 4px;
+/* Full-size trajectory image */
+.gh-image-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(2, 10, 15, .9);
 }
-
-.status-dot.on {
-    background: #10B981;
-    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+.gh-image-viewer img {
+    max-width: 100%;
+    max-height: calc(100vh - 96px);
+    object-fit: contain;
+    border: 1px solid #1e3a50;
+    border-radius: 8px;
 }
-
-.mode-indicator {
-    border-left: 1px solid var(--header-border);
-    padding-left: 12px;
-    color: var(--header-muted);
+.gh-image-actions { display: flex; gap: 10px; }
+.gh-image-actions a,
+.gh-image-actions button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 18px;
+    border: 1px solid #1e3a50;
+    border-radius: 8px;
+    background: #0b1a24;
+    color: #e7f4fa;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
 }
