@@ -21,7 +21,7 @@ CeMoQu currently includes four browser-based assessment modules.
 | Module | Test | Input | Main measurements |
 |---|---|---|---|
 | **SD** | Speech Disturbance Test | Microphone | Sustained phonation, pitch stability, speech rhythm, pause ratio, reading accuracy, speaking rate |
-| **RT** | Random Target Touch Test | Mouse, touch, or webcam | Reaction time, final positional error, time inside target, tremor, movement smoothness |
+| **RT** | Random Target Touch Test | Mouse, touch, or webcam | Arrival error, reaction time, time inside target, hold turns, target found |
 | **LD** | Line Drawing Test | Mouse or touch | Completion time, path deviation, discontinuities, corrective turns, out-of-bounds events, start failures |
 | **ST** | Sitting Balance Test | Webcam | Upper-body sway, maximum/mean sway, sway variability, sway duty, tracking continuity |
 
@@ -44,7 +44,7 @@ It supports:
 - **Cursor Mode** — mouse, trackpad, or touchscreen
 - **Camera Mode** — webcam-based fingertip tracking
 
-The current workflow tests the **right hand and left hand sequentially** and records movement features including final error, reaction time, time inside the target, tremor, and smoothness. The module produces a provisional **SARA Finger Chase Score** and preserves the underlying measurements for research analysis.
+The current workflow tests the **right hand and left hand sequentially** and records movement features including arrival error, reaction time, time inside the target, hold turns, and whether the target was found. The module produces a provisional **RT CMQ Score** and preserves the underlying measurements for research analysis.
 
 ### LD — Line Drawing Test
 
@@ -187,6 +187,16 @@ Current modules may provide:
 - Module-specific visualizations
 
 The exact export fields differ by module because each task measures a different motor or speech function.
+
+### Submit Data
+
+LD, RT and SD save through `shared/upload.js`:
+
+- Each module fills in the same patient and test columns from the shared header.
+- LD and RT save one row per trial. SD saves one row per assessment.
+- Data waits in the browser (IndexedDB) and is sent one record at a time. A record leaves the browser only after the server confirms it, so a lost connection does not lose data. Clearing browser data before it is sent does.
+- The Apps Script stores rows in the `LD_v2`, `RT_v2` and `SD_v2` tabs and raw files in `CeMoQu_Data / patient / session / module` in Google Drive, with a SHA-256 checksum for each file.
+- A `trial_id` that already exists is not saved again.
 
 ## Scoring and Validation
 

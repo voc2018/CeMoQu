@@ -12,7 +12,7 @@ This module (**RT**) is a short, guided pointing task modeled after the logic of
 
 In the official SARA examination, Finger Chase is scored by a clinician while the participant performs repeated pointing movements toward the examiner's finger. The clinician judges **dysmetria**, or the spatial error/overshoot of the pointing movement.
 
-RT does **not** replicate the clinician-administered exam directly. Instead, it standardizes the pointing target on a screen and records movement data from either a direct cursor/touch input or a webcam-based fingertip tracker. This tradeoff makes the task more repeatable and exportable, but it also means that the current score remains an engineering estimate until compared with clinician-rated SARA Finger Chase scores.
+RT does **not** replicate the clinician-administered exam directly. Instead, it standardizes the pointing target on a screen and records movement data from either a direct cursor/touch input or a webcam-based fingertip tracker. This tradeoff makes the task more repeatable and exportable, but it also means that the current score remains an engineering estimate until compared with Clinician-rated SARA Scores.
 
 ---
 
@@ -31,13 +31,13 @@ The design principle is:
 
 That means Cursor Mode and Camera Mode obtain movement data differently, but after each mode produces standardized `x`, `y`, and time samples, the same analysis pipeline is used for arrival detection, dysmetria, tremor, summary metrics, and scoring.
 
-![Screenshot needed: RT main screen showing Cursor Mode selected](docs/screenshots/rt-main-cursor-mode.png)
+![RT main screen showing Cursor Mode selected](docs/screenshots/rt-main-cursor-mode.png)
 
 ---
 
 ## Cursor Mode workflow
 
-Cursor Mode is intended for mouse, trackpad, or touchscreen use. It does not use the camera.
+Cursor Mode is intended for mouse, trackpad, or touchscreen use. It does not use the camera. It scores the distance from the target at the first press in each target window. A window with no press is a missed movement. Analyze Cursor Mode and Camera Mode separately.
 
 1. Select **Cursor Mode**.
 2. Measure the orange calibration bar with a physical ruler.
@@ -51,9 +51,9 @@ Cursor Mode is intended for mouse, trackpad, or touchscreen use. It does not use
 
 Cursor Mode must be calibrated before the test can start. Calibration values are kept only within the current browser session; reopening the module requires calibration again.
 
-![Screenshot needed: Cursor Mode calibration bar before verification](docs/screenshots/cursor-calibration-bar.png)
+![Cursor Mode calibration bar before verification](docs/screenshots/cursor-calibration-bar.png)
 
-![Screenshot needed: Cursor Mode verified calibration result](docs/screenshots/cursor-calibration-verified.png)
+![Cursor Mode verified calibration result](docs/screenshots/cursor-calibration-verified.png)
 
 ---
 
@@ -74,11 +74,11 @@ Camera Mode is intended for webcam-based fingertip tracking.
 
 The four-measurement average is used because a single camera-based measurement can be affected by hand distance, temporary tracking jitter, angle, or posture.
 
-![Screenshot needed: Camera Mode index-finger length input](docs/screenshots/camera-finger-length-input.png)
+![Camera Mode index-finger length input](docs/screenshots/camera-finger-length-input.png)
 
-![Screenshot needed: Camera Auto Calibration progress/log showing 1 of 4 through 4 of 4](docs/screenshots/camera-auto-calibration-progress.png)
+![Camera Auto Calibration progress/log showing 1 of 4 through 4 of 4](docs/screenshots/camera-auto-calibration-progress.png)
 
-![Screenshot needed: Camera calibration complete with average pixels-per-cm](docs/screenshots/camera-calibration-average.png)
+![Camera calibration complete with average pixels-per-cm](docs/screenshots/camera-calibration-average.png)
 
 ---
 
@@ -100,11 +100,11 @@ Calibration
 → Final result
 ```
 
-![Screenshot needed: Right-hand start message](docs/screenshots/right-hand-test-message.png)
+![Right-hand start message](docs/screenshots/right-hand-test-message.png)
 
-![Screenshot needed: 3-2-1 countdown overlay](docs/screenshots/countdown-overlay.png)
+![3-2-1 countdown overlay](docs/screenshots/countdown-overlay.png)
 
-![Screenshot needed: target sequence running](docs/screenshots/target-running.png)
+![target sequence running](docs/screenshots/target-running.png)
 
 ---
 
@@ -123,31 +123,29 @@ For each target, RT records and summarizes the following values:
 | Tracking spikes removed | Number and percent of samples removed as tracking outliers |
 | Measured FPS | Actual sampling rate during the trial |
 
-The current scoring pipeline uses the **arrival-distance dysmetria score** and the **post-arrival tremor score**. Other measurements are exported and displayed for research review, but they are not yet part of the final SARA Finger Chase score.
+The current scoring pipeline uses only the **arrival-distance dysmetria score**. Other measurements are exported and displayed for research review, but they are not yet part of the RT CMQ Score.
 
 ---
 
 ## How scoring works
 
-The current scoring configuration is `rt-scoring-v1`.
+The current scoring configuration is `rt-scoring-v2`.
 
-Each target produces:
+Each target produces a **dysmetria score** from the distance to the target at the arrival point. If no stop is found, the last frame of the target window is used and `arrival_detected` is 0.
 
-1. **Dysmetria score** from arrival distance.
-2. **Tremor score** from post-arrival P95 radial deviation, when available.
-3. **CeMoQu weighted score** from dysmetria and tremor.
+Hold turns, target found and the post-arrival P95 radius are stored and not scored.
 
-The SARA-aligned Finger Chase score currently uses the dysmetria score from the **last three movements**, matching the SARA-style five-movement structure where the final three pointing movements are averaged.
+The RT CMQ Score currently uses the dysmetria score from the **last three tracked movements**, matching the SARA-style five-movement structure where the final three pointing movements are averaged.
 
 ```text
-SARA Finger Chase Score = average of dysmetria scores from the last 3 valid movements
+RT CMQ Score = average of dysmetria scores from the last 3 tracked movements
 ```
 
-If tracking is missing, the run is marked unavailable rather than being automatically scored as 4.
+A finished run scores from the last three tracked movements. If 50% or more of the movements were not tracked, the hand scores 4. The app cannot tell a patient who could not move from a camera that lost the hand, so review these runs.
 
 For the exact thresholds, formulas, and examples, see [`METHODOLOGY.md`](./METHODOLOGY.md).
 
-![Screenshot needed: final RT result screen](docs/screenshots/final-result.png)
+![final RT result screen](docs/screenshots/final-result.png)
 
 ---
 
@@ -174,11 +172,11 @@ Typical exported data include:
 ## Limitations
 
 - The score is not clinically validated.
-- Thresholds and weights are engineering placeholders.
+- Thresholds are engineering placeholders.
 - Camera Mode depends on webcam quality, frame rate, lighting, hand pose, and MediaPipe tracking stability.
 - Cursor Mode depends on screen calibration, browser zoom, window size, monitor scaling, and pointer/touch behavior.
 - Camera and Cursor measurements should not be assumed interchangeable until tested directly.
-- Reaction time, time-inside, smoothness, and other exported measures require validation before being used as scored biomarkers.
+- Reaction time, time-inside, and other exported measures require validation before being used as scored biomarkers.
 - Low camera FPS may reduce confidence in tremor-related measurements.
 - A successful browser test is not the same as clinical validation.
 
@@ -192,4 +190,4 @@ This module follows the same four-document structure used for the SD module:
 - [`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md) — why this task design, why two modes, why these distances, and why these metrics
 - [`VERIFICATION-REPORT.md`](./VERIFICATION-REPORT.md) — what has been checked, what remains unverified, and what is required before clinical validation
 
-**Current scoring configuration:** `rt-scoring-v1`
+**Current scoring configuration:** `rt-scoring-v2`

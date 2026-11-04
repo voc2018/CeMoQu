@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Line Drawing Test — CeMoQu</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/common.css">
+<link rel="stylesheet" href="../shared/header.css">
+<script src="../shared/header.js" defer></script>
+
+<link rel="stylesheet" href="./styles.css">
+
+</head>
+
+<body>
+
+<div id="header-container"></div>
+
+<div class="app">
+<div class="page-body">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <a href="../index.html" class="btn-pill back-link" style="font-size:12px;padding:6px 12px;">← Back</a>
+    <div class="title-block">
+      <h1>Line Drawing Test</h1>
+      <div class="small-muted">SARA-6 compatible · P95 deviation scoring</div>
+    </div>
+    <!-- Test controls aligned with the subtitle -->
+    <div class="controls test-controls">
+      <div id="testGuidance" class="test-guidance" role="status" aria-live="polite">
+        Verify calibration to begin.
+      </div>
+      <select id="testSelector" onchange="changeTest()">
+        <option value="horizontal">Horizontal Test</option>
+        <option value="vertical">Vertical Test</option>
+        <option value="diagonal1">Diagonal Test 1</option>
+        <option value="diagonal2">Diagonal Test 2</option>
+      </select>
+      <select id="handSelector" aria-label="Hand(s)">
+        <option value="B" selected>Right and Left</option>
+        <option value="R">Right only</option>
+        <option value="L">Left only</option>
+      </select>
+      <button id="startSequenceBtn" onclick="startTestSequence()">Start Test</button>
+      <button onclick="stopTest()">Stop Test</button>
+      <button id="exportTrialBtn" onclick="exportData()">Submit Data</button>
+      <button id="exportCsvBtn" onclick="exportCsv()">Export CSV</button>
+      <span id="exportStatus" class="small-muted"></span>
+    </div>
+  </div>
+
+  <div class="test-workspace">
+    <main class="test-column">
+      <!-- Canvas -->
+      <div class="card canvas-card">
+        <div id="canvas-container">
+          <canvas id="testCanvas"></canvas>
+          <div id="handPrompt" class="hand-prompt" hidden>
+            <div class="hand-prompt-kicker" id="handPromptKicker">HAND</div>
+            <div class="hand-prompt-title" id="handPromptTitle">RIGHT HAND</div>
+            <div class="hand-prompt-body" id="handPromptBody"></div>
+            <button type="button" id="handReadyBtn" class="hand-ready-btn">Ready</button>
+          </div>
+          <div id="screenGate" class="hand-prompt screen-gate">
+            <div class="hand-prompt-kicker">DISPLAY</div>
+            <div class="hand-prompt-title" id="screenGateTitle">FULL SCREEN</div>
+            <div class="hand-prompt-body" id="screenGateBody">The test runs in full screen only. The canvas size is fixed when full screen starts and does not change afterward.</div>
+            <button type="button" id="enterFullscreenBtn" class="hand-ready-btn">Enter Full Screen</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="side-column">
+      <div class="ld-tab-bar" role="tablist">
+        <button class="ld-tab active" data-panel="test" role="tab">TEST</button>
+        <button class="ld-tab" data-panel="research" role="tab">RESEARCH</button>
+      </div>
+
+      <div class="ld-side-panel active" data-panel="test">
+      <!-- Calibration -->
+      <section class="card calibration-panel">
+        <div class="panel-header">
+          <h2>Calibration</h2>
+          <div class="header-actions">
+            <div id="calibrationStatus" class="status-bad">Not Verified</div>
+            <button class="verify-button" onclick="verifyCalibration()">Verify Calibration</button>
+          </div>
+        </div>
+        <p class="notice">Measure the orange bar with a ruler and enter its length in cm.</p>
+        <div id="calBarSidebar" class="cal-bar">
+          <span class="cal-bar-label">CALIBRATION BAR</span>
+        </div>
+        <div class="calibration-fields">
+          <div class="form-row">
+            <label>Bar Length (cm)</label>
+            <input type="number" id="measuredDistance" step="0.01" placeholder="e.g. 13.2">
+          </div>
+          <div class="form-row">
+            <label>Tolerance (cm)</label>
+            <input type="number" id="toleranceInput" step="0.01" value="0.25">
+          </div>
+        </div>
+      </section>
+
+      <!-- Results -->
+      <section class="card results-panel">
+        <div class="results-heading">
+          <h2>Results</h2>
+          <span>Time: <strong><span id="timer">0.00</span> s</strong></span>
+        </div>
+        <table class="results-table key-results">
+          <thead>
+            <tr><th>Metric</th><th>Value</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="metric-label" data-def="hand" tabindex="0">Current Hand</span></td><td id="currentHandValue">Right</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="sara" tabindex="0">SARA Score (trial)</span></td><td id="saraScoreValue" class="score-value">—</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="handscore" tabindex="0">SARA-6 Right</span></td><td id="handScoreRValue" class="score-value">—</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="handscore" tabindex="0">SARA-6 Left</span></td><td id="handScoreLValue" class="score-value">—</td></tr>
+            <tr><td><span class="metric-label sara-label" data-def="itemscore" tabindex="0">SARA-6 Item (R+L)/2</span></td><td id="itemScoreValue" class="score-value">—</td></tr>
+            <tr><td><span class="metric-label" data-def="p95" tabindex="0">P95 Deviation</span></td><td id="p95DeviationValue">0 px / 0 cm</td></tr>
+            <tr><td><span class="metric-label" data-def="max" tabindex="0">Max Deviation</span></td><td id="maxDeviationValue">0 px / 0 cm</td></tr>
+            <tr><td><span class="metric-label" data-def="discont" tabindex="0">Discontinuities</span></td><td id="discontValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="vturns" tabindex="0">Vertical Turns</span></td><td id="verticalTurnValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="hturns" tabindex="0">Horizontal Reverses</span></td><td id="horizontalTurnValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="oob" tabindex="0">Out-of-Bounds</span></td><td id="outOfBoundsValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="startfails" tabindex="0">Start Fails</span></td><td id="startFailsValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="mean" tabindex="0">Mean Deviation</span></td><td id="meanDeviationValue">0 px / 0 cm</td></tr>
+            <tr><td><span class="metric-label" data-def="area" tabindex="0">Deviation Area</span></td><td id="deviationAreaValue">0 px² / 0 cm²</td></tr>
+            <tr><td><span class="metric-label" data-def="calibration" tabindex="0">Calibration</span></td><td id="calibrationUsed">0 canvas px/cm</td></tr>
+            <tr><td><span class="metric-label" data-def="cmpx" tabindex="0">cm/px</span></td><td id="cmPerPixelValue">0</td></tr>
+            <tr><td><span class="metric-label" data-def="calstatus" tabindex="0">Cal. Status</span></td><td id="calibrationResult">Not Verified</td></tr>
+          </tbody>
+        </table>
+      </section>
+      </div>
+
+      <div class="ld-side-panel" data-panel="research">
+        <!-- Clinical reference (research tab) -->
+        <section class="card research-card" id="clinicalPanel">
+          <div class="panel-header"><h2>Clinical Reference</h2></div>
+          <div class="clinician-score-grid">
+            <div id="clinicianScoreRField">
+              <label for="clinicianScoreR">SARA-6 Right (0–4)</label>
+              <select id="clinicianScoreR">
+                <option value="">Not entered</option>
+                <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option>
+              </select>
+            </div>
+            <div id="clinicianScoreLField">
+              <label for="clinicianScoreL">SARA-6 Left (0–4)</label>
+              <select id="clinicianScoreL">
+                <option value="">Not entered</option>
+                <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option>
+              </select>
+            </div>
+          </div>
+          <div class="clinician-mean">SARA-6 item score (R + L) / 2: <strong id="clinicianScoreMean">—</strong></div>
+          <label for="researchNotes">Clinician / researcher notes</label>
+          <textarea id="researchNotes" rows="4" placeholder="Optional same-day reference notes"></textarea>
+        </section>
+
+        <!-- Tremor / path-deviation weighting (research tab) -->
+        <section class="card research-card" id="scoringPanel">
+          <div class="panel-header"><h2>SARA Tremor + Path Deviation Weighting</h2></div>
+          <div class="weight-bar" id="weightBar">
+            <div class="weight-handle" id="wHandle1" tabindex="0" role="slider" aria-label="SARA tremor / path deviation boundary"></div>
+          </div>
+          <div class="weight-labels"><span id="wLabelTremor"></span><span id="wLabelPath"></span></div>
+          <p class="small-muted scoring-note">
+            SARA Tremor = oscillation amplitude around the drawn path, corresponding to the action-tremor criterion of SARA Nose-Finger.
+            Path Deviation = slow drift away from the guide line, an optional CeMoQu measure.
+            Drag the bar to control how much Path Deviation contributes (0% excludes it; snaps to 10%).
+          </p>
+          <p class="pending-note">Not yet applied to scoring. The current SARA score still uses P95 deviation only, until the tremor / path-deviation split is implemented.</p>
+          <button id="showScoringBtn" class="text-button" type="button">View calculation details</button>
+          <div id="scoringDetails" class="details-box" hidden></div>
+        </section>
+
+        <!-- Log -->
+        <section class="card research-card log-card" id="logPanel">
+          <div class="panel-header">
+            <div>
+              <h2>Log</h2>
+              <div class="small-muted log-subtitle">Run history and summary messages.</div>
+            </div>
+            <div class="header-actions"><button id="clearLogBtn" type="button">Clear Log</button></div>
+          </div>
+          <div id="logArea" class="log" role="log" aria-live="polite"></div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+</div>
+</div>
+
+<!-- Metric definition popup -->
+<div id="defTip" class="def-tip" role="tooltip" hidden>
+  <h3 id="defTitle">Title</h3>
+  <p id="defText">Definition.</p>
+</div>
+
+<script src="./app.js"></script>
+
+</body>
+</html>

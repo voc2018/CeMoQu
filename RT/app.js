@@ -105,7 +105,7 @@ const LS_SETTINGS = LS_PREFIX + 'settings';
 const DEFAULTS = {
   targets: 5,
   interval_s: 2.0,
-  radius_cm: 1.5,
+  radius_cm: 1.0,
   edge_px: 20,
   min_distance_cm: 30.0,
   center_dot: true,
@@ -116,14 +116,10 @@ const DEFAULTS = {
 };
 
 /* ============================================================
-   RT_SCORING_CONFIG — dysmetria + tremor scoring pipeline
+   RT_SCORING_CONFIG — dysmetria scoring
    ============================================================
-   Single source of truth for the arrival-detection thresholds, the
-   dysmetria/tremor bucket boundaries, and the top-level weight between
-   them. All scoring functions read from this object (same "config is the
-   single source of truth" principle used in the SD module) so that the
-   RESEARCH-tab weight bar and future settings UI can change behavior
-   without code edits.
+   Single source of truth for the first-stop rule and the dysmetria bucket
+   boundaries. All scoring functions read from this object.
 
    References (see RT/TASK-DESIGN-RATIONALE.md for full citations):
    [1] Schmitz-Hübsch T. et al. "Scale for the assessment and rating of
@@ -151,7 +147,7 @@ const DEFAULTS = {
        minimum camera-mode sampling rate used for the low-fps quality flag.
 */
 const RT_SCORING_CONFIG = {
-  version: 'rt-scoring-v1',
+  version: 'rt-scoring-v2',
 
   arrival: {
     // "Arrival" = the point where the cursor/fingertip stops reaching toward
@@ -171,20 +167,9 @@ const RT_SCORING_CONFIG = {
   // TASK-DESIGN-RATIONALE.md pending further calibration data).
   dysmetriaBucketsCm: [1.0, 5.0, 15.0], // <1->0, <5->1, <15->2, else->3
 
-  // Tremor bucket boundaries (cm of max deviation from the arrival point
-  // during the hold phase). Directly reuses SARA Nose-Finger's tremor
-  // amplitude boundaries (<2cm->1, <5cm->2, >5cm->3) [1] and extends them
-  // one step further (>10cm->4) for symmetry with the dysmetria buckets.
-  tremorBucketsCm: [1.0, 2.0, 5.0], // <1->0, <2->1, <5->2, else->3 (experimental)
-
-  // Top-level weight between the two sub-scores. Basis: [4] found both
-  // classes of post-arrival measure (endpoint-accuracy-adjacent and
-  // trajectory/drift-adjacent) correlate with the SARA upper-limb
-  // sub-score at a similar magnitude (r=0.609 and r=0.657). Weighted
-  // slightly toward dysmetria because it is the metric SARA's own Finger
-  // Chase item explicitly defines [1]; tremor is CeMoQu's extension beyond
-  // the original protocol. User-adjustable via the RESEARCH tab weight bar.
-  weights: { dysmetria: 0.6, tremor: 0.4 },
+  // Movement after the stop is stored and not scored. A reversal smaller than
+  // this does not count as a hold turn. Same value as the LD tolerance default.
+  holdTurnToleranceCm: 0.25,
 
   // Below this actual measured camera-mode frame rate, the Nyquist limit
   // (fps/2) falls within the cited cerebellar tremor frequency band
@@ -374,9 +359,11 @@ function saveSettingsToLocal(){
     participant: headerFieldVal('glob-id') || DEFAULT_META.participant,
     session: headerFieldVal('glob-sess') || DEFAULT_META.session,
     date: headerFieldVal('glob-date') || DEFAULT_META.date,
-    hand: ['B','R','L'].includes(meta_hand.value) ? meta_hand.value : 'B',
     notes: DEFAULT_META.notes
   };
+  // Hand(s) is a per-test choice in the top toolbar, not a saved setting:
+  // every page load starts at "Right and Left" so a previous participant's
+  // one-hand choice cannot carry over.
   localStorage.setItem(LS_SETTINGS, JSON.stringify(s));
   loadSettingsIntoRuntime();
   appendLog('<div class="small-muted">Settings saved</div>');
@@ -396,7 +383,6 @@ function loadSettingsFromLocal(){
       cfg_edge_px.value = s.edge_px || DEFAULTS.edge_px;
       cfg_ppc.value = DEFAULTS.ppc;
       cfg_finger_cm.value = (typeof s.finger_cm === 'number') ? s.finger_cm : DEFAULTS.finger_cm;
-      meta_hand.value = currentFourSettingLayout && ['B','R','L'].includes(s.hand) ? s.hand : 'B';
     } else {
       cfg_targets.value = DEFAULTS.targets;
       cfg_interval.value = DEFAULTS.interval_s;
@@ -405,7 +391,6 @@ function loadSettingsFromLocal(){
       cfg_edge_px.value = DEFAULTS.edge_px;
       cfg_ppc.value = DEFAULTS.ppc;
       cfg_finger_cm.value = DEFAULTS.finger_cm;
-      meta_hand.value = DEFAULT_META.hand;
     }
     loadSettingsIntoRuntime();
   }catch(e){ console.warn('load settings fail',e); }
@@ -434,11 +419,11 @@ function loadSettingsIntoRuntime(){
     participant: headerFieldVal('glob-id') || DEFAULT_META.participant,
     session: headerFieldVal('glob-sess') || DEFAULT_META.session,
     date: headerFieldVal('glob-date') || DEFAULT_META.date,
-    hand: ['B','R','L'].includes(meta_hand.value) ? meta_hand.value : 'B',
+    // Keep the current hand: Save Settings during a run must not reset it.
+    hand: metaData.hand,
     notes: DEFAULT_META.notes
   };
-  const handSetting = metaData.hand === 'B' ? 'right and left' : metaData.hand === 'L' ? 'left only' : 'right only';
-  appendLog(`<div class="small-muted">Settings applied: ${cfg.targets} movements per hand • ${cfg.interval_s}s interval • ${(cfg.radius_cm*2).toFixed(1)} cm diameter • Cursor ≥20cm / Camera 30cm movement • ${handSetting}</div>`);
+  appendLog(`<div class="small-muted">Settings applied: ${cfg.targets} movements per hand • ${cfg.interval_s}s interval • ${(cfg.radius_cm*2).toFixed(1)} cm diameter • Cursor ≥20cm / Camera 30cm movement</div>`);
   updateCalibBar();
 }
 
@@ -1077,41 +1062,16 @@ function px_to_cm(px){ return mode === 'cursor' ? cursorPxToCm(px) : cameraPxToC
 function cm_to_px(cm){ return mode === 'cursor' ? cursorCmToPx(cm) : cameraCmToPx(cm); }
 
 /* ============================================================
-   Dysmetria + tremor scoring (replaces the old single-metric
-   trial_sara_score / dead enhanced_sara_score). See RT_SCORING_CONFIG
-   above for the thresholds, weight, and full literature citations.
+   Dysmetria scoring. See RT_SCORING_CONFIG above for the thresholds.
    ============================================================ */
 
 // Dysmetria: distance (cm) from the target at the "arrival point" —
 // the moment the cursor stops reaching and starts merely holding
 // position (see findArrivalIndex). Trial-level technical/missing data remain
-// unavailable; SARA score 4 is assigned only by the five-movement rule.
+// unavailable at trial level. Score 4 is set per hand in finalizeRunAndLog.
 function dysmetria_score(arrival_dist_cm, missed){
   if(missed || arrival_dist_cm === null || arrival_dist_cm === undefined || Number.isNaN(arrival_dist_cm)) return null;
   return bucketFromCm(arrival_dist_cm, RT_SCORING_CONFIG.dysmetriaBucketsCm);
-}
-
-// Tremor: max deviation (cm) from the arrival point during the hold
-// phase (arrival -> end of trial). Null when there was no measurable
-// hold phase (e.g. arrival happened right at trial end, or trial missed).
-function tremor_score(tremor_max_dev_cm, missed){
-  if(missed) return null;
-  if(tremor_max_dev_cm === null || tremor_max_dev_cm === undefined || Number.isNaN(tremor_max_dev_cm)) return null;
-  return bucketFromCm(tremor_max_dev_cm, RT_SCORING_CONFIG.tremorBucketsCm);
-}
-
-// Combined score: weighted round of dysmetria + tremor (RT_SCORING_CONFIG.weights).
-// If tremor is unavailable for this trial, falls back to dysmetria alone
-// (weight renormalized to 1.0) rather than failing the whole trial —
-// same "score what we can, flag what we can't" philosophy used in SD.
-function combined_rt_score(dScore, tScore){
-  if(dScore === null || dScore === undefined) return null;
-  if(tScore === null || tScore === undefined){
-    return { score: dScore, tremorAvailable: false };
-  }
-  const W = RT_SCORING_CONFIG.weights;
-  const raw = dScore * W.dysmetria + tScore * W.tremor;
-  return { score: Math.min(4, Math.max(0, Math.round(raw))), tremorAvailable: true };
 }
 
 /* Find the index in trialState.positions where the cursor "arrives":
@@ -1140,6 +1100,27 @@ function findArrivalIndex(positions, velocities){
     }
   }
   return null;
+}
+
+/* Number of direction reversals after the stop, taken from the axis with more
+   reversals. Stored only. */
+function countHoldTurns(points){
+  const tolerance = RT_SCORING_CONFIG.holdTurnToleranceCm;
+  const turnsOn = values => {
+    let low = values[0], high = values[0], direction = 0, extreme = values[0], turns = 0;
+    for(const value of values){
+      if(direction === 0){
+        low = Math.min(low,value); high = Math.max(high,value);
+        if(high-low >= tolerance){ direction = value===high ? 1 : -1; extreme = value; }
+      }else if((value-extreme)*direction > 0){
+        extreme = value;
+      }else if(Math.abs(value-extreme) >= tolerance){
+        turns++; direction = -direction; extreme = value;
+      }
+    }
+    return turns;
+  };
+  return Math.max(turnsOn(points.map(p=>px_to_cm(p.x))), turnsOn(points.map(p=>px_to_cm(p.y))));
 }
 
 function pushFrameTouch(trialIdx, frameIdx, ts, x_px, y_px, inside){
@@ -1218,6 +1199,7 @@ function processTrialSample(cx, cy, fingertip){
     trialState.missingFrames++;
     trialState.lastSampleMissing = true;
   }
+  trialState.frames?.push({ t: now, x: fingertip ? cx : '', y: fingertip ? cy : '', tracked: fingertip ? 1 : 0, inside: inside ? 1 : 0, event: 'frame' });
   trialState.inside_flags.push(inside);
   trialState.frameLog.push({t: now, inside});
 
@@ -1231,7 +1213,7 @@ function processTrialSample(cx, cy, fingertip){
 
   trialLine.textContent = `Trial: ${trialIndex+1}/${cfg.targets}`;
 
-  if(trialState.positions.length >= 3){
+  if(mode !== 'cursor' && trialState.positions.length >= 3){
     const detectedIdx = findArrivalIndex(trialState.positions, trialState.velocities);
     if(detectedIdx !== null){
       trialState.arrival_index = detectedIdx;
@@ -1351,24 +1333,39 @@ function finalizeTrialAndScheduleNext(){
   const percent_time_inside = total_duration_s > 0 ? 100.0 * time_inside_s / total_duration_s : 0;
   const measured_fps = total_duration_s > 0 ? frames_recorded / total_duration_s : null;
 
-  const missed = (trialState.positions.length === 0);
+  // Cursor Mode is scored only from where the participant presses. Camera Mode
+  // is scored from the tracked movement.
+  const tapMode = mode === 'cursor';
+  const taps = trialState.taps || [];
+  const missed = tapMode ? taps.length === 0 : trialState.positions.length === 0;
 
   // Final (last-recorded-position) distance — kept for CSV continuity.
   let final_dist_px=null, final_dist_cm=null;
-  if(trialState.positions.length > 0){
-    const last = trialState.positions[trialState.positions.length-1];
+  const lastPoint = tapMode ? taps[taps.length-1] : trialState.positions[trialState.positions.length-1];
+  if(lastPoint){
+    const last = lastPoint;
     final_dist_px = Math.hypot(last.x - trialState.target.x, last.y - trialState.target.y);
     final_dist_cm = px_to_cm(final_dist_px);
   }
 
-  // Arrival point (see findArrivalIndex). Without a detected movement
-  // offset, dysmetria is unavailable; the last frame is not substituted.
+  // Arrival point (see findArrivalIndex). When no stop is detected, the last
+  // position inside the target window is used. arrivalDetected stays false
+  // so these trials can be told apart in the export.
   let arrival_dist_cm = null, arrivalDetected = false;
   let tremor_max_dev_cm = null;
-  if(!missed){
+  let hold_turn_count = null, target_found = null;
+  if(!missed && tapMode){
+    const tap = taps[0];
+    arrivalDetected = true;
+    arrival_dist_cm = px_to_cm(Math.hypot(tap.x - trialState.target.x, tap.y - trialState.target.y));
+    target_found = taps.some(p => Math.hypot(p.x-trialState.target.x, p.y-trialState.target.y) <= trialState.target.radius_px);
+  } else if(!missed){
     const arrIdx = trialState.arrival_index;
-    const useIdx = arrIdx;
+    let useIdx = arrIdx;
     arrivalDetected = (arrIdx !== null);
+    if(useIdx === null){
+      useIdx = trialState.positions.reduce((last, p, i) => p.t <= trialState.end_time_ms ? i : last, null);
+    }
     if(useIdx !== null){
       const arrivalPos = trialState.positions[useIdx];
       arrival_dist_cm = px_to_cm(Math.hypot(arrivalPos.x - trialState.target.x, arrivalPos.y - trialState.target.y));
@@ -1377,6 +1374,9 @@ function finalizeTrialAndScheduleNext(){
     // P95 radial deviation is measured around the median hold position.
       const holdCutoff = trialState.end_time_ms;
       const holdPositions = trialState.positions.slice(useIdx + 1).filter(p => p.t <= holdCutoff);
+      const afterStop = [trialState.positions[useIdx], ...holdPositions];
+      target_found = afterStop.some(p => Math.hypot(p.x-trialState.target.x, p.y-trialState.target.y) <= trialState.target.radius_px);
+      if(arrivalDetected) hold_turn_count = countHoldTurns(afterStop);
       if(holdPositions.length > 0){
       const median = values => {
         const a = values.slice().sort((x,y)=>x-y), m = Math.floor(a.length/2);
@@ -1392,14 +1392,14 @@ function finalizeTrialAndScheduleNext(){
   }
 
   const dScore = dysmetria_score(arrival_dist_cm, missed);
-  const tScore = tremor_score(tremor_max_dev_cm, missed);
-  const combined = combined_rt_score(dScore, tScore);
   const runTrial = trialIndex + 1;
   const safeToken = value => String(value || '').replace(/[^a-z0-9_-]+/gi, '_') || 'unknown';
   const safeParticipant = safeToken(metaData.participant || 'participant');
   const handCode = metaData.hand === 'L' ? 'L' : 'R';
   const trajectoryImageFile = `${safeParticipant}_${safeToken(metaData.date)}_${safeToken(metaData.session)}_${handCode}_T${runTrial}_trajectory.png`;
-  const trajectoryImagePng = makeTrajectoryPng(trialState.positions, trialState.target, trialState.arrival_index, handCode, runTrial);
+  const trajectoryImagePng = tapMode
+    ? makeTrajectoryPng(taps.slice(0,1), trialState.target, taps.length ? 0 : null, handCode, runTrial)
+    : makeTrajectoryPng(trialState.positions, trialState.target, trialState.arrival_index, handCode, runTrial);
   const trackingOutliers = trialState.positions.filter(p => p.tracking_outlier).length;
   const trackingOutlierPct = trialState.positions.length ? trackingOutliers / trialState.positions.length * 100 : 0;
 
@@ -1410,6 +1410,15 @@ function finalizeTrialAndScheduleNext(){
 
   const summary = {
     trial: allTargetSummaries.length + 1,
+    mode,
+    run_start_index: runStartSummaryIndex,
+    num_targets: cfg.targets,
+    interval_s: cfg.interval_s,
+    pixels_per_cm,
+    started_at: new Date(performance.timeOrigin + trialState.start_time_ms).toISOString(),
+    ended_at: new Date(performance.timeOrigin + nowEnd).toISOString(),
+    frames: trialState.frames || [],
+    trial_start_ms: trialState.start_time_ms,
     tx: trialState.target.x, ty: trialState.target.y,
     radius_px: trialState.target.radius_px, radius_cm: cfg.radius_cm,
     final_dist_cm: final_dist_cm !== null ? final_dist_cm : null,
@@ -1417,10 +1426,11 @@ function finalizeTrialAndScheduleNext(){
     arrival_dist_cm,
     arrivalDetected,
     tremor_cm: tremor_max_dev_cm,
-    smoothness: null,
+    hold_turn_count,
+    target_found,
     time_inside_s,
     percent_time_inside,
-    reaction_time: trialState.reaction_time,
+    reaction_time: tapMode ? (taps.length ? (taps[0].t - trialState.start_time_ms)/1000.0 : null) : trialState.reaction_time,
     frames_recorded,
     measured_fps,
     lowFpsFlag,
@@ -1432,31 +1442,26 @@ function finalizeTrialAndScheduleNext(){
     tracking_outliers: trackingOutliers,
     tracking_outlier_pct: trackingOutlierPct,
     dysmetria_score: dScore,
-    tremor_score: tScore,
-    trial_score: dScore,
-    tremorAvailableInScore: combined ? combined.tremorAvailable : false,
-    // Legacy field kept identical to trial_score for any downstream
-    // consumer that still reads enhanced_score from earlier CSV exports.
-    enhanced_score: combined ? combined.score : null
+    trial_score: dScore
   };
   allTargetSummaries.push(summary);
+  updateRtTrialResults(summary);
 
   if(missed){
     appendLog(`<div>⚠️ <strong>Target ${summary.trial} — Missing</strong> — no valid touch detected in ${cfg.interval_s}s<br><small>Score: (not counted)</small></div>`);
   } else {
     const rt_ms = summary.reaction_time !== null ? Math.round(summary.reaction_time*1000) : '-';
-    const tremorText = tScore !== null ? tScore : '—' + (summary.tremorAvailableInScore ? '' : ' (no hold phase / unavailable)');
     const arrivalText = summary.arrival_dist_cm !== null
-      ? `${summary.arrival_dist_cm.toFixed(2)} cm (dysmetria ${dScore})`
-      : 'unavailable (no velocity-defined arrival detected)';
+      ? `${summary.arrival_dist_cm.toFixed(2)} cm (dysmetria ${dScore})${summary.arrivalDetected ? '' : ' <small>(no stop detected, last frame used)</small>'}`
+      : 'unavailable (no position in the target window)';
     appendLog(`<div class="trial-log-entry"><div class="trial-log-text">🎯 <strong>Target ${summary.trial}</strong><br>
       Arrival error: ${arrivalText}<br>
-      Post-arrival P95 radius: ${summary.tremor_cm !== null ? summary.tremor_cm.toFixed(2)+' cm' : 'n/a'} (experimental score ${tremorText})${lowFpsFlag ? ' <small>(low camera fps — low confidence)</small>' : ''}<br>
+      Hold turns: ${summary.hold_turn_count ?? 'n/a'}, target found: ${summary.target_found ? 'yes' : 'no'}<br>
+      Post-arrival P95 radius: ${summary.tremor_cm !== null ? summary.tremor_cm.toFixed(2)+' cm' : 'n/a'}${lowFpsFlag ? ' <small>(low camera fps — low confidence)</small>' : ''}<br>
       Reaction time: ${rt_ms} ms<br>
       Percent time inside: ${summary.percent_time_inside.toFixed(1)}%<br>
       Tracking spikes removed: ${summary.tracking_outliers} (${summary.tracking_outlier_pct.toFixed(1)}%)<br>
-      SARA-aligned dysmetria score: ${summary.trial_score}<br>
-      CeMoQu weighted score: ${summary.enhanced_score ?? 'n/a'}</div><a class="trajectory-thumb-link" href="${summary.trajectory_image_png}" download="${summary.trajectory_image_file}" title="Download ${summary.trajectory_image_file}"><img class="trajectory-thumb" src="${summary.trajectory_image_png}" alt="${handCode === 'L' ? 'Left' : 'Right'} hand trial ${runTrial} trajectory" /></a></div>`);
+      RT CMQ Score (trial): ${summary.trial_score}</div><a class="trajectory-thumb-link" href="${summary.trajectory_image_png}" download="${summary.trajectory_image_file}" title="Download ${summary.trajectory_image_file}"><img class="trajectory-thumb" src="${summary.trajectory_image_png}" alt="${handCode === 'L' ? 'Left' : 'Right'} hand trial ${runTrial} trajectory" /></a></div>`);
   }
 
   trialState = null;
@@ -1492,6 +1497,8 @@ function startTrialInternal(){
     frameLog: [],        // {t, inside} for every processed frame (fps-independent timing)
     reaction_time: null,
     arrival_index: null,
+    taps: [],           // Cursor Mode: {x,y,t} of each press inside the target window
+    frames: [],         // raw table: every frame and press, tracked or not
     start_time_ms: scheduledStartMs,
     end_time_ms: scheduledEndMs,
     endTimer: null,
@@ -1522,40 +1529,37 @@ async function finalizeRunAndLog(){
   const scored = summaries.filter(s=>!s.missed && (typeof s.trial_score === 'number'));
   const scores = scored.map(s => s.trial_score).filter(v=>v!==null && v!==undefined);
 
-  let totalScoreText = 'SARA Finger Chase Score: unavailable';
+  let totalScoreText = 'RT CMQ Score: unavailable';
   let finalScore = null;
-  // Tracking loss or failure of the velocity detector is not the same as
-  // the clinical SARA category "unable to perform 5 pointing movements".
-  // Never manufacture score 4 from missing automated measurements.
-  const lastThree = summaries.slice(-3);
-  if(summaries.length === cfg.targets && lastThree.every(s=>!s.missed && typeof s.trial_score === 'number')){
+  // A finished run scores from the last three tracked movements. If 50% or
+  // more of the movements are not tracked it scores 4, SARA's "unable to
+  // perform 5 pointing movements". The app cannot tell a patient who could not move from a camera
+  // that lost the hand, so missed_count is kept for review.
+  const tracked = summaries.filter(s=>!s.missed && typeof s.trial_score === 'number');
+  const lastThree = tracked.slice(-3);
+  const missed_count = summaries.length - tracked.length;
+  if(summaries.length === cfg.targets && missed_count / summaries.length >= 0.5){
+    finalScore = 4;
+    totalScoreText = `RT CMQ Score: 4.00 (${missed_count} of ${summaries.length} movements not tracked; review)`;
+  } else if(summaries.length === cfg.targets){
     const arr = lastThree.map(s=>s.trial_score);
-    const avg = arr.reduce((a,b)=>a+b,0)/arr.length;
-    finalScore = avg;
-    totalScoreText = `SARA Finger Chase Score: ${finalScore.toFixed(2)} (average of last 3 movements)`;
-  } else if(summaries.some(s=>s.missed)){
-    totalScoreText = 'SARA Finger Chase Score: unavailable (hand tracking was missing; not automatically scored as 4)';
-  } else if(summaries.length !== 5){
-    totalScoreText = 'SARA Finger Chase Score: unavailable (run incomplete)';
+    finalScore = arr.reduce((a,b)=>a+b,0)/arr.length;
+    totalScoreText = `RT CMQ Score: ${finalScore.toFixed(2)} (average of last 3 tracked movements${missed_count ? `; ${missed_count} not tracked` : ''})`;
   } else {
-    totalScoreText = 'SARA Finger Chase Score: unavailable (arrival could not be detected in all of the last 3 movements)';
+    totalScoreText = 'RT CMQ Score: unavailable (run incomplete)';
   }
 
   appendLog(`<div style="margin-top:8px"><strong>✅ Test completed successfully.</strong></div>`);
   appendLog(`<div style="margin-top:6px"><strong>${totalScoreText}</strong></div>`);
   const mean = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
   const mean_sara_score = finalScore;
-  const mean_enhanced_score = mean(summaries.map(s => s.enhanced_score).filter(v => typeof v === 'number'));
   const mean_dysmetria_score = mean(summaries.map(s => s.dysmetria_score).filter(v => typeof v === 'number'));
-  const mean_tremor_score = mean(summaries.map(s => s.tremor_score).filter(v => typeof v === 'number'));
   const mean_arrival_dist_cm = mean(summaries.map(s => s.arrival_dist_cm).filter(v => typeof v === 'number'));
   const mean_distance_to_target_cm = mean(summaries.map(s => s.final_dist_cm).filter(v => typeof v === 'number'));
   const mean_time_to_target_s = mean(summaries.map(s => s.reaction_time).filter(v => typeof v === 'number'));
   const mean_percent_time_inside = mean(summaries.map(s => s.percent_time_inside).filter(v => typeof v === 'number'));
   const mean_tremor = mean(summaries.map(s => s.tremor_cm).filter(v => typeof v === 'number'));
-  const mean_smoothness = mean(summaries.map(s => s.smoothness).filter(v => typeof v === 'number'));
 
-  const clinicianScoreEl = document.getElementById('clinicianScore');
   const researchNotesEl = document.getElementById('researchNotes');
 
   const runSummary = {
@@ -1568,22 +1572,21 @@ async function finalizeRunAndLog(){
     mode,
     num_targets: cfg.targets,
     mean_sara_score,
-    mean_enhanced_score,
     mean_dysmetria_score,
-    mean_tremor_score,
     mean_arrival_dist_cm,
     mean_distance_to_target_cm,
     mean_time_to_target_s,
     mean_percent_time_inside,
     mean_tremor,
-    mean_smoothness,
     notes: metaData.notes,
     cfg: {...cfg},
     targets: summaries,
     finalScore,
-    scoringConfig: {...RT_SCORING_CONFIG, weights:{...RT_SCORING_CONFIG.weights}},
+    missed_count,
+    scoringConfig: {...RT_SCORING_CONFIG},
     clinicalReference: {
-      clinicianRatedSaraFingerChaseScore: (clinicianScoreEl && clinicianScoreEl.value !== '') ? Number(clinicianScoreEl.value) : null,
+      clinicianScoreRight: clinicianScoreValue('R'),
+      clinicianScoreLeft: clinicianScoreValue('L'),
       notes: researchNotesEl ? researchNotesEl.value : ''
     }
   };
@@ -1594,12 +1597,14 @@ async function finalizeRunAndLog(){
 
   const completedHand = metaData.hand;
   handSessionResults.push(runSummary);
-  await showPhaseMessage(`${completedHand === 'L' ? 'Left' : 'Right'} hand test is complete.`, 1000);
+  updateRtHandScores();
+  await showPhaseMessage(`${completedHand === 'L' ? 'Left' : 'Right'} hand test is complete.`, 1000, `${completedHand === 'L' ? 'LEFT' : 'RIGHT'} HAND`);
   if(sessionHandIndex + 1 < sessionHands.length && thisRunId === activeRunId){
     sessionHandIndex++;
     metaData.hand = sessionHands[sessionHandIndex];
     await beginCurrentHandRun();
   }else if(thisRunId === activeRunId){
+    meta_hand.disabled = false;
     showFinalTestResult();
   }
 }
@@ -1707,13 +1712,153 @@ async function runCountdownAndCue(){
   countdownOverlay.style.display = 'none';
 }
 
-async function showPhaseMessage(message, durationMs){
+async function showPhaseMessage(message, durationMs, title=''){
   countdownOverlay.classList.add('phase-message');
-  countdownOverlay.textContent = message;
+  countdownOverlay.textContent = '';
+  const kicker = document.createElement('div');
+  kicker.className = 'phase-kicker';
+  kicker.textContent = 'HAND';
+  const head = document.createElement('div');
+  head.className = 'phase-title';
+  head.textContent = title;
+  const body = document.createElement('div');
+  body.textContent = message;
+  if(title) countdownOverlay.append(kicker, head, body);
+  else countdownOverlay.append(body);
   countdownOverlay.style.display = 'flex';
   await new Promise(r=>setTimeout(r,durationMs));
   countdownOverlay.style.display = 'none';
   countdownOverlay.classList.remove('phase-message');
+}
+
+/* TEST-tab Results table (same layout as LD): refreshed at the end of every
+   target, mirroring the per-target Log entry. */
+function setRtResult(id, value){
+  const el = document.getElementById(id);
+  if(el) el.textContent = value;
+}
+
+/* Metric definitions for the Results table (click a metric name).
+   Wording follows RT METHODOLOGY.md / README.md and RT_SCORING_CONFIG. */
+const RT_METRIC_DEFINITIONS = {
+  hand: {
+    title: 'Current Hand',
+    text: 'The hand used for the most recent target. With Right and Left selected, the right hand is tested first, then the left hand.'
+  },
+  target: {
+    title: 'Target',
+    text: 'Position of the most recent target within the current hand run (e.g. 3 of 5). The number of movements per hand is set in Settings.'
+  },
+  trialScore: {
+    title: 'RT CMQ Score (trial)',
+    text: 'CeMoQu score for the most recent target (0–3), from the arrival error: under 1 cm scores 0, 1 to under 5 cm scores 1, 5 to under 15 cm scores 2, and 15 cm or more scores 3. A missed target is not counted. These thresholds are engineering placeholders, not clinically validated cutoffs.'
+  },
+  handScore: {
+    title: 'RT CMQ Score Right / Left',
+    text: 'Per-hand CeMoQu score: the average of the dysmetria scores from the last three tracked movements of that hand. Scores 4 when 50% or more of the movements in a finished run were not tracked, which can also be caused by the camera losing the hand, so review these runs. Unavailable if the run is incomplete.'
+  },
+  itemScore: {
+    title: 'RT CMQ Score Item (R+L)/2',
+    text: 'Item score: the arithmetic mean of the right and left scores, as in the original SARA (limb items 5–8 are rated per side and averaged; Schmitz-Hübsch et al., 2006). Shown only when both hands are tested and scored.'
+  },
+  arrival: {
+    title: 'Arrival Error',
+    text: 'Distance (cm) from the target centre at the arrival point: the first moment after peak velocity where speed falls to 8% or less of the peak and stays there for at least 100 ms. If no stop is detected, the last frame of the target window is used and the trial is marked arrivalDetected = 0.'
+  },
+  tremor: {
+    title: 'Post-arrival P95 Radius',
+    text: 'Instability after the stop: the 95th percentile radial distance (cm) of hold positions from their median position. Stored only. Not used in any score. In Camera Mode below 20 fps it is flagged as low confidence.'
+  },
+  reaction: {
+    title: 'Reaction Time',
+    text: 'Time (ms) from target onset to the first sample inside the target. Unavailable if the target is never entered. Displayed and exported, but not part of the score.'
+  },
+  inside: {
+    title: 'Time Inside',
+    text: 'Percent of the fixed target window spent inside the target, calculated from actual sample timestamps rather than an assumed frame rate. Research metric; not part of the score.'
+  },
+  spikes: {
+    title: 'Tracking Spikes Removed',
+    text: 'Number (and percent) of position samples removed as tracking outliers before velocity, arrival and tremor are calculated. Raw positions are kept in the export for audit.'
+  },
+  holdTurns: {
+    title: 'Hold Turns',
+    text: 'Number of direction reversals of at least 0.25 cm between the stop and the end of the target window, on the axis with more reversals. Stored only. Not used in any score. Empty when no stop was detected.'
+  },
+  targetFound: {
+    title: 'Target Found',
+    text: 'Whether the fingertip was inside the target at the stop or at any time after it, before the target window ended. Stored only. Not used in any score.'
+  }
+};
+
+/* Hover tooltip (not click): RT is often run from a distance, so the
+   definition appears while the pointer is over a metric name and hides
+   when it leaves. Keyboard focus shows it too. */
+function showRtDefinition(label){
+  const def = RT_METRIC_DEFINITIONS[label.dataset.def];
+  const tip = document.getElementById('rtDefTip');
+  if(!def || !tip) return;
+  document.getElementById('rtDefTitle').textContent = def.title;
+  document.getElementById('rtDefText').textContent = def.text;
+  tip.hidden = false;
+  const r = label.getBoundingClientRect();
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  // Prefer the left of the label (side panel is on the right edge).
+  let x = r.left - tw - 12;
+  let y = r.top + r.height/2 - th/2;
+  if(x < 8){ x = Math.max(8, Math.min(r.left, window.innerWidth - tw - 8)); y = r.bottom + 8; }
+  y = Math.max(8, Math.min(y, window.innerHeight - th - 8));
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+
+function hideRtDefinition(){
+  const tip = document.getElementById('rtDefTip');
+  if(tip) tip.hidden = true;
+}
+
+document.querySelectorAll('.rt-results-table .metric-label[data-def]').forEach(label=>{
+  label.addEventListener('mouseenter', ()=>showRtDefinition(label));
+  label.addEventListener('mouseleave', hideRtDefinition);
+  label.addEventListener('focus', ()=>showRtDefinition(label));
+  label.addEventListener('blur', hideRtDefinition);
+});
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape') hideRtDefinition();
+});
+window.addEventListener('scroll', hideRtDefinition, true);
+
+function resetRtResults(){
+  ['rtResHand','rtResTarget','rtResSara','rtResR','rtResL','rtResItem','rtResArrival',
+   'rtResHoldTurns','rtResFound','rtResTremor','rtResRt','rtResInside','rtResSpikes'].forEach(id => setRtResult(id, '—'));
+}
+
+function updateRtTrialResults(s){
+  setRtResult('rtResHand', s.hand === 'L' ? 'Left' : 'Right');
+  setRtResult('rtResTarget', `${s.run_trial} of ${cfg.targets}`);
+  if(s.missed){
+    setRtResult('rtResSara', 'Missing (not counted)');
+    ['rtResArrival','rtResHoldTurns','rtResFound','rtResTremor','rtResRt','rtResInside','rtResSpikes'].forEach(id => setRtResult(id, '—'));
+    return;
+  }
+  setRtResult('rtResSara', s.trial_score !== null && s.trial_score !== undefined ? String(s.trial_score) : '—');
+  setRtResult('rtResArrival', s.arrival_dist_cm !== null ? `${s.arrival_dist_cm.toFixed(2)} cm (dysmetria ${s.dysmetria_score})` : 'Unavailable');
+  setRtResult('rtResHoldTurns', s.hold_turn_count ?? 'n/a');
+  setRtResult('rtResFound', s.target_found === null ? 'n/a' : (s.target_found ? 'Yes' : 'No'));
+  setRtResult('rtResTremor', s.tremor_cm !== null ? `${s.tremor_cm.toFixed(2)} cm${s.lowFpsFlag ? ' · low fps' : ''}` : 'n/a');
+  setRtResult('rtResRt', s.reaction_time !== null ? `${Math.round(s.reaction_time*1000)} ms` : '—');
+  setRtResult('rtResInside', `${s.percent_time_inside.toFixed(1)}%`);
+  setRtResult('rtResSpikes', `${s.tracking_outliers} (${s.tracking_outlier_pct.toFixed(1)}%)`);
+}
+
+function updateRtHandScores(){
+  const right = handSessionResults.find(r => r.hand === 'R');
+  const left = handSessionResults.find(r => r.hand === 'L');
+  const fmt = v => typeof v === 'number' ? v.toFixed(2) : '—';
+  setRtResult('rtResR', right ? fmt(right.finalScore) : '—');
+  setRtResult('rtResL', left ? fmt(left.finalScore) : '—');
+  setRtResult('rtResItem', right && left && typeof right.finalScore === 'number' && typeof left.finalScore === 'number'
+    ? fmt((right.finalScore + left.finalScore) / 2) : '—');
 }
 
 function scoreText(value){
@@ -1729,12 +1874,10 @@ function showFinalTestResult(){
   }else if(handSessionResults.length===1){
     finalScore = handSessionResults[0].finalScore;
   }
-  const extendedValues = handSessionResults.map(r=>r.mean_enhanced_score).filter(v=>typeof v==='number');
-  const extended = extendedValues.length ? extendedValues.reduce((a,b)=>a+b,0)/extendedValues.length : null;
   const handRows = right && left
     ? `<div>Right Hand&nbsp;&nbsp; ${scoreText(right.finalScore)}</div><div>Left Hand&nbsp;&nbsp; ${scoreText(left.finalScore)}</div><div>Average&nbsp;&nbsp; ${scoreText(finalScore)}</div>`
     : `<div>${handSessionResults[0]?.hand==='L'?'Left':'Right'} Hand&nbsp;&nbsp; ${scoreText(finalScore)}</div><div>Bilateral score not available</div>`;
-  testResultOverlay.innerHTML = `<div class="result-kicker">TEST COMPLETE</div><div class="result-title">RANDOM TARGET TEST SCORE</div><div class="result-score">${scoreText(finalScore)}</div><div class="result-hands">${handRows}</div><div class="result-extended">CeMoQu Extended Score&nbsp;&nbsp; ${scoreText(extended)}</div>`;
+  testResultOverlay.innerHTML = `<div class="result-kicker">TEST COMPLETE</div><div class="result-title">RT CMQ SCORE</div><div class="result-score">${scoreText(finalScore)}</div><div class="result-hands">${handRows}</div>`;
   testResultOverlay.style.display = 'flex';
   const bilateralSummary = {
     ts:new Date().toISOString(),
@@ -1742,7 +1885,6 @@ function showFinalTestResult(){
     participant_id:metaData.participant, session:metaData.session, date:metaData.date,
     hand:right&&left?'B':(handSessionResults[0]?.hand||null), mode,
     num_targets:cfg.targets, finalScore, mean_sara_score:finalScore,
-    mean_enhanced_score:extended,
     right_score:right?.finalScore??null, left_score:left?.finalScore??null,
     targets:handSessionResults.flatMap(r=>r.targets||[]), hand_runs:handSessionResults.slice(), cfg:{...cfg}
   };
@@ -1777,7 +1919,7 @@ function resetHandRunState(){
 
 async function startPreparedHandRun(thisRunId){
   const handName = metaData.hand === 'L' ? 'Left' : 'Right';
-  await showPhaseMessage(`The ${handName.toLowerCase()}-hand test will begin.`, 3000);
+  await showPhaseMessage(`The ${handName.toLowerCase()}-hand test will begin.`, 3000, `${handName.toUpperCase()} HAND`);
   if(thisRunId !== activeRunId) return;
   await runCountdownAndCue();
   if(thisRunId !== activeRunId) return;
@@ -1828,6 +1970,10 @@ async function beginCameraHandRun(){
 
 
 startBtn.addEventListener('click', async ()=>{
+  if(!screenReady()){
+    statusLine.textContent = 'Enter full screen before testing';
+    return;
+  }
   const thisRunId = ++activeRunId;
   runFinalized = false;
   running = false;
@@ -1866,7 +2012,11 @@ startBtn.addEventListener('click', async ()=>{
     calibUI.style.display = 'flex';
   }
 
-  sessionHands = metaData.hand === 'B' ? ['R','L'] : [metaData.hand];
+  resetRtResults();
+  const handChoice = ['B','R','L'].includes(meta_hand.value) ? meta_hand.value : 'B';
+  sessionHands = handChoice === 'B' ? ['R','L'] : [handChoice];
+  meta_hand.disabled = true;
+  appendLog(`<div class="small-muted">Hand(s): ${handChoice === 'B' ? 'right and left' : handChoice === 'L' ? 'left only' : 'right only'}</div>`);
   sessionHandIndex = 0;
   handSessionResults = [];
   metaData.hand = sessionHands[0];
@@ -1886,6 +2036,7 @@ cfg_finger_cm?.addEventListener('input', ()=>{
 /* stop */
 stopBtn.addEventListener('click', ()=>{
   activeRunId++;
+  meta_hand.disabled = false;
   runFinalized = true;
   running = false;
   if(trialState?.endTimer) clearTimeout(trialState.endTimer);
@@ -1908,6 +2059,10 @@ document.getElementById('calibGuideStatus')?.addEventListener('click', ()=>{});
 
 /* calibrate button (camera or user) */
 calibrateBtn.addEventListener('click', async ()=>{
+  if(!screenReady()){
+    statusLine.textContent = 'Enter full screen before calibration';
+    return;
+  }
   if(mode === 'camera'){
     cameraCalibrationDone = false;
     cameraCalibrationMeasurements = [];
@@ -1948,6 +2103,115 @@ calibrateBtn.addEventListener('click', async ()=>{
   }
 });
 
+/* Clinician-rated SARA Score for one hand, or null if not entered. */
+function clinicianScoreValue(hand){
+  const el = document.getElementById(hand === 'L' ? 'clinicianScoreL' : 'clinicianScoreR');
+  return el && el.value !== '' ? Number(el.value) : null;
+}
+
+function renderClinicianMean(){
+  const right = clinicianScoreValue('R'), left = clinicianScoreValue('L');
+  const meanEl = document.getElementById('clinicianScoreMean');
+  if(meanEl) meanEl.textContent = right !== null && left !== null ? String((right + left) / 2) : '—';
+}
+['clinicianScoreR','clinicianScoreL'].forEach(id => document.getElementById(id)?.addEventListener('change', renderClinicianMean));
+
+/* Latest finished hand score for this mode. */
+function latestHandScore(targetMode, hand){
+  const run = allFinalSummaries.filter(r => r.mode === targetMode && r.hand === hand && typeof r.finalScore === 'number').at(-1);
+  return run ? run.finalScore : null;
+}
+
+/* Raw table of one target: every frame and press, with the target position
+   and when it appeared. */
+function rtRawCsv(s, patientId, date){
+  const headers = ['participant_id','date','mode','hand','trial_number','target_onset','target_x','target_y','target_radius_px','t_ms','x','y','tracked','inside','event','pixels_per_cm','scoring_version'];
+  const rows = s.frames.map(f => [
+    patientId, date, s.mode, s.hand, s.run_trial, s.started_at, s.tx, s.ty, s.radius_px,
+    (f.t - s.trial_start_ms).toFixed(1), f.x, f.y, f.tracked, f.inside, f.event, s.pixels_per_cm, RT_SCORING_CONFIG.version
+  ]);
+  return CeMoQuUpload.csvText(headers, rows);
+}
+
+/* One row and its files for one target. A score not given is blank; a
+   clinician score not given is -1. */
+function rtRecord(s){
+  const fixed = (v, digits = 3) => typeof v === 'number' && Number.isFinite(v) ? Number(v.toFixed(digits)) : '';
+  const rated = v => v === null ? -1 : v;
+  const run = allFinalSummaries.find(r => r.targets.includes(s));
+  const row = CeMoQuUpload.commonRow({
+    module: 'RT', hand: s.hand, trial: s.run_trial, startedAt: s.started_at, endedAt: s.ended_at,
+    status: run ? 'complete' : 'stopped', scoringVersion: RT_SCORING_CONFIG.version
+  });
+  const right = latestHandScore(s.mode, 'R'), left = latestHandScore(s.mode, 'L');
+  const clinicianRight = clinicianScoreValue('R'), clinicianLeft = clinicianScoreValue('L');
+  Object.assign(row, {
+    mode: s.mode,
+    num_targets: s.num_targets,
+    interval_s: s.interval_s,
+    target_radius_cm: s.radius_cm,
+    pixels_per_cm: fixed(s.pixels_per_cm, 4),
+    target_x: s.tx,
+    target_y: s.ty,
+    arrival_dist_cm: fixed(s.arrival_dist_cm),
+    arrival_detected: s.arrivalDetected ? 1 : 0,
+    final_dist_cm: fixed(s.final_dist_cm),
+    reaction_time_s: fixed(s.reaction_time),
+    percent_time_inside: fixed(s.percent_time_inside, 2),
+    hold_turn_count: s.hold_turn_count ?? '',
+    target_found: s.target_found === null ? '' : (s.target_found ? 1 : 0),
+    tremor_cm: fixed(s.tremor_cm),
+    tracking_spikes_removed: s.tracking_outliers || 0,
+    tracking_spike_pct: fixed(s.tracking_outlier_pct, 2),
+    measured_fps: fixed(s.measured_fps, 1),
+    low_fps_flag: s.lowFpsFlag ? 1 : 0,
+    missed: s.missed ? 1 : 0,
+    missed_count: run ? run.missed_count : '',
+    score_trial: s.trial_score ?? '',
+    score_right: fixed(right),
+    clinician_right: rated(clinicianRight),
+    score_left: fixed(left),
+    clinician_left: rated(clinicianLeft),
+    score_item: right !== null && left !== null ? fixed((right + left) / 2) : '',
+    clinician_item: clinicianRight !== null && clinicianLeft !== null ? (clinicianRight + clinicianLeft) / 2 : -1,
+    researcher_notes: (document.getElementById('researchNotes')?.value || '').replace(/[\r\n]+/g, ' ').trim(),
+    raw_sample_count: s.frames.length
+  });
+  const base = CeMoQuUpload.fileBase({ patientId: row.patient_id, startedAt: s.started_at, module: 'RT', hand: s.hand, trial: s.run_trial });
+  const files = [{
+    kind: 'raw', name: `${base}_raw.csv`, mimeType: 'text/csv',
+    blob: new Blob([rtRawCsv(s, row.patient_id, row.test_date)], { type: 'text/csv' })
+  }];
+  if(s.trajectory_image_png){
+    files.push({ kind: 'image', name: `${base}_trajectory.png`, mimeType: 'image/png', blob: CeMoQuUpload.dataUrlToBlob(s.trajectory_image_png) });
+  }
+  return { module: 'RT', row, files };
+}
+
+/* Saves every finished target. Each target becomes one row. */
+document.getElementById('uploadBtn')?.addEventListener('click', async () => {
+  const button = document.getElementById('uploadBtn');
+  if(!allTargetSummaries.length){
+    statusLine.textContent = 'Complete a test before submitting.';
+    return;
+  }
+  const missing = CeMoQuUpload.missingFields();
+  if(missing){
+    statusLine.textContent = missing;
+    return;
+  }
+  button.disabled = true;
+  try{
+    await CeMoQuUpload.submit(allTargetSummaries.map(rtRecord));
+  }catch(error){
+    console.error('Submit error:', error);
+    statusLine.textContent = `Could not queue the data: ${error.message}`;
+  }finally{
+    button.disabled = false;
+  }
+});
+window.addEventListener('cemoqu-upload-status', event => { statusLine.textContent = event.detail.text; });
+
 /* export CSV (3 files) - include mode in final summary export */
 exportBtn.addEventListener('click', ()=>{
   const sanitize = (value) => String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
@@ -1984,7 +2248,7 @@ exportBtn.addEventListener('click', ()=>{
   downloadBlob(touchesLines.join('\n'), `RT_touches_${fileSuffix}.csv`);
 
   // targets summary csv
-  const targHeader = ['target_id','session_id','participant_id','session','date','hand','trial_global_index','run_trial','trajectory_image_file','tracking_spikes_removed','tracking_spike_pct','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','arrival_dist_cm','arrival_detected','tremor_cm','tremor_available_in_score','dysmetria_score','tremor_score','time_to_target_s','percent_time_inside','frames_recorded','measured_fps','low_fps_flag','missed','valid','sara_score','enhanced_score'];
+  const targHeader = ['target_id','session_id','participant_id','session','date','hand','trial_global_index','run_trial','trajectory_image_file','tracking_spikes_removed','tracking_spike_pct','x_px','y_px','radius_cm','radius_px','distance_to_target_cm','arrival_dist_cm','arrival_detected','tremor_cm','hold_turn_count','target_found','dysmetria_score','time_to_target_s','percent_time_inside','frames_recorded','measured_fps','low_fps_flag','missed','valid','cmq_score'];
   const targLines = [targHeader.join(',')];
   for(const s of allTargetSummaries){
     const rowHand = s.hand === 'L' ? 'L' : 'R';
@@ -2010,9 +2274,9 @@ exportBtn.addEventListener('click', ()=>{
       s.arrival_dist_cm!==null && s.arrival_dist_cm!==undefined ? s.arrival_dist_cm.toFixed(3):'',
       s.arrivalDetected?1:0,
       s.tremor_cm!==null && s.tremor_cm!==undefined ? s.tremor_cm.toFixed(3):'',
-      s.tremorAvailableInScore?1:0,
+      s.hold_turn_count ?? '',
+      s.target_found===null || s.target_found===undefined ? '' : (s.target_found?1:0),
       s.dysmetria_score!==null && s.dysmetria_score!==undefined ? s.dysmetria_score : '',
-      s.tremor_score!==null && s.tremor_score!==undefined ? s.tremor_score : '',
       s.reaction_time!==null ? s.reaction_time.toFixed(3):'',
       s.percent_time_inside.toFixed(2),
       s.frames_recorded,
@@ -2020,18 +2284,15 @@ exportBtn.addEventListener('click', ()=>{
       s.lowFpsFlag?1:0,
       s.missed?1:0,
       valid,
-      s.trial_score!==null ? s.trial_score.toFixed(3) : '',
-      s.enhanced_score!==null ? s.enhanced_score.toFixed(3) : ''
+      s.trial_score!==null ? s.trial_score.toFixed(3) : ''
     ].join(','));
   }
   downloadBlob(targLines.join('\n'), `RT_targets_summary_${fileSuffix}.csv`);
 
   // final summary
-  const clinicianScoreEl = document.getElementById('clinicianScore');
   const researchNotesEl = document.getElementById('researchNotes');
-  const clinicianScoreVal = (clinicianScoreEl && clinicianScoreEl.value !== '') ? clinicianScoreEl.value : '';
   const researcherNotesVal = researchNotesEl ? researchNotesEl.value.replace(/[\r\n,]+/g,' ') : '';
-  const finalHeader = ['session_id','participant_id','session','trial','date','hand','mode','num_targets','trajectory_image_file','tracking_spikes_removed','tracking_spike_pct','sara_score','enhanced_score','dysmetria_score','tremor_score','distance_to_target_cm','arrival_dist_cm','tremor_cm','time_to_target_s','percent_time_inside','clinician_sara_finger_chase_score','researcher_notes','notes'];
+  const finalHeader = ['session_id','participant_id','session','trial','date','hand','mode','num_targets','trajectory_image_file','tracking_spikes_removed','tracking_spike_pct','cmq_score','dysmetria_score','distance_to_target_cm','arrival_dist_cm','tremor_cm','hold_turn_count','target_found','time_to_target_s','percent_time_inside','clinician_score','researcher_notes','notes'];
   const finalLines = [finalHeader.join(',')];
   for(const f of allFinalSummaries){
     for(const s of f.targets){
@@ -2048,15 +2309,15 @@ exportBtn.addEventListener('click', ()=>{
         s.tracking_outliers || 0,
         Number.isFinite(s.tracking_outlier_pct) ? s.tracking_outlier_pct.toFixed(2) : '',
         s.trial_score !== null ? s.trial_score.toFixed(3) : '',
-        s.enhanced_score !== null ? s.enhanced_score.toFixed(3) : '',
         s.dysmetria_score !== null && s.dysmetria_score !== undefined ? s.dysmetria_score : '',
-        s.tremor_score !== null && s.tremor_score !== undefined ? s.tremor_score : '',
         s.final_dist_cm !== null ? s.final_dist_cm.toFixed(3) : '',
         s.arrival_dist_cm !== null && s.arrival_dist_cm !== undefined ? s.arrival_dist_cm.toFixed(3) : '',
         s.tremor_cm !== null && s.tremor_cm !== undefined ? s.tremor_cm.toFixed(3) : '',
+        s.hold_turn_count ?? '',
+        s.target_found === null || s.target_found === undefined ? '' : (s.target_found ? 1 : 0),
         s.reaction_time !== null ? s.reaction_time.toFixed(3) : '',
         s.percent_time_inside.toFixed(2),
-        clinicianScoreVal,
+        clinicianScoreValue(s.hand) ?? '',
         researcherNotesVal,
         f.notes || ''
       ].join(','));
@@ -2096,6 +2357,8 @@ function attachCursorListeners(){
   canvas.addEventListener('mousedown', onCanvasMouseDown);
   canvas.addEventListener('mouseup', onCanvasMouseUp);
   canvas.addEventListener('mouseleave', onCanvasMouseLeave);
+  canvas.addEventListener('pointerdown', onCanvasPointerDown);
+  canvas.style.touchAction = 'none';
 }
 function detachCursorListeners(){
   canvas.style.cursor = 'default';
@@ -2103,6 +2366,8 @@ function detachCursorListeners(){
   canvas.removeEventListener('mousedown', onCanvasMouseDown);
   canvas.removeEventListener('mouseup', onCanvasMouseUp);
   canvas.removeEventListener('mouseleave', onCanvasMouseLeave);
+  canvas.removeEventListener('pointerdown', onCanvasPointerDown);
+  canvas.style.touchAction = '';
   lastMousePos = null;
 }
 
@@ -2110,6 +2375,21 @@ function detachCursorListeners(){
 function onCanvasMouseMove(e){
   const rect = canvas.getBoundingClientRect();
   lastMousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+/* Cursor Mode: one press on the screen, by mouse or touch, in canvas samples. */
+function onCanvasPointerDown(e){
+  if(mode !== 'cursor' || !trialRunning || !trialState) return;
+  const now = performance.now();
+  if(now >= trialState.end_time_ms) return;
+  const rect = canvas.getBoundingClientRect();
+  const tap = {
+    x: Math.round((e.clientX - rect.left) * VIDEO_W / rect.width),
+    y: Math.round((e.clientY - rect.top) * VIDEO_H / rect.height),
+    t: now
+  };
+  trialState.taps.push(tap);
+  const onTarget = Math.hypot(tap.x - trialState.target.x, tap.y - trialState.target.y) <= trialState.target.radius_px;
+  trialState.frames?.push({ ...tap, tracked: 1, inside: onTarget ? 1 : 0, event: 'tap' });
 }
 function onCanvasMouseDown(e){
   cursorIsDown = true;
@@ -2191,70 +2471,130 @@ function setMode(m){
 }
 
 /* Run initialization */
-/* ============================================================
-   RESEARCH tab: dysmetria/tremor weight bar (reuses the SD module's
-   weight-bar drag pattern per the CeMoQu design principle 2026-09-08).
-   Single handle: 0% = all-dysmetria, 100% = all-tremor, snaps to 10%.
-   ============================================================ */
-(function wireWeightBar(){
-  const weightBar = document.getElementById('weightBar');
-  const wHandle1 = document.getElementById('wHandle1');
-  const wLabelDysmetria = document.getElementById('wLabelDysmetria');
-  const wLabelTremor = document.getElementById('wLabelTremor');
+/* RESEARCH tab: calculation details. */
+(function wireScoringDetails(){
   const showScoringBtn = document.getElementById('showScoringBtn');
   const scoringDetails = document.getElementById('scoringDetails');
-  if(!weightBar || !wHandle1) return;
-
-  function renderWeightBar(){
-    const tPct = Math.round(RT_SCORING_CONFIG.weights.tremor * 100);
-    wHandle1.style.left = (100 - tPct) + '%';
-    if(wLabelDysmetria) wLabelDysmetria.textContent = `Dysmetria ${Math.round(RT_SCORING_CONFIG.weights.dysmetria*100)}%`;
-    if(wLabelTremor) wLabelTremor.textContent = `Tremor ${tPct}%`;
-  }
-
-  function applyHandlePct(pct){
-    const tremorPct = Math.max(0, Math.min(100, Math.round(pct/10)*10));
-    RT_SCORING_CONFIG.weights = { dysmetria: (100-tremorPct)/100, tremor: tremorPct/100 };
-    renderWeightBar();
-  }
-
-  function pctFromClientX(clientX){
-    const rect = weightBar.getBoundingClientRect();
-    const dysPct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
-    return 100 - dysPct; // handle position = dysmetria%, we want tremor%
-  }
-
-  let dragging = false;
-  wHandle1.addEventListener('pointerdown', (e)=>{ dragging = true; e.preventDefault(); });
-  window.addEventListener('pointermove', (e)=>{
-    if(!dragging) return;
-    applyHandlePct(pctFromClientX(e.clientX));
-  });
-  window.addEventListener('pointerup', ()=>{ dragging = false; });
-  wHandle1.addEventListener('keydown', (e)=>{
-    const cur = Math.round(RT_SCORING_CONFIG.weights.tremor*100);
-    if(e.key === 'ArrowLeft') applyHandlePct(cur - 10);
-    else if(e.key === 'ArrowRight') applyHandlePct(cur + 10);
-  });
-
-  if(showScoringBtn && scoringDetails){
-    showScoringBtn.addEventListener('click', ()=>{
-      const hidden = scoringDetails.hidden;
-      scoringDetails.hidden = !hidden;
-      if(hidden){
-        scoringDetails.textContent =
+  if(!showScoringBtn || !scoringDetails) return;
+  showScoringBtn.addEventListener('click', ()=>{
+    const hidden = scoringDetails.hidden;
+    scoringDetails.hidden = !hidden;
+    if(hidden){
+      scoringDetails.textContent =
 `Dysmetria bucket boundaries (cm, arrival-point error): ${RT_SCORING_CONFIG.dysmetriaBucketsCm.join(', ')}
-Tremor bucket boundaries (cm, max hold-phase deviation): ${RT_SCORING_CONFIG.tremorBucketsCm.join(', ')}
 Arrival = velocity <= ${Math.round(RT_SCORING_CONFIG.arrival.peakVelocityThresholdPct*100)}% of this trial's peak velocity, sustained >= ${RT_SCORING_CONFIG.arrival.minSustainMs} ms.
-Combined score = round(dysmetria_score * ${RT_SCORING_CONFIG.weights.dysmetria.toFixed(2)} + tremor_score * ${RT_SCORING_CONFIG.weights.tremor.toFixed(2)}), clamped 0-4.
-If no measurable hold phase, falls back to dysmetria score alone.
-Config version: ${RT_SCORING_CONFIG.version}. See TASK-DESIGN-RATIONALE.md for full literature citations.`;
-      }
-    });
-  }
-
-  renderWeightBar();
+If no stop is found, the last frame of the target window is used and arrival_detected is 0.
+Cursor Mode: distance at the first press in the target window. No press is a missed movement.
+Hold turns, target found and P95 radius are stored and not scored.
+Config version: ${RT_SCORING_CONFIG.version}.`;
+    }
+  });
 })();
+
+/* =========================================================
+   FULL SCREEN + TEST AREA SIZE LOCK (same behaviour as LD)
+   The test runs in full screen only. On the first entry the viewer (and
+   so the canvas) gets a fixed CSS pixel size that never changes again —
+   not on window resize, not on leaving full screen — so targets generated
+   for one size are never drawn on another. Leaving full screen stops a
+   running test. Browser zoom shortcuts are blocked; a zoom change clears
+   cursor calibration because it changes the physical size of a CSS pixel.
+   ========================================================= */
+let viewerLockedSize = null;
+const FS_SUPPORTED = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+
+function isFullscreen(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+function screenReady(){
+  return viewerLockedSize !== null && (!FS_SUPPORTED || isFullscreen());
+}
+
+function updateScreenGate(){
+  const gate = document.getElementById('screenGate');
+  if(!gate) return;
+  gate.hidden = screenReady();
+  if(viewerLockedSize){
+    document.getElementById('screenGateTitle').textContent = 'RETURN TO FULL SCREEN';
+    document.getElementById('enterFullscreenBtn').textContent = 'Return to Full Screen';
+  }
+}
+
+function lockViewerSize(){
+  if(viewerLockedSize) return;
+  const r = viewer.getBoundingClientRect();
+  const w = Math.floor(r.width), h = Math.floor(r.height);
+  viewer.style.setProperty('width', w + 'px', 'important');
+  viewer.style.setProperty('height', h + 'px', 'important');
+  viewer.style.setProperty('flex-shrink', '0', 'important');
+  viewerLockedSize = {w, h, dpr: window.devicePixelRatio};
+  resizeCanvasBacking();
+  appendLog(`<div class="small-muted">Test area size locked: ${w} × ${h} px.</div>`);
+}
+
+function testSessionActive(){
+  // meta_hand is locked exactly while a Start → final-result session runs.
+  return meta_hand.disabled || running || trialRunning;
+}
+
+function enterFullScreen(){
+  const el = document.documentElement;
+  const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+  if(!fn){
+    lockViewerSize();
+    updateScreenGate();
+    return;
+  }
+  try{
+    const r = fn.call(el);
+    if(r && r.catch) r.catch(()=>{ statusLine.textContent = 'Full screen blocked — try again'; });
+  }catch(e){
+    statusLine.textContent = 'Full screen blocked — try again';
+  }
+}
+
+function onFullscreenChange(){
+  if(isFullscreen()){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      lockViewerSize();
+      updateScreenGate();
+    }));
+  }else{
+    if(testSessionActive()){
+      stopBtn.click();
+      appendLog('<div class="small-muted">Full screen exited — test stopped.</div>');
+    }
+    updateScreenGate();
+    statusLine.textContent = 'Return to full screen to continue';
+  }
+}
+
+document.addEventListener('fullscreenchange', onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+document.getElementById('enterFullscreenBtn')?.addEventListener('click', enterFullScreen);
+
+window.addEventListener('keydown', e=>{
+  if((e.ctrlKey || e.metaKey) && ['+','-','=','0','_'].includes(e.key)) e.preventDefault();
+}, {capture:true});
+window.addEventListener('wheel', e=>{
+  if(e.ctrlKey) e.preventDefault();
+}, {passive:false});
+
+window.addEventListener('resize', ()=>{
+  if(!viewerLockedSize) return;
+  if(Math.abs(window.devicePixelRatio - viewerLockedSize.dpr) > 0.001){
+    viewerLockedSize.dpr = window.devicePixelRatio;
+    if(testSessionActive()) stopBtn.click();
+    if(cursorCalibrationDone){
+      cursorCalibrationDone = false;
+      setStartAvailability();
+      setCalibrationStatus('Calibration required', 'warning');
+      statusLine.textContent = 'Zoom changed — verify calibration again';
+      appendLog('<div class="small-muted">Zoom changed — cursor calibration cleared.</div>');
+    }
+  }
+});
 
 function init(){
   loadSettingsFromLocal();
@@ -2262,6 +2602,7 @@ function init(){
   resizeCanvasBacking();
   showCursorModeInstruction();
   setStartAvailability();
+  updateScreenGate();
   appendLog('<div class="small-muted">App ready. Verify settings. Use Cursor Mode for mouse-based runs; Camera Mode for a webcam.</div>');
 }
 init();

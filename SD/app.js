@@ -293,18 +293,75 @@
   function filename(ext,task='session'){const p=safe($('glob-id')?.value||'unknown'),s=safe($('glob-sess')?.value||'session'),stamp=new Date().toISOString().replace(/[:.]/g,'-');return `${p}_${s}_SD_${task}_${stamp}.${ext}`}
   function exportJson(){download(new Blob([JSON.stringify(buildExport(),null,2)],{type:'application/json;charset=utf-8'}),filename('json'))}
   function exportTrial(){const latest=model.currentAttempt||Object.values(model.accepted).at(-1);if(!latest)return;download(new Blob([JSON.stringify({...withoutBlob(latest),protocolVersion:PROTOCOL_VERSION},null,2)],{type:'application/json;charset=utf-8'}),filename('json',latest.task))}
-  function exportCsv(){const data=buildExport(),rows=[];for(const a of data.acceptedTrials){const base={participant_id:data.identification.participantId,session_id:data.identification.sessionId,trial_id:a.trialId,attempt_number:a.attemptNumber,accepted_attempt:a.accepted,task:a.task,timestamp:a.timestamp,test_language:a.testLanguage,mic_distance_cm:a.microphoneDistanceCm,mime_type:a.mimeType,codec:a.codec,sample_rate:a.sampleRate,channel_count:a.channelCount,quality_flags:a.quality.flags.join('|'),detection_confidence:a.quality.detectionConfidence,component_score:a.scoring.score,scoring_version:a.scoring.configVersion,clinician_score:data.clinicalReference.clinicianRatedSaraSpeechScore,researcher_notes:data.clinicalReference.notes,estimated_sara_speech_score:data.overallScoring?.estimatedScore??'',weighted_score:data.overallScoring?.weightedScore??'',intelligibility_floor_applied:data.overallScoring?.intelligibilityFloorApplied??''};rows.push({...base,...flatten(a.metrics,'metric_'),transcript:a.transcript||'',reference_text:a.passage?.text||'',requested_constraints:JSON.stringify(a.requestedConstraints),actual_settings:JSON.stringify(a.actualSettings),browser:a.browser})}const headers=[...new Set(rows.flatMap(Object.keys))];const csv=[headers.map(csvCell).join(','),...rows.map(r=>headers.map(h=>csvCell(r[h]??'')).join(','))].join('\r\n');download(new Blob(['\ufeff',csv],{type:'text/csv;charset=utf-8'}),filename('csv'))}
+  function exportCsv(){const data=buildExport(),rows=[];for(const a of data.acceptedTrials){const base={participant_id:data.identification.participantId,session_id:data.identification.sessionId,trial_id:a.trialId,attempt_number:a.attemptNumber,accepted_attempt:a.accepted,task:a.task,timestamp:a.timestamp,test_language:a.testLanguage,mic_distance_cm:a.microphoneDistanceCm,mime_type:a.mimeType,codec:a.codec,sample_rate:a.sampleRate,channel_count:a.channelCount,quality_flags:a.quality.flags.join('|'),detection_confidence:a.quality.detectionConfidence,component_score:a.scoring.score,scoring_version:a.scoring.configVersion,clinician_score:data.clinicalReference.clinicianRatedSaraSpeechScore,researcher_notes:data.clinicalReference.notes,cmq_score:data.overallScoring?.estimatedScore??'',weighted_score:data.overallScoring?.weightedScore??'',intelligibility_floor_applied:data.overallScoring?.intelligibilityFloorApplied??''};rows.push({...base,...flatten(a.metrics,'metric_'),transcript:a.transcript||'',reference_text:a.passage?.text||'',requested_constraints:JSON.stringify(a.requestedConstraints),actual_settings:JSON.stringify(a.actualSettings),browser:a.browser})}const headers=[...new Set(rows.flatMap(Object.keys))];const csv=[headers.map(csvCell).join(','),...rows.map(r=>headers.map(h=>csvCell(r[h]??'')).join(','))].join('\r\n');download(new Blob(['\ufeff',csv],{type:'text/csv;charset=utf-8'}),filename('csv'))}
   function downloadAudio(key){const a=model.accepted[key];if(!a)return;const ext=a.mimeType.includes('ogg')?'ogg':a.mimeType.includes('wav')?'wav':'webm';download(a.blob,filename(ext,key))}
   function enableExports(){els.exportCsvTopBtn.disabled=false;els.stopTestBtn.disabled=true;els.submitDataBtn.disabled=!model.result?.available;}
   function stopTest(){if(!['countdown','recording','processing','review'].includes(model.state))return;clearTimeout(model.stopTimer);clearInterval(model.clockTimer);stopCue();stopRecognition();if(model.recorder&&model.recorder.state!=='inactive'){model.recorder.onstop=null;try{model.recorder.stop()}catch{}}cleanupAttemptUrls();els.countdown.hidden=true;els.timeChip.hidden=true;els.finishBtn.hidden=true;try{els.playback.pause()}catch{}setState('ready');loadTask()}
-  function submitData(){if(!model.result?.available){els.toolbarMessage.textContent='Complete the assessment before submitting.';return}
-    // TODO: wire to the real CeMoQu submission endpoint/shared upload function used by LD/RT/ST.
-    // That code was not available when this was built, so this only prepares the payload and
-    // does not actually transmit it anywhere yet.
-    const payload=buildExport();
-    console.warn('submitData(): no submission endpoint configured yet — payload prepared but not sent.',payload);
-    els.toolbarMessage.textContent='Submit endpoint not yet configured — see console for the prepared payload.';
+  /* One row for one assessment, with its three recordings. A clinician score
+     not given is -1. */
+  function buildRecord(){
+    const data=buildExport();
+    const accepted=Object.fromEntries(Object.values(model.accepted).map(a=>[a.task,a]));
+    const reading=accepted.reading||{},pataka=accepted.pataka||{},vowel=accepted.vowel||{};
+    const present=Object.values(accepted);
+    const startMs=a=>new Date(a.timestamp).getTime()-a.durationSeconds*1000;
+    const first=present.reduce((a,b)=>startMs(b)<startMs(a)?b:a);
+    const last=present.reduce((a,b)=>new Date(b.timestamp)>new Date(a.timestamp)?b:a);
+    const startedAt=new Date(startMs(first)).toISOString();
+    const row=CeMoQuUpload.commonRow({module:'SD',hand:'NA',trial:1,startedAt,endedAt:last.timestamp,status:'complete',scoringVersion:data.overallScoring?.scoringVersion||PROVISIONAL_SCORING_CONFIG.version});
+    const blank=v=>v===null||v===undefined?'':v;
+    Object.assign(row,{
+      protocol_version:data.protocolVersion,
+      test_language:data.testLanguage,
+      mic_distance_cm:blank(data.microphoneDistanceCm),
+      passage_id:reading.passage?.id||'',
+      transcript:reading.transcript||'',
+      asr_status:reading.asrStatus||'',
+      reading_score:blank(reading.scoring?.score),
+      reading_wer:blank(reading.metrics?.wer),
+      reading_wpm:blank(reading.metrics?.wordsPerMinute),
+      reading_word_accuracy_pct:blank(reading.metrics?.wordAccuracyPercentage),
+      pataka_score:blank(pataka.scoring?.score),
+      pataka_overall_syllables_per_sec:blank(pataka.metrics?.overallSyllablesPerSecond),
+      pataka_inter_onset_cv:blank(pataka.metrics?.interOnsetCv),
+      pataka_pause_ratio:blank(pataka.metrics?.pauseRatio),
+      vowel_score:blank(vowel.scoring?.score),
+      vowel_valid_phonation_sec:blank(vowel.metrics?.validPhonationSeconds),
+      vowel_f0_cv:blank(vowel.metrics?.f0Cv),
+      phonation_dropout_count:blank(vowel.metrics?.phonationDropoutCount),
+      weighted_score:blank(data.overallScoring?.weightedScore),
+      score_auto:blank(data.overallScoring?.estimatedScore),
+      score_clinician:data.clinicalReference.clinicianRatedSaraSpeechScore??-1,
+      researcher_notes:(data.clinicalReference.notes||'').replace(/[\r\n]+/g,' ').trim(),
+      raw_sample_count:''
+    });
+    const base=CeMoQuUpload.fileBase({patientId:row.patient_id,startedAt,module:'SD',hand:'NA',trial:1});
+    const ext=type=>type.includes('ogg')?'ogg':type.includes('mp4')?'m4a':'webm';
+    const files=present.map(a=>({kind:`audio_${a.task}`,name:`${base}_audio_${a.task}.${ext(a.mimeType)}`,mimeType:a.mimeType||'audio/webm',blob:a.blob}));
+    return{module:'SD',row,files};
   }
+
+  async function submitData(){
+    if(!model.result?.available){
+      els.toolbarMessage.textContent='Complete the assessment before submitting.';
+      return;
+    }
+    const missing=CeMoQuUpload.missingFields();
+    if(missing){
+      els.toolbarMessage.textContent=missing;
+      return;
+    }
+    els.submitDataBtn.disabled=true;
+    try{
+      await CeMoQuUpload.submit([buildRecord()]);
+    }catch(err){
+      console.error('SD submit error:',err);
+      els.toolbarMessage.textContent=`Could not queue the data: ${err.message}. CSV export is still available.`;
+    }finally{
+      els.submitDataBtn.disabled=!model.result?.available;
+    }
+  }
+  window.addEventListener('cemoqu-upload-status',event=>{els.toolbarMessage.textContent=event.detail.text;});
   function restart(){cleanupAttemptUrls();model.attempts=[];model.accepted={};model.result=null;model.taskIndex=0;model.attemptNumber={vowel:0,pataka:0,reading:0};renderTaskResultSummary();setState('idle');if(model.micCheck)setState('ready');showStage(els.setupStage);progress(0);els.stepLabel.textContent='PRE-TEST SETUP';els.startTestBtn.disabled=!model.micCheck;els.micTestBtn.disabled=false;els.stopTestBtn.disabled=true;els.submitDataBtn.disabled=true;els.exportCsvTopBtn.disabled=true;els.toolbarMessage.textContent='';}
   function releaseMedia(){cancelAnimationFrame(model.monitorFrame);model.monitorFrame=null;if(model.stream)model.stream.getTracks().forEach(t=>t.stop());model.stream=null;model.source?.disconnect();model.analyser?.disconnect();model.source=null;model.analyser=null;if(model.audioContext&&model.audioContext.state!=='closed')model.audioContext.close();model.audioContext=null}
   function cleanupAttemptUrls(){if(model.currentUrl)URL.revokeObjectURL(model.currentUrl);model.currentUrl=null}

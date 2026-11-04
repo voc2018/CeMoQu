@@ -5,9 +5,9 @@ This document specifies **how RT turns cursor or camera movement into numerical 
 It is organized in two parts:
 
 - **Part A** — how raw cursor/camera samples become movement measurements
-- **Part B** — how those measurements become the provisional SARA Finger Chase estimate
+- **Part B** — how those measurements become the provisional RT CMQ Score
 
-> **These thresholds and weights are engineering placeholders, not clinically validated cutoffs.** Current scoring configuration: `rt-scoring-v1`.
+> **These thresholds are engineering placeholders, not clinically validated cutoffs.** Current scoring configuration: `rt-scoring-v2`.
 
 ---
 
@@ -162,7 +162,7 @@ The final interval from the last sample to the scheduled end of the target windo
 percentTimeInside = timeInsideSeconds / totalTrialSeconds × 100
 ```
 
-This is exported as a research metric. It is not currently part of the final SARA Finger Chase score.
+This is exported as a research metric. It is not currently part of the RT CMQ Score.
 
 ### A8. Reaction time
 
@@ -174,11 +174,15 @@ reactionTime = firstInsideTimestamp - targetStartTimestamp
 
 If the pointer/fingertip never enters the target during the target window, reaction time is unavailable.
 
-Reaction time is exported and displayed, but it is not currently part of the final SARA Finger Chase score.
+Reaction time is exported and displayed, but it is not currently part of the RT CMQ Score.
 
 ### A9. Arrival detection
 
-The scoring pipeline does not use the last frame as the primary dysmetria point. Instead, it estimates an **arrival point**: the moment when the movement stops reaching toward the target and enters the hold phase.
+Cursor Mode does not use arrival detection. Its point is the first press in the target window. A window with no press is a missed movement, and the trajectory image shows only the press point on the target.
+
+Camera Mode uses the method below.
+
+The scoring pipeline does not use the last frame as the primary dysmetria point. It estimates an **arrival point**: the moment when the movement stops reaching toward the target and enters the hold phase. If no stop is detected, the last frame of the target window is used and the trial is marked `arrivalDetected = 0`.
 
 The current implementation finds arrival by velocity:
 
@@ -187,7 +191,7 @@ arrival = first point after peak velocity where velocity falls to <= 8% of peak 
           and stays low for at least 100 ms
 ```
 
-If no such point is detected, arrival-based dysmetria is unavailable for that target.
+If no such point is detected, the last frame of the target window is used and `arrival_detected` is 0.
 
 ### A10. Dysmetria measurement
 
@@ -211,7 +215,9 @@ The current tremor-related measure is the P95 radial deviation from the median h
 4. Use the 95th percentile radial distance.
 5. Convert that pixel distance to centimeters.
 
-This is exported as `tremor_cm` and contributes to the experimental weighted CeMoQu score when available.
+This is exported as `tremor_cm`. It includes any slow correction toward the target. It is stored only and is not used in any score.
+
+Two more values are stored and not scored: `hold_turn_count`, the number of direction reversals of at least 0.25 cm after the stop on the axis with more reversals, and `target_found`, whether the fingertip was inside the target at the stop or later in the window.
 
 ### A12. Tracking-spike filtering
 
@@ -238,11 +244,10 @@ minReliableFps = 20
 Current configuration:
 
 ```text
-version: rt-scoring-v1
+version: rt-scoring-v2
 arrival velocity threshold: 8% of peak velocity
 arrival sustain time: 100 ms
-dysmetria weight: 60%
-tremor weight: 40%
+hold turn tolerance: 0.25 cm
 minimum reliable camera FPS: 20
 ```
 
@@ -258,47 +263,21 @@ Arrival distance in centimeters is converted to a 0–3 dysmetria score.
 | ≥ 15 cm | 3 |
 | Missing / no arrival detected | Unavailable |
 
-### B3. Tremor severity conversion
+### B5. RT CMQ Score
 
-Post-arrival P95 radial deviation is converted to a 0–3 tremor score.
-
-| P95 radial deviation | Tremor score |
-|---|---:|
-| < 1 cm | 0 |
-| 1 to < 2 cm | 1 |
-| 2 to < 5 cm | 2 |
-| ≥ 5 cm | 3 |
-| Missing hold phase | Unavailable |
-
-### B4. Experimental CeMoQu weighted target score
-
-When both dysmetria and tremor are available:
+The current RT CMQ Score is based on dysmetria from the last three tracked movements.
 
 ```text
-weightedTargetScore = round(dysmetriaScore × 0.60 + tremorScore × 0.40)
+RT CMQ Score = average(lastThreeDysmetriaScores)
 ```
 
-If tremor is unavailable but dysmetria is available, the target can still retain the dysmetria score rather than failing the entire target.
+The run is marked unavailable only if it is incomplete.
 
-### B5. SARA-aligned Finger Chase score
-
-The current SARA-aligned Finger Chase score is based on dysmetria from the last three valid movements.
-
-```text
-SARA Finger Chase Score = average(lastThreeDysmetriaScores)
-```
-
-The run is marked unavailable if:
-
-- the run is incomplete,
-- hand tracking is missing,
-- or arrival cannot be detected for all required final movements.
-
-Missing automated measurements are **not** automatically converted into SARA score 4. That category should not be assigned by the browser solely because tracking failed.
+A finished run scores from the last three tracked movements. If 50% or more of the movements were not tracked, the hand scores 4 and `missed_count` is recorded. The app cannot tell a patient who could not move from a camera that lost the hand, so review these runs.
 
 ### B6. Worked example
 
-Assume the final three valid movements have arrival distances:
+Assume the final three tracked movements have arrival distances:
 
 ```text
 Movement 3: 0.8 cm → dysmetria score 0
@@ -309,29 +288,11 @@ Movement 5: 6.5 cm → dysmetria score 2
 Then:
 
 ```text
-SARA Finger Chase Score = (0 + 1 + 2) / 3 = 1.00
+RT CMQ Score = (0 + 1 + 2) / 3 = 1.00
 ```
-
-If the same movements have tremor scores:
-
-```text
-Movement 3: tremor score 0
-Movement 4: tremor score 1
-Movement 5: tremor score 2
-```
-
-Then the experimental weighted scores for each target are:
-
-```text
-Movement 3: round(0×0.60 + 0×0.40) = 0
-Movement 4: round(1×0.60 + 1×0.40) = 1
-Movement 5: round(2×0.60 + 2×0.40) = 2
-```
-
-These weighted scores are useful for research comparison but must not be presented as clinically validated SARA scoring.
 
 ### B7. Quality flags are not clinical validation
 
 The module can detect technical conditions such as low FPS, missing tracking, and tracking spikes. These checks improve transparency, but they do not establish clinical validity.
 
-Clinical validation still requires comparison with blinded clinician-rated SARA Finger Chase scores and repeated testing across participants, devices, and sessions.
+Clinical validation still requires comparison with blinded Clinician-rated SARA Scores and repeated testing across participants, devices, and sessions.

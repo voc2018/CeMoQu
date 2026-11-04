@@ -1,5 +1,7 @@
 # LD Verification Report
 
+> This report covers the earlier P95 scoring. Scoring version `ld-scoring-v2` is verified by `test_scoring.js`.
+
 **Verification date:** 2026-09-12  
 **Build reviewed:** `LD(3).zip`  
 **Module:** LD — Line Drawing Test  

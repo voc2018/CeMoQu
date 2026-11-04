@@ -5,7 +5,7 @@ and speech symptoms of cerebellar ataxia using only a standard computer camera, 
 browser — no special hardware.
 
 This module (**SD**) is a short, guided speech test that runs in about two minutes. It produces an
-**Estimated SARA Speech Score (0–6)** alongside the individual measurements it was calculated from,
+**SD CMQ Score (0–6)** alongside the individual measurements it was calculated from,
 so a clinician or researcher can see not just the number but exactly how it was reached.
 
 > **This is a research prototype, not a diagnostic tool.** It does not replace a clinician's
@@ -108,7 +108,7 @@ The three task scores are then combined into one overall estimate using adjustab
 Reading 50%  +  Pa-ta-ka 40%  +  Sustained vowel 10%
 ```
 
-![Final results screen showing the Estimated SARA Speech Score, the three component scores and weights, and the calculation breakdown](docs/screenshots/final-results.png)
+![Final results screen showing the SD CMQ Score, the three component scores and weights, and the calculation breakdown](docs/screenshots/final-results.png)
 
 These particular numbers are a starting point, not a fixed rule — the reading task keeps the largest
 share because SARA's own definition centers on intelligibility, but pa-ta-ka's weight was raised from
@@ -155,8 +155,7 @@ what went wrong from a threshold table.
 
 - **Download accepted audio** for any completed task (RESEARCH tab)
 - **Export CSV** of the full session's measurements
-- **Submit Data** currently packages the data but is not yet wired to a real submission
-  endpoint — this needs the actual CeMoQu submission mechanism used by the other modules
+- **Submit Data** saves one row per assessment to the `SD_v2` tab, with the three recordings stored in Google Drive. Data waits in the browser until the server confirms it.
 
 ## Limitations
 

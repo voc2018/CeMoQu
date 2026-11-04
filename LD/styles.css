@@ -91,26 +91,69 @@ flex-direction:column;
 gap:0;
 background:var(--ld-panel);
 border-left:1px solid var(--ld-border);
-overflow-y:scroll;
+overflow:hidden;
 min-height:0;
+}
+
+/* TEST / RESEARCH tabs (pattern from RT side panel) */
+.ld-tab-bar{
+display:flex;
+height:42px;
+flex-shrink:0;
+border-bottom:1px solid var(--ld-border);
+}
+
+.ld-tab{
+flex:1;
+border:0;
+border-radius:0;
+background:transparent;
+color:var(--muted);
+font-size:11px;
+font-weight:700 !important;
+letter-spacing:1.5px !important;
+cursor:pointer;
+}
+
+.ld-tab:hover:enabled{
+transform:none;
+filter:none;
+color:var(--ld-accent2);
+}
+
+.ld-tab.active{
+color:var(--ld-accent2);
+border-bottom:2px solid var(--ld-accent2);
+}
+
+.ld-side-panel{
+display:none;
+flex:1;
+min-height:0;
+overflow-y:scroll;
+overflow-x:hidden;
 scrollbar-width:thin;
 scrollbar-color:#3b5b7a var(--ld-panel);
 }
 
-.side-column::-webkit-scrollbar{
+.ld-side-panel.active{
+display:block;
+}
+
+.ld-side-panel::-webkit-scrollbar{
 width:8px;
 }
 
-.side-column::-webkit-scrollbar-track{
+.ld-side-panel::-webkit-scrollbar-track{
 background:var(--ld-panel);
 }
 
-.side-column::-webkit-scrollbar-thumb{
+.ld-side-panel::-webkit-scrollbar-thumb{
 background-color:#3b5b7a;
 border-radius:4px;
 }
 
-.side-column::-webkit-scrollbar-button{
+.ld-side-panel::-webkit-scrollbar-button{
 display:none;
 width:0;
 height:0;
@@ -223,8 +266,13 @@ font-weight:400;
 
 .test-guidance{
 min-height:30px;
-width:auto;
-max-width:520px;
+/* Fixed width: guidance text length must never re-flow the top bar and
+   move the canvas mid-stroke. */
+width:300px;
+max-width:300px;
+box-sizing:border-box;
+overflow:hidden;
+text-overflow:ellipsis;
 margin:0;
 align-self:center;
 display:flex;
@@ -467,8 +515,12 @@ min-height:340px;
 .side-column{
 border-left:0;
 border-top:1px solid var(--ld-border);
-overflow-y:visible;
+overflow:visible;
 max-height:none;
+}
+
+.ld-side-panel{
+overflow-y:visible;
 }
 
 .test-guidance{
@@ -478,76 +530,367 @@ padding:6px 10px;
 }
 }
 
-/* ── metric definition popup ── */
+/* ── metric definition hover tooltip (same as RT) ── */
 
 .metric-label{
-cursor:pointer;
+cursor:help;
 border-bottom:1px dotted rgba(148,163,184,0.5);
 }
 
-.metric-label:hover{
+.metric-label:hover,
+.metric-label:focus{
 color:#60a5fa;
+outline:none;
 }
 
-.def-overlay{
+.def-tip{
 position:fixed;
-inset:0;
-background:rgba(2,6,23,0.75);
-display:none;
-align-items:center;
-justify-content:center;
 z-index:10000;
-padding:20px;
-}
-
-.def-overlay.open{
-display:flex;
-}
-
-.def-modal{
-position:relative;
-max-width:420px;
-width:100%;
+width:340px;
+max-width:calc(100vw - 16px);
+padding:14px 16px;
+box-sizing:border-box;
 border-radius:10px;
-padding:18px;
 background:var(--ld-panel);
 border:1px solid var(--ld-border2);
 box-shadow:0 24px 60px rgba(0,0,0,0.7);
+pointer-events:none;
 }
 
-.def-modal h3{
-margin:0 0 10px;
+.def-tip[hidden]{
+display:none;
+}
+
+.def-tip h3{
+margin:0 0 8px;
 font-size:14px;
 color:#fff;
-padding-right:24px;
 }
 
-.def-modal p{
+.def-tip p{
 margin:0;
 font-size:12px;
 color:var(--muted);
 line-height:1.55;
 }
 
-.def-close{
-position:absolute;
-top:14px;
-right:14px;
-width:26px;
-height:26px;
-border-radius:999px;
-background:var(--ld-panel2);
-border:1px solid var(--ld-border);
-color:var(--text);
-font-size:13px;
-line-height:1;
-cursor:pointer;
-display:flex;
-align-items:center;
-justify-content:center;
-padding:0;
+/* ── RESEARCH tab: clinical reference, weight bar, log ──
+   Visual pattern reused from RT's RESEARCH tab (itself from SD), per the
+   CeMoQu design principle (2026-09-08): every module gets a clinician
+   direct-input section + a user-adjustable scoring weight bar. */
+
+.research-card{
+display:block;
+min-height:0;
+margin:0;
+padding:11px 16px 18px;
+border:0;
+border-bottom:1px solid var(--ld-border);
+border-radius:0;
+background:transparent;
+box-shadow:none;
+overflow:visible;
 }
 
-.def-close:hover{
-filter:brightness(1.2);
+.research-card::before{
+display:none;
+}
+
+.research-card .panel-header{
+display:flex;
+align-items:center;
+justify-content:space-between;
+gap:8px;
+margin-bottom:4px;
+}
+
+.research-card h2{
+margin:0;
+font-size:11px;
+font-weight:600;
+letter-spacing:2px;
+text-transform:uppercase;
+color:var(--ld-accent2);
+}
+
+.research-card label{
+display:block;
+color:#a8c5d0;
+font-size:11px;
+margin:10px 0 5px;
+}
+
+#clinicalPanel select,
+#clinicalPanel textarea{
+width:100%;
+box-sizing:border-box;
+font-size:12px;
+padding:8px;
+background:var(--ld-panel2);
+border:1px solid var(--ld-border);
+border-radius:6px;
+color:#e5e7eb;
+font-family:inherit;
+}
+
+#clinicalPanel textarea{
+resize:vertical;
+}
+
+.clinician-score-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:10px;
+}
+
+.clinician-score-grid>div{
+min-width:0;
+}
+
+.clinician-score-grid.single{
+grid-template-columns:1fr;
+}
+
+.clinician-mean{
+margin:10px 0 2px;
+font-size:11px;
+color:#a8c5d0;
+}
+
+.clinician-mean strong{
+color:#ffe600;
+font-weight:600;
+}
+
+.weight-bar{
+position:relative;
+height:7px;
+border-radius:5px;
+background:linear-gradient(90deg,var(--ld-accent) 0%,var(--ld-accent2) 100%);
+margin:16px 2px 10px;
+}
+
+.weight-handle{
+position:absolute;
+top:50%;
+width:13px;
+height:13px;
+margin:-7px 0 0 -7px;
+background:var(--ld-panel);
+border:2px solid #e7f4fa;
+border-radius:50%;
+cursor:ew-resize;
+box-shadow:0 1px 3px rgba(0,0,0,.6);
+touch-action:none;
+transition:transform .12s ease;
+}
+
+.weight-handle:hover,
+.weight-handle:active{
+transform:scale(1.2);
+}
+
+.weight-labels{
+display:flex;
+justify-content:space-between;
+font-size:10px;
+color:#a8c5d0;
+letter-spacing:.01em;
+}
+
+.research-card .scoring-note{
+font-size:11px;
+line-height:1.6;
+margin:10px 0 0;
+}
+
+.research-card .pending-note{
+font-size:11px;
+line-height:1.5;
+margin:8px 0 0;
+padding:7px 9px;
+border:1px solid rgba(245,158,11,0.35);
+border-radius:6px;
+background:rgba(245,158,11,0.08);
+color:#f5c26b;
+}
+
+.research-card .text-button{
+padding:0;
+border-radius:0;
+background:transparent;
+color:var(--ld-accent2);
+font-size:11px;
+border:0;
+cursor:pointer;
+margin-top:10px;
+}
+
+.details-box{
+margin-top:10px;
+padding:10px;
+background:var(--ld-panel2);
+border:1px solid var(--ld-border);
+border-radius:7px;
+font-size:10px;
+color:#8faebb;
+white-space:pre-wrap;
+line-height:1.55;
+overflow:auto;
+max-height:260px;
+}
+
+.log-card #clearLogBtn{
+height:26px;
+padding:4px 10px;
+border-radius:6px;
+border:1px solid rgba(148,163,184,0.18);
+background:#0a1e2a;
+color:var(--text);
+font-size:11px;
+cursor:pointer;
+}
+
+.log-subtitle{
+font-size:10px;
+margin-top:3px;
+}
+
+.log{
+min-height:220px;
+font-size:11px;
+color:#a8c5d0;
+line-height:1.5;
+}
+
+.log>div{
+padding:8px 0;
+border-bottom:1px solid var(--ld-border);
+}
+
+/* ── Hand prompt (on-canvas, examiner confirms each hand block) ── */
+
+.hand-prompt{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+z-index:5;
+width:min(360px,86%);
+padding:22px 22px 20px;
+box-sizing:border-box;
+border-radius:12px;
+border:1px solid var(--ld-border2);
+background:rgba(11,26,36,0.96);
+box-shadow:0 18px 50px rgba(0,0,0,0.7);
+text-align:center;
+}
+
+.screen-gate{
+z-index:6;
+}
+
+.hand-prompt[hidden]{
+display:none;
+}
+
+.hand-prompt-kicker{
+font-size:10px;
+letter-spacing:2px;
+color:var(--ld-accent2);
+font-weight:600;
+}
+
+.hand-prompt-title{
+margin:8px 0 8px;
+font-size:26px;
+font-weight:700;
+color:#fff;
+letter-spacing:1px;
+}
+
+.hand-prompt-body{
+font-size:12px;
+line-height:1.55;
+color:#a8c5d0;
+}
+
+.hand-prompt .hand-ready-btn{
+margin-top:16px;
+min-width:120px;
+height:34px;
+padding:6px 18px;
+border-radius:6px;
+border:0;
+background:linear-gradient(135deg,var(--ld-accent),var(--ld-accent2));
+color:#fff;
+font-size:13px;
+cursor:pointer;
+}
+
+/* ── Per-trial trajectory thumbnail in the Log (pattern from RT) ── */
+
+.trial-log-entry{
+display:flex;
+align-items:flex-start;
+justify-content:space-between;
+gap:8px;
+}
+
+.trial-log-text{
+min-width:0;
+flex:1 1 auto;
+}
+
+.trajectory-thumb-link{
+flex:0 0 150px;
+display:block;
+width:150px;
+height:105px;
+background:#04121a;
+border:1px solid rgba(79,209,197,.45);
+border-radius:6px;
+overflow:hidden;
+line-height:0;
+}
+
+.trajectory-thumb{
+display:block;
+width:150px;
+height:105px;
+object-fit:contain;
+background:#04121a;
+}
+
+/* Reason codes for a score of 4 */
+.fail-codes{
+margin:12px 0 0;
+padding-top:10px;
+border-top:1px solid var(--line, rgba(148,163,184,.2));
+display:grid;
+gap:4px;
+font-size:12px;
+line-height:1.4;
+color:var(--muted, #94a3b8);
+}
+
+.fail-codes div{
+display:grid;
+grid-template-columns:28px 1fr;
+gap:6px;
+}
+
+.fail-codes dt{
+font-weight:700;
+}
+
+.fail-codes dd{
+margin:0;
+}
+
+/* Controls large enough for a shaking hand */
+.test-controls select,
+.test-controls button,
+.verify-button{
+min-height:44px;
 }

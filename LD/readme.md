@@ -1,31 +1,106 @@
-# CeMoQu Line Drawing Test (LD)
+# LD — Line Drawing Test
 
-Browser-based line drawing assessment for recording tracing accuracy, movement interruptions, directional changes, and task completion. The module is designed for the CeMoQu interface and uses the shared CeMoQu header and common styles.
+Part of **CeMoQu** (Cerebellar Motor Quantification), a browser-based platform that measures movement, speech, and coordination features relevant to cerebellar ataxia using standard web technologies.
 
-> Research prototype: the current score mapping and tolerance values have not yet been clinically validated. The Line Drawing Test is not an official standalone SARA item.
+This module (**LD**) is a guided line-tracing task. It asks a participant to draw from an **S** start marker to an **F** finish marker while the app records cursor/touch movement, deviation from the ideal guide line, movement interruptions, directional reversals, and completion timing. The current default workflow is a **five-trial horizontal line drawing sequence** with recorded audio instructions and a visible countdown.
 
-## Current Interface
+> **This is a research prototype, not a diagnostic tool.** It does not replace a clinician's judgment or the official SARA examination. The displayed score is a provisional research estimate based on the current engineering thresholds and has not been clinically validated.
 
-![CeMoQu Line Drawing Test interface](ld-interface.png)
+![LD interface overview](docs/screenshots/ld-interface-overview.png)
 
-The test area occupies approximately 70% of the workspace. Calibration and live results remain visible in the right-side panel during testing.
+## What this task is trying to measure
 
-## Main Features
+The LD task standardizes a simple upper-limb coordination challenge: tracing a straight path accurately from start to finish. The browser records the movement path continuously and converts pixel-based movement data into centimeters through an on-screen calibration bar.
 
-- Horizontal and vertical line drawing modes
-- Physical on-screen calibration bar
-- Configurable line tolerance in centimeters
-- Five-trial guided horizontal test sequence
-- Recorded audio instructions and visible `3, 2, 1, GO` countdown
-- Automatic timing beginning at `GO`
-- Live result display beside the test area
-- Trial export and multi-trial CSV export
-- Calibration settings saved in the browser with `localStorage`
-- Shared CeMoQu header and common site styling
+The current implementation focuses on one primary scoring metric:
 
-## Required Project Structure
+- **P95 deviation** — the 95th-percentile distance between the participant's drawn path and the ideal guide line.
 
-The LD folder must remain inside the main CeMoQu project because it loads shared files from `../shared/`.
+The module also records several research metrics that may be useful for later validation:
+
+| Metric | Plain-language meaning | Current scoring role |
+|---|---|---:|
+| P95 deviation | Sustained distance from the ideal guide line | Primary score metric |
+| Max deviation | Largest single deviation from the guide line | Research/export only |
+| Mean deviation | Average deviation across recorded samples | Research/export only |
+| Deviation area | Cumulative area between the drawn trace and ideal line | Research/export only |
+| Discontinuities | Number of times drawing was released and restarted | Research/export only |
+| Vertical turns | Sustained up/down reversals | Research/export only |
+| Horizontal reverses | Sustained left/right reversals | Research/export only |
+| Out-of-bounds | Times the pointer left the canvas during an active trial | Research/export only |
+| Start fails | Attempts that began outside the start marker | Research/export only |
+| Duration | Time from `GO` to finish | Research/export only |
+
+## Current test flow
+
+The current guided sequence is designed around the horizontal test because recorded audio prompts are included for five horizontal trials.
+
+1. Confirm participant/session metadata in the shared CeMoQu header.
+2. Measure the orange calibration bar with a physical ruler.
+3. Enter the measured bar length in centimeters.
+4. Enter the tolerance value in centimeters.
+5. Click **Verify Calibration**.
+6. Select **Horizontal Test**.
+7. Click **Start Test**.
+8. Listen to the recorded prompt and watch the visible countdown.
+9. Begin drawing at **GO**.
+10. Start inside the **S** marker and finish inside the **F** marker.
+11. Complete all five trials.
+12. Review results and export data.
+
+![Calibration panel](docs/screenshots/ld-calibration-panel.png)
+
+![Right-hand prompt before the test starts](docs/screenshots/ld-countdown-go.png)
+
+![Running trace](docs/screenshots/ld-running-trace.png)
+
+## Current interface
+
+The LD interface uses a 70/30 layout:
+
+- The left side is the drawing canvas.
+- The right side contains calibration, settings, live results, and export controls.
+
+The canvas uses a fixed internal coordinate system of **1000 × 700** units. The displayed canvas is responsive, so calibration converts the physical screen measurement into the internal coordinate space used by the calculation functions.
+
+## How scoring works
+
+The score uses turn amplitude only: the height from one turn to the next across the guide line. Movements smaller than the Tolerance are not turns, and the largest 5% of amplitudes are removed before taking the mean.
+
+| Result | Score | Label |
+|---:|---:|---|
+| No turn above Tolerance | 0 | Normal |
+| Mean amplitude `< 2 cm` | 1 | Mild |
+| Mean amplitude `< 5 cm` | 2 | Moderate |
+| Mean amplitude `≥ 5 cm` | 3 | Severe |
+| Reason code SF, TO, OB or DC | 4 | Unable to perform |
+
+The 2 and 5 cm cut-offs follow SARA Nose-Finger. This mapping has not been validated against clinician scores.
+
+For the exact calculation path, see [`METHODOLOGY.md`](./METHODOLOGY.md).
+
+## Exports
+
+The module supports two export paths:
+
+- **Export CSV** — downloads a CSV containing all completed trials in the browser.
+- **Export Raw** — downloads time, x, y and press events for every completed trial.
+- **Submit Data** — saves every completed trial as one row, with its raw CSV and trajectory PNG. Trials wait in the browser until the server confirms them.
+
+Exported fields include participant/session metadata, trial number, timestamp, duration, calibration values, deviation metrics, movement-event counts, score, label, and completion status.
+
+## Limitations
+
+- The score thresholds are engineering placeholders and have not been calibrated against clinician-rated patient data.
+- The task is a standardized line-tracing proxy and does not reproduce the full clinical richness of a clinician-observed upper-limb exam.
+- The current score uses turn amplitude only; discontinuities, reversals, area, and timing are exported but not yet part of the score.
+- Calibration depends on the user's physical measurement of an on-screen bar and can be affected by display scaling, browser zoom, screen resizing, and inaccurate ruler placement.
+- The guided audio sequence is currently implemented for the horizontal five-trial test.
+- Validation is still required across devices, screen sizes, input methods, healthy controls, and cerebellar ataxia participants.
+
+## Required project structure
+
+The LD folder must remain inside the main CeMoQu project because it loads shared header and style files from `../shared/`.
 
 ```text
 CeMoQu/
@@ -35,130 +110,32 @@ CeMoQu/
 │   ├── header.html
 │   └── header.js
 └── LD/
+    ├── README.md
+    ├── METHODOLOGY.md
+    ├── TASK-DESIGN-RATIONALE.md
+    ├── VERIFICATION-REPORT.md
     ├── index.html
     ├── styles.css
     ├── app.js
-    ├── README.md
     ├── ld-interface.png
+    ├── docs/
+    │   └── screenshots/
     └── audio/
-        ├── 01_intro_horizontal.mp3
-        ├── 02_start_test_1.mp3
-        ├── 03_test_1_complete.mp3
-        ├── 04_start_test_2.mp3
-        ├── 05_test_2_complete.mp3
-        ├── 06_start_test_3.mp3
-        ├── 07_test_3_complete.mp3
-        ├── 08_start_test_4.mp3
-        ├── 09_test_4_complete.mp3
-        ├── 10_start_test_5.mp3
-        └── 11_horizontal_complete.mp3
 ```
 
-## Running Locally
+## Running locally
 
-Do not open `index.html` directly with a `file://` address. The shared header is loaded with JavaScript and requires a local web server.
+Do not open `index.html` directly from `file://`. Use a local server so the shared CeMoQu header loads correctly.
 
-### VS Code Live Server
+Example with VS Code Live Server:
 
-1. Open the main `CeMoQu` project folder in VS Code.
-2. Install the **Live Server** extension if needed.
-3. Open `LD/index.html`.
-4. Select **Open with Live Server**.
+1. Open the main CeMoQu project folder in VS Code.
+2. Open `LD/index.html`.
+3. Select **Open with Live Server**.
+4. Confirm the page opens from a local HTTP address such as `http://127.0.0.1:5500/LD/index.html`.
 
-The page should open from an address similar to:
+## Where to look next
 
-```text
-http://127.0.0.1:5500/LD/index.html
-```
-
-## Test Procedure
-
-1. Confirm the participant and session information in the shared header.
-2. Measure the orange calibration bar with a physical ruler.
-3. Enter the measured length in centimeters.
-4. Enter the desired tolerance in centimeters.
-5. Select **Verify Calibration**.
-6. Select the test type.
-7. Select **Start Test**.
-8. Wait for the visible and recorded countdown.
-9. Begin drawing when `GO` appears.
-10. Start inside the `S` marker and finish inside the `F` marker.
-11. For the horizontal guided sequence, complete all five trials.
-12. Export the current trial or all completed trials as CSV.
-
-## Result Metrics
-
-| Metric | Description | Used for current score |
-|---|---|---:|
-| SARA Score | Prototype 0–4 score derived from P95 deviation | — |
-| P95 Deviation | Distance containing 95% of deviations from the guide line | Yes |
-| Max Deviation | Largest single deviation from the guide line | No |
-| Mean Deviation | Average deviation across recorded points | No |
-| Deviation Area | Accumulated area between the trace and guide line | No |
-| Discontinuities | Number of times drawing was released and restarted | No |
-| Vertical Turns | Sustained vertical direction reversals | No |
-| Horizontal Reverses | Sustained horizontal direction reversals | No |
-| Out-of-Bounds | Number of times the cursor left the canvas during a trial | No |
-| Start Fails | Attempts that began outside the start marker | No |
-| Calibration | Canvas pixels represented by one centimeter | Conversion only |
-| cm/px | Real-world centimeters represented by one canvas pixel | Conversion only |
-
-P95 is used instead of the maximum deviation to reduce the influence of a single extreme point. The other metrics are retained for research and export but currently do not affect the score.
-
-## Current Prototype Score Mapping
-
-| P95 deviation | Score | Label |
-|---:|---:|---|
-| Less than 0.5 cm | 0 | Normal |
-| 0.5–2.0 cm | 1 | Mild |
-| 2.0–5.0 cm | 2 | Moderate |
-| More than 5.0 cm | 3 | Severe |
-| Incomplete trial or unverified calibration | 4 | Unable to perform |
-
-These thresholds are provisional research settings. They must not be interpreted as clinically validated SARA thresholds.
-
-## Direction-Change Filtering
-
-Small cursor fluctuations can incorrectly appear as turns or reversals. The current prototype uses a temporary `0.25 cm` movement tolerance and a sustained-reversal condition to reduce counts caused by coordinate noise or minor tremor.
-
-This value is provisional and must be tested using healthy control and patient data.
-
-## Exported Data
-
-The CSV export includes participant/session metadata, test mode, trial number, timestamp, duration, calibration values, tolerance, deviation measurements, movement-event counts, prototype score, and completion status.
-
-The current browser version downloads files through the browser. A browser running through Live Server cannot silently save CSV files directly into the project's `data/` folder without additional permission or a local/server-side save method.
-
-## Clinical Questions to Review
-
-- Should a single large jump be counted as a clinical movement abnormality or treated as an accidental outlier?
-- Is P95 deviation an appropriate primary measurement for this task?
-- What distance from the guide line should be treated as normal variation?
-- Should tolerance be fixed or adjusted for the display, input device, or participant?
-- What minimum distance or duration should define a clinically meaningful turn or reversal?
-- Should turn and reversal counts affect scoring or remain research-only metrics?
-- Should the right and left hands be scored separately?
-- Is `SARA-compatible` an acceptable description for this prototype?
-
-## Planned Work
-
-- Add a required right-hand/left-hand selector.
-- Store hand information separately for every trial.
-- Redesign filenames to include participant ID, session, date/time, hand, test type, and trial number.
-- Add a method for saving CSV files into a project `data/` folder.
-- Validate the guide-line tolerance using healthy control data.
-- Validate the `0.25 cm` direction-change filter with real test data.
-- Reassess the P95-to-score thresholds using clinician-reviewed patient data.
-- Test the interface at different monitor sizes and browser zoom levels.
-
-## Files
-
-- `index.html` — LD page structure and controls
-- `styles.css` — LD-specific layout and visual styling
-- `app.js` — drawing, calibration, audio sequence, calculations, results, and export logic
-- `audio/` — recorded horizontal-test instructions
-- `ld-interface.png` — current interface screenshot used in this README
-
-## Intended Use
-
-This module is intended for research, prototyping, and data collection. It is not a diagnostic medical device and should not be used for clinical decisions until its measurements and scoring rules have been validated.
+- [`METHODOLOGY.md`](./METHODOLOGY.md) — every method used to turn cursor/touch movement into measurements and the current provisional score.
+- [`TASK-DESIGN-RATIONALE.md`](./TASK-DESIGN-RATIONALE.md) — why this task, why calibration is required, why P95 is currently primary, and why other metrics are retained.
+- [`VERIFICATION-REPORT.md`](./VERIFICATION-REPORT.md) — what has been checked, what remains unverified, and what is required before clinical validation.

@@ -1,49 +1,58 @@
 <nav class="global-header">
     <div class="gh-brand">
-        <span class="gh-title">AtaxiaV 1.2</span>
-        <span class="gh-subtitle">CeMoQu 0.1</span>
+        <a class="gh-title" href="https://ataxiav.com" target="_blank" rel="noopener">AtaxiaV 2.0</a>
+        <span class="gh-subtitle">CeMoQu V. 0.2</span>
     </div>
 
-    <div class="gh-data-panel">
-        <div class="data-bar">
-            <label>Patient</label>
-            <input type="text" class="gh-input inp-id" id="glob-id" placeholder="ID" />
-            <span class="divider">|</span>
-            <input type="text" class="gh-input inp-name" id="glob-name" placeholder="Name" />
-            <span class="divider">|</span>
-            <input type="text" class="gh-input inp-age" id="glob-age" placeholder="Age" />
-            <span class="divider">|</span>
-            <input type="text" class="gh-input inp-dob" id="glob-dob" placeholder="DOB" />
-            <span class="divider">|</span>
-            <input type="text" class="gh-input inp-sex" id="glob-sex" placeholder="Gender" />
+    <div class="gh-inner">
+        <div class="gh-data-panel">
+            <div class="data-bar">
+                <label>Patient</label>
+                <input type="text" class="gh-input inp-id" id="glob-id" placeholder="ID" />
+                <span class="divider">|</span>
+                <input type="text" class="gh-input inp-name" id="glob-name" placeholder="Name" />
+                <span class="divider">|</span>
+                <input type="number" class="gh-input inp-age" id="glob-age" placeholder="Age" min="0" max="120" step="1" inputmode="numeric" aria-label="Age" />
+                <span class="divider">|</span>
+                <input type="date" class="gh-input inp-dob" id="glob-dob" aria-label="Date of birth" />
+                <span class="divider">|</span>
+                <select class="gh-input inp-sex" id="glob-sex" aria-label="Sex">
+                    <option value="">Sex</option>
+                    <option>Female</option>
+                    <option>Male</option>
+                    <option>Other</option>
+                </select>
+                <span class="divider">|</span>
+                <select class="gh-input inp-hand" id="glob-hand" aria-label="Dominant hand">
+                    <option value="">Dominant hand</option>
+                    <option>Right</option>
+                    <option>Left</option>
+                    <option>Both</option>
+                </select>
+            </div>
+            <div class="data-bar">
+                <label>Session</label>
+                <input type="text" class="gh-input inp-sess" id="glob-sess" placeholder="SID" />
+                <span class="divider">|</span>
+
+                <label>DATE</label>
+                <input type="text" class="gh-input inp-date" id="glob-date" readonly />
+                <span class="divider">|</span>
+
+                <label>OPERATOR</label>
+                <input type="text" class="gh-input inp-op" id="glob-op" placeholder="Operator Name" />
+            </div>
         </div>
-        <div class="data-bar">
-            <label>Session</label>
-            <input type="text" class="gh-input inp-sess" id="glob-sess" placeholder="SID" />
-            <span class="divider">|</span>
 
-            <label>DATE</label>
-            <input type="text" class="gh-input inp-date" id="glob-date" readonly />
-            <span class="divider">|</span>
-
-            <label>OPERATOR</label>
-            <input type="text" class="gh-input inp-op" id="glob-op" placeholder="Operator Name" />
+        <div class="gh-nav">
+            <a href="../index.html" class="nav-btn" id="nav-home">Home</a>
+            <a href="../SD/index.html" class="nav-btn" id="nav-sd">SD</a>
+            <a href="../RT/index.html" class="nav-btn" id="nav-rt">RT</a>
+            <a href="../LD/index.html" class="nav-btn" id="nav-ld">LD</a>
+            <a href="../ST/index.html" class="nav-btn" id="nav-st">ST</a>
+            <a href="#" class="nav-btn">Dashboard</a>
+            <a href="#" class="nav-btn">Export</a>
+            <span class="gh-upload-status" id="gh-upload-status" role="status" aria-live="polite" hidden></span>
         </div>
-    </div>
-
-    <div class="gh-nav">
-        <a href="../index.html" class="nav-btn" id="nav-home">Home</a>
-        <a href="../SD/index.html" class="nav-btn" id="nav-sd">SD</a>
-        <a href="../RT/index.html" class="nav-btn" id="nav-rt">RT</a>
-        <a href="../LD/index.html" class="nav-btn" id="nav-ld">LD</a>
-        <a href="../ST/index.html" class="nav-btn" id="nav-st">ST</a>
-        <a href="../About/index.html" class="nav-btn" id="nav-about">About</a>
-        <a href="#" class="nav-btn">Export</a>
-    </div>
-
-    <div class="gh-status">
-        <div class="status-item"><span class="status-dot on"></span> Mic</div>
-        <div class="status-item"><span class="status-dot on"></span> Cam</div>
-        <div class="status-item" style="margin-left:8px; border-left:1px solid #334155; padding-left:12px;">Mode: Cursor</div>
     </div>
 </nav>

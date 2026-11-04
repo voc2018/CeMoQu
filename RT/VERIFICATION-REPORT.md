@@ -56,9 +56,9 @@ The current design includes:
 - Frame-timestamp-based time-inside calculation.
 - Velocity-based arrival detection.
 - Arrival-distance dysmetria score.
-- Experimental post-arrival tremor score.
+- Stored post-arrival values: hold turns, target found, P95 radius.
 - SARA-aligned score based on last three valid dysmetria movements.
-- Missing tracking not automatically converted into SARA score 4.
+- A finished run with 50% or more of the movements not tracked scores 4 and is marked for review.
 - Low camera FPS flag for tremor-confidence caution.
 - CSV export of raw and summary values.
 
@@ -87,8 +87,7 @@ These checks should be repeated in a clean browser session before release.
 - Camera pixels-per-centimeter changes with distance from the camera.
 - Cursor calibration depends on display size, browser zoom, window size, and monitor scaling.
 - Reaction time, time-inside, final-frame distance, tracking spikes, and measured FPS are exported but not clinically calibrated as SARA scoring inputs.
-- Smoothness is currently present as a field but not a validated scored metric in the current SARA-aligned score.
-- The experimental CeMoQu weighted score is distinct from the SARA-aligned dysmetria score.
+- Post-arrival values are stored and do not change the RT CMQ Score.
 - The current Camera Auto Calibration average does not by itself prove correct physical scaling across the full camera field.
 - A successful target run does not prove clinical validity.
 
@@ -156,7 +155,7 @@ The following tests are required before treating the build as stable for supervi
 
 RT must not be presented as validated SARA scoring until the following are completed:
 
-- Same-day clinician-rated official SARA Finger Chase scores.
+- Same-day Clinician-rated SARA Scores.
 - Blinded clinical reference ratings.
 - Test–retest reliability.
 - Inter-device reliability.
@@ -188,7 +187,7 @@ RT must not be presented as validated SARA scoring until the following are compl
 
 ## 10. Screenshot checklist
 
-The following screenshots should be added under `docs/screenshots/`:
+The screenshots below are in `docs/screenshots/`. Faces are blurred in the camera screenshots:
 
 - `rt-main-cursor-mode.png` — main RT screen with Cursor Mode selected
 - `cursor-calibration-bar.png` — Cursor Mode calibration before verification
@@ -200,8 +199,6 @@ The following screenshots should be added under `docs/screenshots/`:
 - `countdown-overlay.png` — countdown screen
 - `target-running.png` — active target trial
 - `final-result.png` — final result screen
-- `research-details.png` — RESEARCH tab scoring/config details
-- `csv-export.png` — export buttons or exported CSV example
 
 ---
 
@@ -209,4 +206,4 @@ The following screenshots should be added under `docs/screenshots/`:
 
 The current RT build is suitable for supervised prototype testing and internal research-development use. It is **not verified for diagnostic use, clinical decision-making, or claims of validated SARA scoring accuracy**.
 
-Advancement beyond provisional status requires browser/device testing, physical calibration checks, signal/trajectory validation, accessibility review, and clinical/statistical validation against clinician-rated SARA Finger Chase scores.
+Advancement beyond provisional status requires browser/device testing, physical calibration checks, signal/trajectory validation, accessibility review, and clinical/statistical validation against Clinician-rated SARA Scores.

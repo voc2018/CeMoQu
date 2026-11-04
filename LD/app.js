@@ -25,33 +25,18 @@ let cmPerPixel=0;
 
 let calibrationVerified=false;
 
-/* Load saved calibration */
+/* Saved calibration: restored only after the canvas size is locked and
+   only if it was verified at the same locked canvas width and zoom
+   (see lockCanvasSize). Older saves without that info are not restored. */
+let savedCalibration=null;
 (function loadSavedCalibration(){
-
-const saved=localStorage.getItem("ld_cal");
-
-if(!saved) return;
-
 try{
-
-const{ppc,cpp,measuredCm}=JSON.parse(saved);
-
-if(ppc>0&&cpp>0){
-
-pixelsPerCm=ppc;
-cmPerPixel=cpp;
-calibrationVerified=true;
-
-document.getElementById("measuredDistance").value=measuredCm;
-
-document.getElementById("calibrationStatus")
-.innerHTML=
-'<span class="status-good">Verified (saved)</span>';
-
+const saved=JSON.parse(localStorage.getItem("ld_cal")||"null");
+if(saved&&saved.ppc>0&&saved.cpp>0){
+savedCalibration=saved;
+if(saved.measuredCm) document.getElementById("measuredDistance").value=saved.measuredCm;
 }
-
 }catch(e){}
-
 })();
 
 /* =========================
@@ -66,6 +51,11 @@ let active=false;
 let drawing=false;
 let success=false;
 let trialAttempted=false;
+let trialOver=false;
+let trialFailCode="";
+let trialToleranceCm=0;
+let trialStartedAtIso=null;
+let isOutside=false;
 
 let startHit=false;
 let finishHit=false;
@@ -73,6 +63,9 @@ let finishHit=false;
 let touches=[];
 
 let deviationSamples=[];
+
+/* Raw data for each trial: time, x, y (canvas units) and event type. */
+let rawSamples=[];
 
 let statistics={
 discontinuities:0,
@@ -83,8 +76,8 @@ outOfBounds:0,
 startFails:0
 };
 
-/* Turn/reverse sensitivity is now driven by the on-screen "Tolerance (cm)" field
-   (see updateDirectionChange), not a fixed constant. */
+/* Turn/reverse sensitivity comes from the on-screen "Tolerance (cm)" field.
+   Its value is held for the whole trial (see beginTrackingTrial). */
 let xDirection=0;
 let yDirection=0;
 let xDirectionDistance=0;
@@ -95,7 +88,171 @@ let trialStartTime=null;
 
 const TRIALS_PER_TEST=5;
 const completedTrials=[];
-const trialCounts={horizontal:0,vertical:0,diagonal1:0,diagonal2:0};
+/* Trial counts per test mode AND per hand. SARA-6 (Nose-Finger) is rated
+   separately for each side (Schmitz-Hübsch et al., 2006). */
+const trialCounts={
+horizontal:{R:0,L:0},
+vertical:{R:0,L:0},
+diagonal1:{R:0,L:0},
+diagonal2:{R:0,L:0}
+};
+
+/* =========================
+   HAND SEQUENCE
+   Right → Left (same order as RT). Each hand block = TRIALS_PER_TEST
+   trials and starts only after the examiner confirms the hand on the
+   on-canvas prompt. Stopping mid-block keeps completed hands; the next
+   Start Test redoes only the unfinished hand.
+========================= */
+
+const HAND_NAMES={R:"Right",L:"Left"};
+/* Per-hand automated score = mean of the last HAND_SCORE_TRIALS trial
+   scores (first trials treated as familiarization, as in RT; SARA-6 rates
+   performance over three movements). */
+const HAND_SCORE_TRIALS=3;
+
+let currentHand="R";
+let handReady=false;
+let handPromptResolve=null;
+
+function handSequence(){
+const v=document.getElementById("handSelector")?.value;
+return v==="R"?["R"]:v==="L"?["L"]:["R","L"];
+}
+
+function nextHandFor(key){
+return handSequence().find(h=>trialCounts[key][h]<TRIALS_PER_TEST)??null;
+}
+
+function allHandsComplete(key){
+return nextHandFor(key)===null;
+}
+
+function showHandPrompt(hand){
+const seq=handSequence();
+const idx=seq.indexOf(hand);
+const isSwitch=idx>0;
+document.getElementById("handPromptKicker").textContent=isSwitch?"SWITCH HANDS":"HAND";
+document.getElementById("handPromptTitle").textContent=`${HAND_NAMES[hand].toUpperCase()} HAND`;
+document.getElementById("handPromptBody").textContent=isSwitch?
+`${HAND_NAMES[seq[idx-1]]} hand complete. Switch to the ${HAND_NAMES[hand].toLowerCase()} hand for the next ${TRIALS_PER_TEST} trials.`:
+`Use the ${HAND_NAMES[hand].toLowerCase()} hand for the next ${TRIALS_PER_TEST} trials.`;
+document.getElementById("handPrompt").hidden=false;
+setGuidance(isSwitch?`Switch to ${HAND_NAMES[hand].toLowerCase()} hand — press Ready.`:`${HAND_NAMES[hand]} hand — press Ready to begin.`,false);
+return new Promise(resolve=>{handPromptResolve=resolve;});
+}
+
+function hideHandPrompt(){
+const el=document.getElementById("handPrompt");
+if(el) el.hidden=true;
+handPromptResolve=null;
+}
+
+function confirmHandReady(){
+const resolve=handPromptResolve;
+hideHandPrompt();
+if(resolve) resolve();
+}
+
+async function runHandBlock(key,hand){
+currentHand=hand;
+handReady=false;
+updateHandScores();
+appendLog(`${TEST_NAMES[key]} · ${HAND_NAMES[hand]} hand: block started.`);
+await showHandPrompt(hand);
+if(!sequenceRunning) return;
+handReady=true;
+resetForNextTrial();
+
+if(key!=="horizontal"){
+setGuidance(readyMessage(),false);
+return;
+}
+
+try{
+if(hand===handSequence()[0]){
+setGuidance("Horizontal test is about to begin.",false);
+await playAudioFile("01_intro_horizontal.mp3");
+if(!sequenceRunning) return;
+}
+await wait(1000);
+if(sequenceRunning) playTrialStart(1);
+}catch(error){
+console.error(error);
+sequenceRunning=false;
+document.getElementById("startSequenceBtn").disabled=false;
+document.getElementById("testSelector").disabled=false;
+document.getElementById("handSelector").disabled=false;
+setGuidance("Audio failed — restart the test.",false);
+}
+}
+
+async function finishHandBlock(key){
+handReady=false;
+const hand=currentHand;
+const score=handScore(key,hand);
+appendLog(`${TEST_NAMES[key]} · ${HAND_NAMES[hand]} hand complete: LD CMQ Score ${HAND_NAMES[hand]} = ${formatScore(score)}`);
+updateHandScores();
+const next=nextHandFor(key);
+if(next&&sequenceRunning){
+await wait(800);
+if(sequenceRunning) runHandBlock(key,next);
+return;
+}
+sequenceRunning=false;
+document.getElementById("startSequenceBtn").disabled=false;
+document.getElementById("testSelector").disabled=false;
+document.getElementById("handSelector").disabled=false;
+const item=itemScore(key);
+if(item!==null) appendLog(`${TEST_NAMES[key]} · LD CMQ Score Item (R + L) / 2 = ${formatScore(item)}`);
+setGuidance(`${TEST_NAMES[key]}: all hands complete.`,false,true);
+}
+
+/* =========================
+   PER-HAND SCORES
+========================= */
+
+function formatScore(v){
+return v===null||v===undefined?"—":(Math.round(v*100)/100).toString();
+}
+
+function handScore(key,hand){
+const trials=completedTrials
+.filter(t=>t.testMode===key&&t.hand===hand)
+.sort((a,b)=>a.trialNumber-b.trialNumber);
+if(trials.length<TRIALS_PER_TEST) return null;
+const last=trials.slice(-HAND_SCORE_TRIALS);
+return last.reduce((a,t)=>a+t.score,0)/last.length;
+}
+
+function itemScore(key){
+const seq=handSequence();
+if(seq.length<2) return null;
+const r=handScore(key,"R"),l=handScore(key,"L");
+return r!==null&&l!==null?(r+l)/2:null;
+}
+
+function updateHandScores(){
+const key=selectedTestKey();
+const set=(id,v)=>{const el=document.getElementById(id);if(el) el.innerText=v;};
+set("currentHandValue",HAND_NAMES[currentHand]);
+set("handScoreRValue",formatScore(handScore(key,"R")));
+set("handScoreLValue",formatScore(handScore(key,"L")));
+set("itemScoreValue",formatScore(itemScore(key)));
+}
+
+function getClinicianValues(){
+const val=id=>{const el=document.getElementById(id);return el&&el.value!==""?Number(el.value):null;};
+const seq=handSequence();
+const r=seq.includes("R")?val("clinicianScoreR"):null;
+const l=seq.includes("L")?val("clinicianScoreL"):null;
+const notesEl=document.getElementById("researchNotes");
+return{
+r,l,
+item:seq.length===2&&r!==null&&l!==null?(r+l)/2:null,
+notes:notesEl?notesEl.value.replace(/[\r\n]+/g," ").trim():""
+};
+}
 
 const AUDIO_BASE="./audio/";
 const START_AUDIO={
@@ -151,6 +308,13 @@ el.classList.toggle("complete",isComplete);
 el.classList.remove("countdown");
 }
 showGuidanceBox();
+syncStartButton();
+}
+
+/* Calibration is required before a test can start. */
+function syncStartButton(){
+const btn=document.getElementById("startSequenceBtn");
+if(btn) btn.disabled=sequenceRunning||!calibrationVerified;
 }
 
 function showCountdownCue(cue,trialNumber){
@@ -214,11 +378,7 @@ touches=[];
 resetStats();
 stopTimer();
 document.getElementById("timer").innerText="0.00";
-trialStartTime=performance.now();
-timerId=setInterval(()=>{
-document.getElementById("timer").innerText=
-((performance.now()-trialStartTime)/1000).toFixed(2);
-},10);
+startTrialClock();
 setGuidance(`GO — Test ${trialNumber}`,false);
 }
 
@@ -249,7 +409,7 @@ if(session===audioSessionId) hideGuidanceBox();
 },{once:true});
 audio.addEventListener("error",()=>{
 if(session===audioSessionId) hideGuidanceBox();
-setGuidance("Audio could not be played. Please restart the test.",false);
+setGuidance("Audio failed — restart the test.",false);
 sequenceRunning=false;
 document.getElementById("startSequenceBtn").disabled=false;
 },{once:true});
@@ -261,46 +421,51 @@ countdownTimerIds.push(setTimeout(callback,Math.max(0,(time-audio.currentTime)*1
 });
 }catch(error){
 if(session===audioSessionId) hideGuidanceBox();
-setGuidance("Audio could not be played. Please restart the test.",false);
+setGuidance("Audio failed — restart the test.",false);
 sequenceRunning=false;
 document.getElementById("startSequenceBtn").disabled=false;
 document.getElementById("testSelector").disabled=false;
+document.getElementById("handSelector").disabled=false;
 }
 }
 
 async function startTestSequence(){
-if(!calibrationVerified){
-alert("Calibration required before testing.");
+if(!screenReady()){
+setGuidance("Enter full screen before testing.",false);
 return;
 }
-if(selectedTestKey()!=="horizontal"){
-setGuidance("Recorded guidance is currently available for the Horizontal Test only.",false);
+if(!calibrationVerified){
+setGuidance("Verify calibration to begin.",false);
+return;
+}
+if(!((parseFloat(document.getElementById("toleranceInput").value)||0)>0)){
+setGuidance("Enter a Tolerance above 0 cm.",false);
 return;
 }
 if(sequenceRunning) return;
 
+const key=selectedTestKey();
+let hand=nextHandFor(key);
+let redoHands;
+if(hand===null){
+/* All selected hands already complete → full restart of this test mode. */
+redoHands=handSequence();
+hand=redoHands[0];
+}else{
+/* Redo only the unfinished hand; finished hands are kept. */
+redoHands=[hand];
+}
+redoHands.forEach(h=>{trialCounts[key][h]=0;});
+completedTrials.splice(0,completedTrials.length,
+...completedTrials.filter(t=>!(t.testMode===key&&redoHands.includes(t.hand))));
+
 sequenceRunning=true;
 trialArmed=false;
-trialCounts.horizontal=0;
-completedTrials.splice(0,completedTrials.length,
-...completedTrials.filter(trial=>trial.testMode!=="horizontal"));
 document.getElementById("startSequenceBtn").disabled=true;
 document.getElementById("testSelector").disabled=true;
+document.getElementById("handSelector").disabled=true;
 resetForNextTrial();
-setGuidance("The line drawing test will now begin. Horizontal test.",false);
-
-try{
-await playAudioFile("01_intro_horizontal.mp3");
-if(!sequenceRunning) return;
-await wait(1000);
-if(sequenceRunning) playTrialStart(1);
-}catch(error){
-console.error(error);
-sequenceRunning=false;
-document.getElementById("startSequenceBtn").disabled=false;
-document.getElementById("testSelector").disabled=false;
-setGuidance("Audio could not be played. Please restart the test.",false);
-}
+runHandBlock(key,hand);
 }
 
 function selectedTestKey(){
@@ -309,11 +474,11 @@ return document.getElementById("testSelector").value;
 
 function readyMessage(){
 const key=selectedTestKey();
-const next=trialCounts[key]+1;
-if(next>TRIALS_PER_TEST){
-return `${TEST_NAMES[key]}: all 5 trials are complete.`;
+if(!sequenceRunning||!handReady){
+return allHandsComplete(key)?`${TEST_NAMES[key]}: all hands complete.`:"Select Start Test when you are ready.";
 }
-return `When you are ready, press S to start test ${next}.`;
+const next=trialCounts[key][currentHand]+1;
+return `${HAND_NAMES[currentHand]} hand: press S to start test ${next}.`;
 }
 
 /* =========================
@@ -422,6 +587,21 @@ finishBox[1]+BOX/2
 
 ctx.stroke();
 
+/* End boundary: crossing this line anywhere ends the trial. */
+const line=ldGuideLine(startBox,finishBox,BOX);
+const along=line.length-BOX/2;
+const bx=line.sx+line.ux*along;
+const by=line.sy+line.uy*along;
+const reach=Math.max(WIDTH,HEIGHT);
+ctx.save();
+ctx.setLineDash([8,8]);
+ctx.lineWidth=2;
+ctx.beginPath();
+ctx.moveTo(bx-line.uy*reach,by+line.ux*reach);
+ctx.lineTo(bx+line.uy*reach,by-line.ux*reach);
+ctx.stroke();
+ctx.restore();
+
 }
 
 function redraw(clear=true){
@@ -502,8 +682,7 @@ function updateDirectionChange(delta,axis){
 if(delta===0||!calibrationVerified)
 return;
 
-const toleranceCm=parseFloat(document.getElementById("toleranceInput").value)||0;
-const thresholdPx=toleranceCm*pixelsPerCm;
+const thresholdPx=trialToleranceCm*pixelsPerCm;
 const movementDirection=normalize(delta);
 
 let direction=axis==="x"?xDirection:yDirection;
@@ -591,6 +770,11 @@ Math.min(index,sorted.length-1)
 
 function verifyCalibration(){
 
+if(!screenReady()){
+setGuidance("Enter full screen before calibration.",false);
+return;
+}
+
 const measuredCm=parseFloat(
 document.getElementById("measuredDistance").value
 );
@@ -627,7 +811,9 @@ localStorage.setItem(
 JSON.stringify({
 ppc:pixelsPerCm,
 cpp:cmPerPixel,
-measuredCm
+measuredCm,
+canvasW:canvasLockedSize?canvasLockedSize.w:null,
+dpr:window.devicePixelRatio
 })
 );
 
@@ -636,6 +822,8 @@ document.getElementById("calibrationStatus")
 '<span class="status-good">Verified</span>';
 
 setGuidance("Select Start Test when you are ready.",false);
+
+appendLog(`Calibration verified: ${measuredCm} cm bar → ${pixelsPerCm.toFixed(2)} canvas px/cm.`);
 
 redraw();
 
@@ -647,22 +835,17 @@ updateStats();
    TIMER
 ========================= */
 
-function startTimer(){
-
-const start=Date.now();
-trialStartTime=start;
-
-clearInterval(timerId);
-
+/* Horizontal: starts at GO. Other modes: starts when S is pressed.
+   The same clock enforces the time limit. */
+function startTrialClock(){
+stopTimer();
+trialStartTime=performance.now();
+trialStartedAtIso=new Date().toISOString();
 timerId=setInterval(()=>{
-
-document.getElementById("timer")
-.innerText=
-((Date.now()-start)/1000)
-.toFixed(2);
-
+const elapsed=(performance.now()-trialStartTime)/1000;
+document.getElementById("timer").innerText=elapsed.toFixed(2);
+if(elapsed>=LD_SCORING_CONFIG.timeLimitSeconds) endFailedTrial("TO");
 },10);
-
 }
 
 function stopTimer(){
@@ -687,6 +870,11 @@ startFails:0
 };
 
 deviationSamples=[];
+rawSamples=[];
+trialOver=false;
+trialFailCode="";
+trialStartedAtIso=null;
+isOutside=false;
 
 xDirection=0;
 yDirection=0;
@@ -725,7 +913,7 @@ document.getElementById("timer")
 .innerText="0.00";
 
 if(calibrationVerified){
-setGuidance("Select Start Test when you are ready.",false,trialCounts[selectedTestKey()]>=TRIALS_PER_TEST);
+setGuidance("Select Start Test when you are ready.",false,allHandsComplete(selectedTestKey()));
 }
 
 }
@@ -750,15 +938,59 @@ updateStats();
    POINTER EVENTS
 ========================= */
 
+function recordRaw(event,x,y){
+rawSamples.push({t:performance.now(),x,y,event});
+}
+
+function beginTrackingTrial(testKey){
+trialToleranceCm=parseFloat(document.getElementById("toleranceInput").value)||0;
+const trialNumber=trialCounts[testKey][currentHand]+1;
+setGuidance(`${HAND_NAMES[currentHand]} hand · Test ${trialNumber} in progress.`,false);
+if(testKey!=="horizontal") startTrialClock();
+}
+
+function lastPoint(){
+return touches.at(-1).points.at(-1);
+}
+
+/* Trial ends without a score of its own: one of the four reasons for 4. */
+function endFailedTrial(code){
+if(trialOver) return;
+trialOver=true;
+trialFailCode=code;
+trialAttempted=true;
+success=false;
+active=false;
+drawing=false;
+if(!trialStartedAtIso){
+trialStartedAtIso=new Date().toISOString();
+trialStartTime=performance.now();
+}
+if(!startHit) trialToleranceCm=parseFloat(document.getElementById("toleranceInput").value)||0;
+stopTimer();
+completeCurrentTrial();
+updateStats();
+}
+
+function noteOutOfBounds(){
+if(isOutside||!active||success) return;
+isOutside=true;
+const point=touches.at(-1)?.points.at(-1);
+if(point) recordRaw("leave",point[0],point[1]);
+statistics.outOfBounds++;
+updateStats();
+if(statistics.outOfBounds>=LD_SCORING_CONFIG.outOfBoundsLimit) endFailedTrial("OB");
+}
+
 canvas.addEventListener(
 "pointerdown",
 e=>{
 
+if(!screenReady()) return;
+
 if(!calibrationVerified){
 
-alert(
-"Calibration required before testing."
-);
+setGuidance("Verify calibration to begin.",false);
 
 return;
 
@@ -768,21 +1000,28 @@ if(selectedTestKey()==="horizontal" && (!sequenceRunning || !trialArmed)){
 return;
 }
 
-const[x,y]=getCoords(e);
-
-drawing=true;
-
-const testKey=selectedTestKey();
-
-if(trialCounts[testKey]>=TRIALS_PER_TEST){
-setGuidance(`${TEST_NAMES[testKey]}: all 5 trials are complete.`);
-drawing=false;
+/* Manual modes: drawing only inside a confirmed hand block. */
+if(selectedTestKey()!=="horizontal" && (!sequenceRunning || !handReady)){
+setGuidance(readyMessage(),false,allHandsComplete(selectedTestKey()));
 return;
 }
 
-if(success){
+const[x,y]=getCoords(e);
+
+const testKey=selectedTestKey();
+
+if(trialCounts[testKey][currentHand]>=TRIALS_PER_TEST){
+setGuidance(`${HAND_NAMES[currentHand]} hand: all ${TRIALS_PER_TEST} trials are complete.`);
+return;
+}
+
+/* After a finished trial, the next press starts a new one (manual modes). */
+if(trialOver){
 resetForNextTrial();
 }
+
+drawing=true;
+isOutside=false;
 
 if(
 isInside(x,y,startBox)
@@ -795,10 +1034,11 @@ startHit=true;
 
 trialAttempted=true;
 
-const trialNumber=trialCounts[testKey]+1;
-setGuidance(`Test ${trialNumber} in progress.`,false);
+beginTrackingTrial(testKey);
 
 redraw();
+
+recordRaw("down",x,y);
 
 touches.push({
 points:[[x,y]]
@@ -810,7 +1050,13 @@ else if(!active){
 
 statistics.startFails++;
 
+recordRaw("down",x,y);
+
+drawing=false;
+
 updateStats();
+
+if(statistics.startFails>=LD_SCORING_CONFIG.startFailLimit) endFailedTrial("SF");
 
 }
 
@@ -818,11 +1064,15 @@ else{
 
 statistics.discontinuities++;
 
+recordRaw("down",x,y);
+
 touches.push({
 points:[[x,y]]
 });
 
 updateStats();
+
+if(statistics.discontinuities>=LD_SCORING_CONFIG.discontinuityLimit) endFailedTrial("DC");
 
 }
 
@@ -838,10 +1088,30 @@ if(
 success
 ) return;
 
+/* Mouse released outside the canvas: treat as a lift. */
+if(e.pointerType==="mouse"&&e.buttons===0){
+drawing=false;
+isOutside=false;
+return;
+}
+
 const[x,y]=getCoords(e);
 
-const last=
-touches.at(-1).points.at(-1);
+/* Touch keeps reporting positions past the edge. */
+if(x<0||y<0||x>WIDTH||y>HEIGHT){
+noteOutOfBounds();
+return;
+}
+
+/* Back inside after leaving the canvas: drawing simply continues. */
+if(isOutside){
+isOutside=false;
+touches.push({points:[[x,y]]});
+recordRaw("down",x,y);
+return;
+}
+
+const last=lastPoint();
 
 ctx.beginPath();
 
@@ -877,13 +1147,16 @@ updateDirectionChange(y-last[1],"y");
 
 touches.at(-1).points.push([x,y]);
 
+recordRaw("move",x,y);
+
 if(
-isInside(x,y,finishBox)
-&& !finishHit
+!finishHit
+&& ldCrossedEndBoundary([x,y],ldGuideLine(startBox,finishBox,BOX),BOX)
 ){
 
 finishHit=true;
 success=true;
+trialOver=true;
 
 active=false;
 
@@ -901,6 +1174,19 @@ updateStats();
 
 canvas.addEventListener(
 "pointerup",
+e=>{
+
+if(active&&drawing){
+const[x,y]=getCoords(e);
+recordRaw("up",x,y);
+}
+
+drawing=false;
+
+});
+
+canvas.addEventListener(
+"pointercancel",
 ()=>{
 
 drawing=false;
@@ -911,37 +1197,18 @@ canvas.addEventListener(
 "pointerleave",
 ()=>{
 
-if(active && !success){
-
-statistics.outOfBounds++;
-
-updateStats();
-
-}
+/* Only while pressed: lifting a finger or moving a released mouse is not
+   leaving the canvas. */
+if(drawing) noteOutOfBounds();
 
 });
 
 /* =========================
-   SARA
+   LD CMQ SCORE
+   Rules and calculation are in scoring.js.
 ========================= */
 
-/*
- SARA scoring algorithm (P95 deviation in cm):
-   < 0.5 cm  → 0  Normal
-   0.5–2 cm  → 1  Mild
-   2–5 cm    → 2  Moderate
-   > 5 cm    → 3  Severe
-   not completed or not calibrated → 4  Unable to perform
-
- Only P95 deviation is used for scoring.
- P95 is chosen over max deviation because it reflects
- sustained error rather than isolated outliers.
- All other captured metrics (turns, reverses,
- discontinuities, area, time) are exported but do
- not contribute to the SARA score.
-*/
-
-const SARA_LABELS=[
+const SCORE_LABELS=[
 "0 — Normal",
 "1 — Mild",
 "2 — Moderate",
@@ -949,16 +1216,22 @@ const SARA_LABELS=[
 "4 — Unable to perform"
 ];
 
-function calculateSara(p95Cm){
+function scoreLabel(score,failCode){
+return (SCORE_LABELS[score]??score)+(failCode?` · ${failCode}`:"");
+}
 
-if(!success||!calibrationVerified)
-return 4;
+function fixedOrDash(value,digits,unit){
+return value===null||value===undefined?"—":`${value.toFixed(digits)}${unit}`;
+}
 
-if(p95Cm<0.5)  return 0;  // < 0.5 cm
-if(p95Cm<2)    return 1;  // 0.5–2 cm
-if(p95Cm<=5)   return 2;  // 2–5 cm  (boundary 5 cm = score 2)
-return 3;                 // > 5 cm
-
+function currentTrialScore(){
+return ldScoreTrial({
+strokes:touches.map(t=>t.points),
+line:ldGuideLine(startBox,finishBox,BOX),
+toleranceCm:trialToleranceCm,
+cmPerPixel,
+failCode:trialFailCode
+});
 }
 
 /* =========================
@@ -967,11 +1240,7 @@ return 3;                 // > 5 cm
 
 function updateStats(){
 
-/* Tolerance now controls turn-detection sensitivity (see updateDirectionChange),
-   not deviation scoring — deviation is reported raw and unfiltered. */
-const toleranceCm=
-parseFloat(document.getElementById("toleranceInput").value)||0;
-
+/* Deviation is reported raw and unfiltered. */
 const effective=deviationSamples;
 
 const maxPx=
@@ -1004,8 +1273,9 @@ const areaCm2=
 statistics.deviationAreaPx2*
 (cmPerPixel*cmPerPixel);
 
-const sara=
-calculateSara(p95Cm);
+/* Keeps showing the latest finished trial until the next one finishes. */
+const key=selectedTestKey();
+const scored=completedTrials.filter(t=>t.testMode===key&&t.hand===currentHand).at(-1)??null;
 
 document.getElementById("calibrationUsed")
 .innerText=
@@ -1058,11 +1328,34 @@ document.getElementById("deviationAreaValue")
 .innerText=
 `${statistics.deviationAreaPx2.toFixed(2)} px² / ${areaCm2.toFixed(2)} cm²`;
 
-document.getElementById("saraScoreValue")
+document.getElementById("cmqScoreValue")
 .innerText=
-trialAttempted?
-(SARA_LABELS[sara]??sara):
+scored?
+`${scoreLabel(scored.score,scored.failCode)} · Test ${scored.trialNumber}`:
 "--";
+
+document.getElementById("trialScoresValue")
+.innerText=
+Array.from({length:TRIALS_PER_TEST},(_,i)=>{
+const t=completedTrials.find(c=>c.testMode===key&&c.hand===currentHand&&c.trialNumber===i+1);
+return t?(t.failCode?`${t.score} ${t.failCode}`:t.score):"–";
+}).join("  |  ");
+
+document.getElementById("rejoinJumpValue")
+.innerText=
+scored?fixedOrDash(scored.rejoinJumpMaxCm,2," cm"):"—";
+
+document.getElementById("turnCountValue")
+.innerText=
+scored?scored.turnCount:"—";
+
+document.getElementById("turnAmpMeanValue")
+.innerText=
+scored?fixedOrDash(scored.amplitudeMeanCm,2," cm"):"—";
+
+document.getElementById("turnAmpMedianValue")
+.innerText=
+scored?fixedOrDash(scored.amplitudeMedianCm,2," cm"):"—";
 
 }
 
@@ -1072,19 +1365,59 @@ trialAttempted?
 
 const METRIC_DEFINITIONS={
 
-sara:{
-title:"SARA Score",
-text:"A 0–4 ataxia severity score modeled on the SARA finger-chase item, derived from the P95 deviation: less than 0.5 cm scores 0 (Normal), 0.5–2 cm scores 1 (Mild), 2–5 cm scores 2 (Moderate), and over 5 cm scores 3 (Severe). An incomplete trial or unverified calibration is automatically scored 4 (Unable to Perform)."
+hand:{
+title:"Current Hand",
+text:"The hand currently being tested. With Right and Left selected, the right hand is tested first (5 trials), then the examiner confirms the switch and the left hand is tested (5 trials)."
+},
+
+handscore:{
+title:"LD CMQ Score Right / Left",
+text:"Automated per-hand score for this test mode: the mean of the last 3 trial LD CMQ Scores for that hand, once all 5 trials are complete."
+},
+
+itemscore:{
+title:"LD CMQ Score Item (R + L) / 2",
+text:"The arithmetic mean of the right and left scores. Shown only when both hands are selected and complete."
+},
+
+trialscores:{
+title:"Trial Scores",
+text:"The scores of trials 1 to 5 for the current hand and test, in order. A dash means the trial has not been done."
+},
+
+cmq:{
+title:"LD CMQ Score (trial)",
+text:"A 0–4 score based on turn amplitude. No turn above the Tolerance scores 0, a mean amplitude under 2 cm scores 1, under 5 cm scores 2, and 5 cm or more scores 3. A score of 4 shows its reason code: SF, TO, OB or DC. The 2 and 5 cm cut-offs follow the SARA Nose-Finger tremor amplitudes."
+},
+
+turns:{
+title:"Turn Count",
+text:"The number of side-to-side direction changes across the guide line. A movement smaller than the Tolerance is not counted as a turn."
+},
+
+ampmean:{
+title:"Turn Amplitude Mean",
+text:"The average height from one turn to the next, measured across the guide line, after removing the largest 5% of amplitudes. Each stroke is measured on its own. This value sets the LD CMQ Score."
+},
+
+rejoin:{
+title:"Max Rejoin Jump",
+text:"The largest distance between where the hand lifted and where it touched again. Every jump is stored. Jumps are not amplitudes and do not affect the score, so review a trial with a large jump."
+},
+
+ampmedian:{
+title:"Turn Amplitude Median",
+text:"The middle turn amplitude after removing the largest 5%. Stored for comparison and not used in the score."
 },
 
 p95:{
 title:"P95 Deviation",
-text:"The 95th-percentile distance between the cursor and the ideal guide line, in pixels and centimeters, using the raw (unadjusted) deviation. This is the only metric used to calculate the SARA score, since it reflects sustained tracing error rather than one extreme outlier."
+text:"The 95th-percentile distance between the cursor and the ideal guide line, in pixels and centimeters. Stored for reference and not used in the score."
 },
 
 max:{
 title:"Max Deviation",
-text:"The single largest distance recorded between the cursor and the guide line during the trial, in pixels and centimeters. Captured for reference — it does not factor into the SARA score."
+text:"The single largest distance recorded between the cursor and the guide line during the trial, in pixels and centimeters. Stored for reference and not used in the score."
 },
 
 mean:{
@@ -1099,7 +1432,7 @@ text:"The cumulative area swept out between the cursor's path and the ideal guid
 
 discont:{
 title:"Discontinuities",
-text:"The number of times the user released the mouse button and pressed again before completing the trial. Each re-press after the first counts as one discontinuity."
+text:"The number of times the hand lifted and pressed again before completing the trial. A lift can be forward-and-back tremor that a screen cannot measure in depth, so it is recorded. Ten or more score 4 (code DC). This can also appear with small tremor, so review those trials."
 },
 
 vturns:{
@@ -1114,12 +1447,12 @@ text:"The number of times the cursor's horizontal direction (left vs. right) rev
 
 oob:{
 title:"Out-of-Bounds",
-text:"The number of times the cursor left the canvas area entirely while the trial was active and not yet completed."
+text:"The number of times the hand left the canvas while pressed during the trial. Three or more score 4 (code OB)."
 },
 
 startfails:{
 title:"Start Fails",
-text:"The number of times the user pressed the mouse button outside the green S (start) block before successfully beginning the trial."
+text:"The number of times the user pressed outside the S block before beginning the trial. Three in a row score 4 (code SF)."
 },
 
 calibration:{
@@ -1134,36 +1467,49 @@ text:"The inverse of the calibration value — how many real-world centimeters o
 
 calstatus:{
 title:"Calibration Status",
-text:"Whether the calibration has been verified for this session. Testing and scoring are not considered valid until calibration is verified."
+text:"Whether the calibration has been verified for this session. A test cannot start until calibration is verified."
 }
 
 };
 
-function showDefinition(key){
-
-const def=METRIC_DEFINITIONS[key];
-
-if(!def) return;
-
-document.getElementById("defTitle").innerText=def.title;
-document.getElementById("defText").innerText=def.text;
-
-document.getElementById("defOverlay").classList.add("open");
-
+/* Hover tooltip (not click), same behaviour as RT: the definition appears
+   while the pointer is over a metric name and hides when it leaves.
+   Keyboard focus shows it too. */
+function showDefinition(label){
+const def=METRIC_DEFINITIONS[label.dataset.def];
+const tip=document.getElementById("defTip");
+if(!def||!tip) return;
+document.getElementById("defTitle").textContent=def.title;
+document.getElementById("defText").textContent=def.text;
+tip.hidden=false;
+const r=label.getBoundingClientRect();
+const tw=tip.offsetWidth,th=tip.offsetHeight;
+/* Prefer the left of the label (side panel is on the right edge). */
+let x=r.left-tw-12;
+let y=r.top+r.height/2-th/2;
+if(x<8){x=Math.max(8,Math.min(r.left,window.innerWidth-tw-8));y=r.bottom+8;}
+y=Math.max(8,Math.min(y,window.innerHeight-th-8));
+tip.style.left=x+"px";
+tip.style.top=y+"px";
 }
 
 function closeDefinition(){
-
-document.getElementById("defOverlay").classList.remove("open");
-
+const tip=document.getElementById("defTip");
+if(tip) tip.hidden=true;
 }
 
-document.addEventListener("keydown",e=>{
-
-if(e.key==="Escape")
-closeDefinition();
-
+document.querySelectorAll(".metric-label[data-def]").forEach(label=>{
+label.addEventListener("mouseenter",()=>showDefinition(label));
+label.addEventListener("mouseleave",closeDefinition);
+label.addEventListener("focus",()=>showDefinition(label));
+label.addEventListener("blur",closeDefinition);
 });
+
+document.addEventListener("keydown",e=>{
+if(e.key==="Escape") closeDefinition();
+});
+
+window.addEventListener("scroll",closeDefinition,true);
 
 /* =========================
    CONTROLS
@@ -1180,16 +1526,21 @@ resetTest();
 
 if(calibrationVerified){
 const key=selectedTestKey();
-setGuidance(key==="horizontal"?"Select Start Test when you are ready.":readyMessage(),false,trialCounts[key]>=TRIALS_PER_TEST);
+setGuidance(readyMessage(),false,allHandsComplete(key));
+updateHandScores();
 }
 
 }
 
 function stopTest(){
 
+if(active||sequenceRunning) appendLog("Test stopped by examiner.");
+
 active=false;
 trialArmed=false;
 sequenceRunning=false;
+handReady=false;
+hideHandPrompt();
 
 stopTimer();
 
@@ -1197,13 +1548,14 @@ stopAudio();
 
 document.getElementById("startSequenceBtn").disabled=false;
 document.getElementById("testSelector").disabled=false;
+document.getElementById("handSelector").disabled=false;
 
-setGuidance("Test stopped. Select Start Test to begin again.",false);
+setGuidance("Test stopped. Press Start Test to resume.",false);
 
 }
 
 function getTrialMetrics(){
-const toleranceCm=parseFloat(document.getElementById("toleranceInput").value)||0;
+const toleranceCm=trialToleranceCm;
 const effective=deviationSamples;
 const maxPx=effective.length?Math.max(...effective):0;
 const meanPx=effective.length?effective.reduce((a,b)=>a+b,0)/effective.length:0;
@@ -1214,41 +1566,58 @@ toleranceCm,maxPx,meanPx,p95Px,p95Cm,
 maxCm:maxPx*cmPerPixel,
 meanCm:meanPx*cmPerPixel,
 areaCm2:statistics.deviationAreaPx2*cmPerPixel*cmPerPixel,
-sara:calculateSara(p95Cm)
+...currentTrialScore()
 };
 }
 
 async function completeCurrentTrial(){
 const key=selectedTestKey();
 const metrics=getTrialMetrics();
-trialCounts[key]++;
-const trialNumber=trialCounts[key];
+const hand=currentHand;
+trialCounts[key][hand]++;
+const trialNumber=trialCounts[key][hand];
 trialArmed=false;
 completedTrials.push({
 testMode:key,
 testName:TEST_NAMES[key],
+hand,
 trialNumber,
+startedAt:trialStartedAtIso,
 timestamp:new Date().toISOString(),
-durationSeconds:parseFloat(document.getElementById("timer").innerText)||0,
+durationSeconds:trialStartTime&&trialStartedAtIso?(performance.now()-trialStartTime)/1000:0,
 pixelsPerCm,
 cmPerPixel,
+scoringVersion:LD_SCORING_CONFIG.version,
+startBox:[...startBox],
+finishBox:[...finishBox],
+rawSamples:rawSamples.map(r=>({...r,t:r.t-(rawSamples[0]?.t??r.t)})),
 ...metrics,
 statistics:{...statistics},
-success:true
+success
 });
 
+{
+const safe=v=>String(v||"").replace(/[^A-Za-z0-9_-]+/g,"_")||"unknown";
+const fv=id=>{const el=document.getElementById(id);return el?el.value.trim():"";};
+const file=`${safe(fv("glob-id")||"participant")}_${safe(fv("glob-date")||new Date().toISOString().split("T")[0])}_${safe(fv("glob-sess")||"S1")}_${key}_${hand}_T${trialNumber}_trajectory.png`;
+const png=makeTrajectoryPng(touches,startBox,finishBox,hand,trialNumber,key);
+const rec=completedTrials[completedTrials.length-1];
+rec.trajectoryImageFile=file;
+rec.trajectoryImagePng=png;
+const time=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+appendLogHtml(`<div class="trial-log-entry"><div class="trial-log-text"><span class="small-muted">${time}</span> ${escapeLogText(`${TEST_NAMES[key]} · ${HAND_NAMES[hand]} · Trial ${trialNumber}`)}<br>Turn amplitude ${escapeLogText(fixedOrDash(metrics.amplitudeMeanCm,2," cm"))} → LD CMQ Score ${escapeLogText(scoreLabel(metrics.score,metrics.failCode))}</div><a class="trajectory-thumb-link" href="${png}" download="${escapeLogText(file)}" title="Download ${escapeLogText(file)}"><img class="trajectory-thumb" src="${png}" alt="${HAND_NAMES[hand]} hand trial ${trialNumber} trajectory"></a></div>`);
+}
+
+updateHandScores();
+
 if(key==="horizontal" && sequenceRunning){
-setGuidance(trialNumber>=TRIALS_PER_TEST?
-"Test 5 complete. Horizontal test complete.":
-`Test ${trialNumber} complete.`,false,trialNumber>=TRIALS_PER_TEST);
+setGuidance(trialResultMessage(hand,trialNumber,metrics.failCode),false,trialNumber>=TRIALS_PER_TEST);
 
 try{
 await playAudioFile(COMPLETE_AUDIO[trialNumber]);
 if(!sequenceRunning) return;
 if(trialNumber>=TRIALS_PER_TEST){
-sequenceRunning=false;
-document.getElementById("startSequenceBtn").disabled=false;
-document.getElementById("testSelector").disabled=false;
+await finishHandBlock(key);
 return;
 }
 await wait(1000);
@@ -1256,20 +1625,74 @@ if(sequenceRunning) playTrialStart(trialNumber+1);
 }catch(error){
 console.error(error);
 sequenceRunning=false;
+handReady=false;
 document.getElementById("startSequenceBtn").disabled=false;
 document.getElementById("testSelector").disabled=false;
-setGuidance("Audio could not be played. Please restart the test.",false);
+document.getElementById("handSelector").disabled=false;
+setGuidance("Audio failed — restart the test.",false);
 }
 }else if(trialNumber>=TRIALS_PER_TEST){
-setGuidance(`${TEST_NAMES[key]}: all 5 trials are complete.`,false,true);
+await finishHandBlock(key);
 }else{
-setGuidance(`Test ${trialNumber} is complete.`,false);
+setGuidance(trialResultMessage(hand,trialNumber,metrics.failCode),false);
 }
+}
+
+function trialResultMessage(hand,trialNumber,failCode){
+const base=`${HAND_NAMES[hand]} hand · Test ${trialNumber} complete`;
+return failCode?`${base} · code ${failCode}.`:`${base}.`;
 }
 
 function csvEscape(value){
 const text=String(value??"");
 return /[",\n\r]/.test(text)?`"${text.replace(/"/g,'""')}"`:text;
+}
+
+/* Columns added for scoring version 2. */
+const EXTRA_HEADERS=[
+"scoring_version","tolerance_cm","turn_count","turn_amp_mean_cm","turn_amp_median_cm",
+"turn_amps_used","turn_amps_removed","fail_code","rejoin_jump_max_cm","rejoin_jumps_cm","trial_number",
+"duration_seconds","started_at","ended_at"
+];
+
+/* The CSV already has these under its own columns. */
+const CSV_ALREADY_HAS=["tolerance_cm","trial_number","duration_seconds"];
+
+function extraValues(t){
+const cm=v=>v===null||v===undefined?"":v.toFixed(3);
+return[
+t.scoringVersion,t.toleranceCm.toFixed(2),t.turnCount,cm(t.amplitudeMeanCm),cm(t.amplitudeMedianCm),
+t.amplitudesUsed,t.amplitudesRemoved,t.failCode,cm(t.rejoinJumpMaxCm),t.rejoinJumpsCm.map(j=>j.toFixed(3)).join(";"),t.trialNumber,
+t.durationSeconds.toFixed(2),t.startedAt||"",t.timestamp
+];
+}
+
+/* Raw data for every completed trial, with what is needed to recalculate it. */
+function exportRawCsv(){
+const statusEl=document.getElementById("exportStatus");
+if(completedTrials.length===0){
+if(statusEl){statusEl.textContent="Complete at least one test before exporting raw data.";statusEl.style.color="#f59e0b";}
+return;
+}
+const fieldVal=id=>{const el=document.getElementById(id);return el?el.value.trim():"";};
+const participant=fieldVal("glob-id")||"UNKNOWN";
+const date=fieldVal("glob-date")||new Date().toISOString().split("T")[0];
+const headers=["participant_id","date","test_mode","hand","trial_number","t_ms","x","y","event",
+"start_x","start_y","finish_x","finish_y","box","pixels_per_cm","tolerance_cm","scoring_version"];
+const rows=completedTrials.flatMap(t=>t.rawSamples.map(r=>[
+participant,date,t.testMode,t.hand,t.trialNumber,r.t.toFixed(1),r.x.toFixed(2),r.y.toFixed(2),r.event,
+t.startBox[0],t.startBox[1],t.finishBox[0],t.finishBox[1],BOX,t.pixelsPerCm.toFixed(4),t.toleranceCm.toFixed(2),t.scoringVersion
+]));
+const csv="\uFEFF"+[headers,...rows].map(row=>row.map(csvEscape).join(",")).join("\r\n");
+const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+const link=document.createElement("a");
+link.href=url;
+link.download=`LD_raw_${participant.replace(/[^A-Za-z0-9_-]/g,"_")}_${date}.csv`;
+document.body.appendChild(link);
+link.click();
+link.remove();
+URL.revokeObjectURL(url);
+if(statusEl){statusEl.textContent="Raw data downloaded.";statusEl.style.color="#22c55e";}
 }
 
 function exportCsv(){
@@ -1291,18 +1714,27 @@ date:fieldVal("glob-date")||new Date().toISOString().split("T")[0]
 };
 
 const headers=[
-"participant_id","session","age","sex","hand","date","test_mode","test_name","trial_number","timestamp","duration_seconds",
+"participant_id","session","age","sex","dominant_hand","date","test_mode","test_name","trial_number","timestamp","duration_seconds",
 "pixels_per_cm","cm_per_pixel","turn_tolerance_cm","discontinuities","vertical_turns","horizontal_reverses","out_of_bounds","start_fails",
 "max_deviation_px","max_deviation_cm","mean_deviation_px","mean_deviation_cm","p95_deviation_px","p95_deviation_cm",
-"deviation_area_px2","deviation_area_cm2","sara_score","sara_label","success"
+"deviation_area_px2","deviation_area_cm2","cmq_score","cmq_label","success",
+"test_hand","cmq_score_right","cmq_score_left","cmq_score_item",
+"clinician_right","clinician_left","clinician_item","researcher_notes",
+...EXTRA_HEADERS.filter(h=>!CSV_ALREADY_HAS.includes(h))
 ];
+
+const clin=getClinicianValues();
+const fmt=v=>v===null||v===undefined?"":formatScore(v);
 
 const rows=completedTrials.map(t=>[
 metadata.participant_id,metadata.session,metadata.age,metadata.sex,metadata.hand,metadata.date,
 t.testMode,t.testName,t.trialNumber,t.timestamp,t.durationSeconds.toFixed(2),t.pixelsPerCm.toFixed(4),t.cmPerPixel.toFixed(6),t.toleranceCm.toFixed(2),
 t.statistics.discontinuities,t.statistics.verticalTurns,t.statistics.horizontalTurns,t.statistics.outOfBounds,t.statistics.startFails,
 t.maxPx.toFixed(3),t.maxCm.toFixed(3),t.meanPx.toFixed(3),t.meanCm.toFixed(3),t.p95Px.toFixed(3),t.p95Cm.toFixed(3),
-t.statistics.deviationAreaPx2.toFixed(3),t.areaCm2.toFixed(3),t.sara,SARA_LABELS[t.sara]??t.sara,t.success?1:0
+t.statistics.deviationAreaPx2.toFixed(3),t.areaCm2.toFixed(3),t.score,SCORE_LABELS[t.score]??t.score,t.success?1:0,
+t.hand||"",fmt(handScore(t.testMode,"R")),fmt(handScore(t.testMode,"L")),fmt(itemScore(t.testMode)),
+fmt(clin.r),fmt(clin.l),fmt(clin.item),clin.notes,
+...extraValues(t).filter((v,i)=>!CSV_ALREADY_HAS.includes(EXTRA_HEADERS[i]))
 ]);
 
 const csv="\uFEFF"+[headers,...rows].map(row=>row.map(csvEscape).join(",")).join("\r\n");
@@ -1322,121 +1754,412 @@ setGuidance(`CSV downloaded with ${completedTrials.length} completed trials.`);
 }
 
 /* =========================
-   EXPORT TRIAL (GOOGLE SHEETS)
+   SUBMIT DATA
 ========================= */
 
-/* Paste your Google Apps Script Web App URL here — see setup guide. */
-const LD_GOOGLE_SHEET_WEB_APP_URL="https://script.google.com/macros/s/AKfycbzneQXEM3ElSdXBlhjCxaIlNSRJgV2iUAbYWh6uLllD7U90o6pqtL9EC3TBpjRLRFeP/exec";
+/* Raw samples of one trial, with what is needed to recalculate it. */
+function ldRawCsv(t,patientId,date){
+const headers=["participant_id","date","test_mode","hand","trial_number","t_ms","x","y","event",
+"start_x","start_y","finish_x","finish_y","box","pixels_per_cm","tolerance_cm","scoring_version"];
+const rows=t.rawSamples.map(r=>[
+patientId,date,t.testMode,t.hand,t.trialNumber,r.t.toFixed(1),r.x.toFixed(2),r.y.toFixed(2),r.event,
+t.startBox[0],t.startBox[1],t.finishBox[0],t.finishBox[1],BOX,t.pixelsPerCm.toFixed(4),t.toleranceCm.toFixed(2),t.scoringVersion
+]);
+return CeMoQuUpload.csvText(headers,rows);
+}
 
+/* One row and its files for one trial. A score not given is blank; a clinician
+   score not given is -1. */
+function ldRecord(t,clin){
+const startedAt=t.startedAt||t.timestamp;
+const completeHand=completedTrials.filter(c=>c.testMode===t.testMode&&c.hand===t.hand).length>=TRIALS_PER_TEST;
+const row=CeMoQuUpload.commonRow({
+module:"LD",hand:t.hand,trial:t.trialNumber,startedAt,endedAt:t.timestamp,
+status:completeHand?"complete":"stopped",scoringVersion:t.scoringVersion
+});
+const fixed=(v,d=3)=>v===null||v===undefined?"":Number(v.toFixed(d));
+const score=v=>v===null||v===undefined?"":Number(v.toFixed(3));
+const rated=v=>v===null||v===undefined?-1:v;
+const stats=t.statistics;
+Object.assign(row,{
+test_mode:t.testMode,
+pixels_per_cm:fixed(t.pixelsPerCm,4),
+cm_per_pixel:fixed(t.cmPerPixel,6),
+calibration_verified:calibrationVerified?1:0,
+tolerance_cm:fixed(t.toleranceCm,2),
+start_x:t.startBox[0],
+start_y:t.startBox[1],
+finish_x:t.finishBox[0],
+finish_y:t.finishBox[1],
+box:BOX,
+duration_seconds:fixed(t.durationSeconds,2),
+discontinuities:stats.discontinuities,
+vertical_turns:stats.verticalTurns,
+horizontal_reverses:stats.horizontalTurns,
+out_of_bounds:stats.outOfBounds,
+start_fails:stats.startFails,
+max_deviation_cm:fixed(t.maxCm),
+mean_deviation_cm:fixed(t.meanCm),
+p95_deviation_cm:fixed(t.p95Cm),
+deviation_area_cm2:fixed(t.areaCm2),
+turn_count:t.turnCount,
+turn_amp_mean_cm:fixed(t.amplitudeMeanCm),
+turn_amp_median_cm:fixed(t.amplitudeMedianCm),
+turn_amps_used:t.amplitudesUsed,
+turn_amps_removed:t.amplitudesRemoved,
+rejoin_jump_max_cm:fixed(t.rejoinJumpMaxCm),
+rejoin_jumps_cm:t.rejoinJumpsCm.map(j=>j.toFixed(3)).join(";"),
+success:t.success?1:0,
+fail_code:t.failCode,
+score_trial:t.score,
+score_right:score(handScore(t.testMode,"R")),
+clinician_right:rated(clin.r),
+score_left:score(handScore(t.testMode,"L")),
+clinician_left:rated(clin.l),
+score_item:score(itemScore(t.testMode)),
+clinician_item:rated(clin.item),
+researcher_notes:clin.notes,
+raw_sample_count:t.rawSamples.length
+});
+const base=CeMoQuUpload.fileBase({patientId:row.patient_id,startedAt,module:"LD",hand:t.hand,trial:t.trialNumber});
+const files=[{
+kind:"raw",name:`${base}_raw.csv`,mimeType:"text/csv",
+blob:new Blob([ldRawCsv(t,row.patient_id,row.test_date)],{type:"text/csv"})
+}];
+if(t.trajectoryImagePng){
+files.push({kind:"image",name:`${base}_trajectory.png`,mimeType:"image/png",blob:CeMoQuUpload.dataUrlToBlob(t.trajectoryImagePng)});
+}
+return{module:"LD",row,files};
+}
+
+/* Saves every completed trial. Each trial becomes one row. */
 async function exportData(){
-
 const statusEl=document.getElementById("exportStatus");
 const btn=document.getElementById("exportTrialBtn");
-
-if(!LD_GOOGLE_SHEET_WEB_APP_URL||LD_GOOGLE_SHEET_WEB_APP_URL==="INSERT_YOUR_GOOGLE_WEB_APP_URL_HERE"){
-if(statusEl){statusEl.textContent="⚠ Google Sheet URL not configured — see setup guide.";statusEl.style.color="#f59e0b";}
+const show=(text,color)=>{if(statusEl){statusEl.textContent=text;statusEl.style.color=color;}};
+if(completedTrials.length===0){
+show("Complete a test before submitting.","#f59e0b");
 return;
 }
-
-const toleranceCm=
-parseFloat(document.getElementById("toleranceInput").value)||0;
-
-const effective=deviationSamples;
-
-const maxPx=
-effective.length?
-Math.max(...effective):
-0;
-
-const meanPx=
-effective.length?
-effective.reduce((a,b)=>a+b,0)/
-effective.length:
-0;
-
-const p95Px=
-percentile(effective,0.95);
-
-const p95Cm=p95Px*cmPerPixel;
-
-const sara=calculateSara(p95Cm);
-
-/* Patient / session metadata from the global header bar */
-const fieldVal=id=>{const el=document.getElementById(id);return el?el.value.trim():"";};
-const participant=fieldVal("glob-id")||"UNKNOWN";
-const patientName=fieldVal("glob-name");
-const age=fieldVal("glob-age");
-const sex=fieldVal("glob-sex");
-const dob=fieldVal("glob-dob");
-const sessionLabel=fieldVal("glob-sess")||"S1";
-const operator=fieldVal("glob-op");
-const dateLabel=fieldVal("glob-date")||new Date().toISOString().split("T")[0];
-const testMode=document.getElementById("testSelector").value;
-
-const sanitize=v=>String(v||"").replace(/[^A-Za-z0-9_-]/g,"");
-const sessionId=`${sanitize(participant)}_${dateLabel}_${sanitize(sessionLabel)}`;
-
-const headerRow=[
-'session_id','participant_id','name','age','sex','dob','session','operator','date',
-'test_mode','timestamp','pixels_per_cm','cm_per_pixel','calibration_verified',
-'discontinuities','vertical_turns','horizontal_reverses','out_of_bounds','start_fails',
-'max_deviation_px','max_deviation_cm','mean_deviation_px','mean_deviation_cm',
-'p95_deviation_px','p95_deviation_cm','deviation_area_px2','deviation_area_cm2',
-'sara_score','sara_label','scoring_basis','success'
-];
-
-const dataRow=[
-sessionId,participant,patientName,age,sex,dob,sessionLabel,operator,dateLabel,
-testMode,new Date().toISOString(),
-pixelsPerCm.toFixed(4),cmPerPixel.toFixed(6),calibrationVerified?1:0,
-statistics.discontinuities,statistics.verticalTurns,statistics.horizontalTurns,
-statistics.outOfBounds,statistics.startFails,
-maxPx.toFixed(3),(maxPx*cmPerPixel).toFixed(3),
-meanPx.toFixed(3),(meanPx*cmPerPixel).toFixed(3),
-p95Px.toFixed(3),p95Cm.toFixed(3),
-statistics.deviationAreaPx2.toFixed(3),
-(statistics.deviationAreaPx2*cmPerPixel*cmPerPixel).toFixed(3),
-sara,SARA_LABELS[sara]??sara,"P95 deviation (cm)",success?1:0
-];
-
-const payload={trials:[headerRow,dataRow]};
-
-if(statusEl){statusEl.textContent="Uploading…";statusEl.style.color="";}
+const missing=CeMoQuUpload.missingFields();
+if(missing){
+show(missing,"#f59e0b");
+return;
+}
+const clin=getClinicianValues();
 if(btn)btn.disabled=true;
-
 try{
+await CeMoQuUpload.submit(completedTrials.map(t=>ldRecord(t,clin)));
+}catch(err){
+console.error("Submit error:",err);
+show("Could not queue the data: "+err.message,"#ef4444");
+}finally{
+if(btn)btn.disabled=false;
+}
+}
 
-const res=await fetch(LD_GOOGLE_SHEET_WEB_APP_URL,{
-method:"POST",
-headers:{"Content-Type":"text/plain;charset=utf-8"},
-body:JSON.stringify(payload)
+window.addEventListener("cemoqu-upload-status",event=>{
+const statusEl=document.getElementById("exportStatus");
+if(!statusEl) return;
+const{text,state}=event.detail;
+statusEl.textContent=text;
+statusEl.style.color=state==="saved"?"#22c55e":state==="error"?"#ef4444":"#f59e0b";
 });
 
-if(!res.ok) throw new Error("Network response was not ok.");
+/* =========================
+   TRAJECTORY THUMBNAIL (pattern from RT: per-trial PNG in the Log,
+   click to download)
+========================= */
 
-const responseData=await res.json();
+function makeTrajectoryPng(strokes,sBox,fBox,hand,trialNumber,testKey){
+const plot=document.createElement("canvas");
+plot.width=WIDTH;
+plot.height=HEIGHT;
+const p=plot.getContext("2d");
+p.fillStyle="#04121a";
+p.fillRect(0,0,WIDTH,HEIGHT);
 
-if(responseData.status==="success"){
-if(statusEl){statusEl.textContent="✅ Saved to Google Sheet.";statusEl.style.color="#22c55e";}
+/* Guide line between box centers */
+const sx=sBox[0]+BOX/2,sy=sBox[1]+BOX/2,fx=fBox[0]+BOX/2,fy=fBox[1]+BOX/2;
+p.strokeStyle="rgba(148,163,184,0.55)";
+p.lineWidth=3;
+p.beginPath();p.moveTo(sx,sy);p.lineTo(fx,fy);p.stroke();
+
+/* Start / finish boxes */
+p.fillStyle="rgba(0,200,120,0.9)";
+p.fillRect(sBox[0],sBox[1],BOX,BOX);
+p.fillRect(fBox[0],fBox[1],BOX,BOX);
+
+/* Drawn path; each touch (after a lift) is its own segment */
+p.strokeStyle="rgba(255,255,255,0.95)";
+p.lineWidth=2.5;
+p.lineJoin="round";
+p.lineCap="round";
+strokes.forEach(t=>{
+if(!t.points||t.points.length<2) return;
+p.beginPath();
+p.moveTo(t.points[0][0],t.points[0][1]);
+for(let i=1;i<t.points.length;i++) p.lineTo(t.points[i][0],t.points[i][1]);
+p.stroke();
+});
+
+p.fillStyle="rgba(255,255,255,0.9)";
+p.font="26px sans-serif";
+p.fillText(`${TEST_NAMES[testKey]} · ${HAND_NAMES[hand]} hand · Trial ${trialNumber}`,20,HEIGHT-20);
+return plot.toDataURL("image/png");
+}
+
+function appendLogHtml(html){
+if(!logArea) return;
+const el=document.createElement("div");
+el.innerHTML=html;
+logArea.appendChild(el);
+logArea.scrollTop=logArea.scrollHeight;
+}
+
+/* =========================
+   RESEARCH TAB
+   TEST / RESEARCH side tabs, clinical reference, weight bar, log.
+   UI pattern reused from RT's RESEARCH tab (itself from SD), per the
+   CeMoQu design principle (2026-09-08).
+========================= */
+
+const logArea=document.getElementById("logArea");
+
+function escapeLogText(value){
+return String(value??"")
+.replace(/&/g,"&amp;")
+.replace(/</g,"&lt;")
+.replace(/>/g,"&gt;");
+}
+
+function appendLog(text){
+if(!logArea) return;
+const el=document.createElement("div");
+const time=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+el.innerHTML=`<span class="small-muted">${time}</span> ${escapeLogText(text)}`;
+logArea.appendChild(el);
+logArea.scrollTop=logArea.scrollHeight;
+}
+
+(function wireResearchTab(){
+
+/* Tabs */
+const tabs=document.querySelectorAll(".ld-tab");
+const panels=document.querySelectorAll(".ld-side-panel");
+tabs.forEach(btn=>btn.addEventListener("click",()=>{
+tabs.forEach(b=>b.classList.toggle("active",b===btn));
+panels.forEach(p=>p.classList.toggle("active",p.dataset.panel===btn.dataset.panel));
+}));
+
+/* Clinical reference: SARA-6 is rated per side; item score = (R + L) / 2
+   (Schmitz-Hübsch et al., 2006 — limb items 5–8 use the arithmetic mean
+   of both sides, giving half-point values). Fields follow the Hand(s)
+   selector in the test controls; with one hand selected, only that side
+   is shown and no item mean is formed. */
+const handsSel=document.getElementById("handSelector"); // TEST-side Hand(s) setting; clinical fields follow it
+const scoreR=document.getElementById("clinicianScoreR");
+const scoreL=document.getElementById("clinicianScoreL");
+const fieldR=document.getElementById("clinicianScoreRField");
+const fieldL=document.getElementById("clinicianScoreLField");
+const meanEl=document.getElementById("clinicianScoreMean");
+const scoreGrid=document.querySelector(".clinician-score-grid");
+
+function renderClinicianScores(){
+if(!handsSel) return;
+const hands=handsSel.value;
+if(fieldR) fieldR.hidden=(hands==="L");
+if(fieldL) fieldL.hidden=(hands==="R");
+if(scoreGrid) scoreGrid.classList.toggle("single",hands!=="B");
+if(!meanEl) return;
+const r=scoreR&&scoreR.value!==""?Number(scoreR.value):null;
+const l=scoreL&&scoreL.value!==""?Number(scoreL.value):null;
+if(hands==="B"){
+meanEl.textContent=(r!==null&&l!==null)?((r+l)/2).toFixed(1):"—";
 }else{
-throw new Error(responseData.message||"Unknown error from server.");
+meanEl.textContent="— (both sides required)";
+}
 }
 
-}catch(err){
+[handsSel,scoreR,scoreL].forEach(el=>el?.addEventListener("change",renderClinicianScores));
+renderClinicianScores();
 
-console.error("Export Error:",err);
-if(statusEl){statusEl.textContent="❌ Upload failed: "+err.message;statusEl.style.color="#ef4444";}
+/* Log */
+document.getElementById("clearLogBtn")?.addEventListener("click",()=>{
+if(logArea) logArea.textContent="";
+});
 
-}finally{
+/* Scoring rules */
+const showScoringBtn=document.getElementById("showScoringBtn");
+const scoringDetails=document.getElementById("scoringDetails");
+if(showScoringBtn&&scoringDetails){
+showScoringBtn.addEventListener("click",()=>{
+const hidden=scoringDetails.hidden;
+scoringDetails.hidden=!hidden;
+if(hidden){
+const c=LD_SCORING_CONFIG;
+scoringDetails.textContent=
+`Scoring version: ${c.version}
+Turn amplitude = height from one turn to the next, across the guide line.
+A movement smaller than the Tolerance is not a turn.
+Each stroke is measured on its own. A jump after a lift is stored, not scored.
+The largest ${c.trimTopFraction*100}% of amplitudes are removed, then the mean sets the score.
 
-if(btn)btn.disabled=false;
+No turn above Tolerance → 0
+Mean amplitude < ${c.amplitudeCutoffsCm[0]} cm → 1
+Mean amplitude < ${c.amplitudeCutoffsCm[1]} cm → 2
+Mean amplitude ≥ ${c.amplitudeCutoffsCm[1]} cm → 3
+SF, TO, OB or DC → 4
 
+Provisional, to be set by a clinician:
+Tolerance, ${c.startFailLimit} start fails, ${c.timeLimitSeconds} s, ${c.outOfBoundsLimit} out of bounds, ${c.discontinuityLimit} discontinuities.`;
+}
+});
 }
 
+})();
+
+/* =========================
+   FULL SCREEN + CANVAS SIZE LOCK
+   The test runs in full screen only. On the first entry the canvas is
+   given a fixed CSS pixel size at the internal 10:7 aspect ratio (uniform
+   x/y scale) and is never resized afterward — not on window resize, not on
+   leaving full screen. Leaving full screen stops a running test; browser
+   zoom shortcuts are blocked, and a zoom change clears calibration because
+   it changes the physical size of a CSS pixel.
+========================= */
+
+let canvasLockedSize=null;
+const FS_SUPPORTED=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
+
+function isFullscreen(){
+return !!(document.fullscreenElement||document.webkitFullscreenElement);
 }
+
+function screenReady(){
+return canvasLockedSize!==null&&(!FS_SUPPORTED||isFullscreen());
+}
+
+function updateScreenGate(){
+const gate=document.getElementById("screenGate");
+if(!gate) return;
+gate.hidden=screenReady();
+const title=document.getElementById("screenGateTitle");
+const btn=document.getElementById("enterFullscreenBtn");
+if(canvasLockedSize){
+if(title) title.textContent="RETURN TO FULL SCREEN";
+if(btn) btn.textContent="Return to Full Screen";
+}
+}
+
+function lockCanvasSize(){
+if(canvasLockedSize) return;
+const container=document.getElementById("canvas-container");
+const availW=container.clientWidth;
+const availH=Math.max(240,window.innerHeight-260);
+const w=Math.floor(Math.min(availW,availH*WIDTH/HEIGHT));
+const h=Math.floor(w*HEIGHT/WIDTH);
+canvas.style.width=w+"px";
+canvas.style.height=h+"px";
+canvas.style.flexShrink="0";
+canvasLockedSize={w,h,dpr:window.devicePixelRatio};
+appendLog(`Canvas size locked: ${w} × ${h} px.`);
+
+if(savedCalibration&&savedCalibration.canvasW===w&&Math.abs((savedCalibration.dpr||0)-window.devicePixelRatio)<0.001){
+pixelsPerCm=savedCalibration.ppc;
+cmPerPixel=savedCalibration.cpp;
+calibrationVerified=true;
+document.getElementById("calibrationStatus").innerHTML='<span class="status-good">Verified (saved)</span>';
+appendLog("Saved calibration restored (same canvas size and zoom).");
+updateStats();
+}
+redraw();
+}
+
+function invalidateCalibration(reason){
+if(sequenceRunning||active) stopTest();
+calibrationVerified=false;
+document.getElementById("calibrationStatus").innerHTML='<span class="status-bad">Not Verified</span>';
+setGuidance(reason,false);
+appendLog(reason);
+updateStats();
+}
+
+function enterFullScreen(){
+const el=document.documentElement;
+const fn=el.requestFullscreen||el.webkitRequestFullscreen;
+if(!fn){
+/* No Fullscreen API (e.g. iPhone Safari): lock at the current size. */
+lockCanvasSize();
+updateScreenGate();
+return;
+}
+try{
+const r=fn.call(el);
+if(r&&r.catch) r.catch(()=>setGuidance("Full screen blocked — try again.",false));
+}catch(e){
+setGuidance("Full screen blocked — try again.",false);
+}
+}
+
+function onFullscreenChange(){
+if(isFullscreen()){
+/* Wait two frames so the full-screen layout has settled before measuring. */
+requestAnimationFrame(()=>requestAnimationFrame(()=>{
+lockCanvasSize();
+updateScreenGate();
+if(calibrationVerified) setGuidance(readyMessage(),false,allHandsComplete(selectedTestKey()));
+else setGuidance("Verify calibration to begin.",false);
+}));
+}else{
+if(sequenceRunning||active){
+stopTest();
+appendLog("Full screen exited — test stopped.");
+}
+updateScreenGate();
+setGuidance("Return to full screen to continue.",false);
+}
+}
+
+document.addEventListener("fullscreenchange",onFullscreenChange);
+document.addEventListener("webkitfullscreenchange",onFullscreenChange);
+document.getElementById("enterFullscreenBtn")?.addEventListener("click",enterFullScreen);
+
+/* Block browser zoom shortcuts (Ctrl/Cmd + + - = 0, Ctrl + wheel). */
+window.addEventListener("keydown",e=>{
+if((e.ctrlKey||e.metaKey)&&["+","-","=","0","_"].includes(e.key)) e.preventDefault();
+},{capture:true});
+window.addEventListener("wheel",e=>{
+if(e.ctrlKey) e.preventDefault();
+},{passive:false});
+
+/* Zoom that gets through anyway (browser menu) changes devicePixelRatio. */
+window.addEventListener("resize",()=>{
+if(!canvasLockedSize) return;
+if(Math.abs(window.devicePixelRatio-canvasLockedSize.dpr)>0.001){
+canvasLockedSize.dpr=window.devicePixelRatio;
+if(calibrationVerified) invalidateCalibration("Zoom changed — verify calibration again.");
+}
+});
 
 /* =========================
    INIT
 ========================= */
 
+document.getElementById("handReadyBtn")?.addEventListener("click",confirmHandReady);
+document.getElementById("handSelector")?.addEventListener("change",()=>{
+if(sequenceRunning) return;
+currentHand=handSequence()[0];
+updateHandScores();
+if(calibrationVerified){
+const key=selectedTestKey();
+setGuidance(readyMessage(),false,allHandsComplete(key));
+}
+});
+
 changeTest();
+updateHandScores();
+updateScreenGate();
+syncStartButton();
+
+appendLog("App ready. Verify calibration, then select Start Test.");
