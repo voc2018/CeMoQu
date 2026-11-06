@@ -73,7 +73,7 @@
     recordStartedAt: 0, currentUrl: null, recognition: null, transcript: '', asrStatus: 'not_started', actualSettings: {}, micCheck: null, cueOscillator: null
   };
   const transitions = {
-    idle: ['checking', 'ready', 'error'], checking: ['ready', 'idle', 'error'], ready: ['countdown', 'idle', 'error'], countdown: ['recording', 'ready', 'error'],
+    idle: ['checking', 'ready', 'error'], checking: ['ready', 'idle', 'error'], ready: ['checking', 'countdown', 'idle', 'error'], countdown: ['recording', 'ready', 'error'],
     recording: ['processing', 'ready', 'error'], processing: ['review', 'ready', 'error'], review: ['ready', 'accepted', 'error'], accepted: ['ready', 'completed'], completed: ['idle'], error: ['idle', 'checking', 'ready']
   };
 
@@ -118,7 +118,7 @@
   function drawWave(ctx, data, peak) { const { width:w,height:h } = ctx.canvas; ctx.clearRect(0,0,w,h); ctx.strokeStyle = peak > .98 ? '#ef4444' : '#21c1fb'; ctx.lineWidth = 2; ctx.beginPath(); for(let i=0;i<data.length;i++){ const x=i/(data.length-1)*w,y=h/2+clamp(data[i]*1.6,-.48,.48)*h; i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); ctx.strokeStyle='#244050';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke(); }
 
   async function checkMicrophone() {
-    if (model.state === 'checking') return; setState('checking'); els.checkMicBtn.disabled = true; els.micTestBtn.disabled = true; els.micGuidance.textContent = 'Stay quiet briefly, then say a few words at your normal level.';
+    if (model.state === 'checking') return; setState('checking'); els.checkMicBtn.disabled = true; els.micTestBtn.disabled = true; els.startTestBtn.disabled = true; els.micState.textContent = 'Checking…'; els.micState.className = ''; els.levelState.textContent = '—'; els.levelState.className = ''; els.noiseState.textContent = '—'; els.noiseState.className = ''; els.micGuidance.textContent = 'Stay quiet for 1 second, then say a few words at your normal level.';
     try {
       await requestMicrophone(); const noise=[]; const signal=[]; for(let i=0;i<30;i++){ await wait(100); (i<10?noise:signal).push(model.lastRms||0); }
       const noiseRms = mean(noise), signalRms = Math.max(...signal), peak = model.lastPeak || 0;
