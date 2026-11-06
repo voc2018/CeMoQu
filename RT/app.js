@@ -2189,15 +2189,28 @@ function rtRecord(s){
 }
 
 /* Saves every finished target. Each target becomes one row. */
+/* The status line is hidden in this layout, so Submit messages appear here. */
+let submitMessageTimer = null;
+function showSubmitMessage(text, state = 'waiting'){
+  const el = document.getElementById('submitMessage');
+  statusLine.textContent = text;
+  if(!el) return;
+  clearTimeout(submitMessageTimer);
+  el.textContent = text;
+  el.dataset.state = state;
+  el.hidden = !text;
+  if(state !== 'waiting') submitMessageTimer = setTimeout(() => { el.hidden = true; }, 8000);
+}
+
 document.getElementById('uploadBtn')?.addEventListener('click', async () => {
   const button = document.getElementById('uploadBtn');
   if(!allTargetSummaries.length){
-    statusLine.textContent = 'Complete a test before submitting.';
+    showSubmitMessage('Complete a test before submitting.', 'error');
     return;
   }
   const missing = CeMoQuUpload.missingFields();
   if(missing){
-    statusLine.textContent = missing;
+    showSubmitMessage(missing, 'error');
     return;
   }
   button.disabled = true;
@@ -2205,12 +2218,12 @@ document.getElementById('uploadBtn')?.addEventListener('click', async () => {
     await CeMoQuUpload.submit(allTargetSummaries.map(rtRecord));
   }catch(error){
     console.error('Submit error:', error);
-    statusLine.textContent = `Could not queue the data: ${error.message}`;
+    showSubmitMessage(`Could not queue the data: ${error.message}`, 'error');
   }finally{
     button.disabled = false;
   }
 });
-window.addEventListener('cemoqu-upload-status', event => { statusLine.textContent = event.detail.text; });
+window.addEventListener('cemoqu-upload-status', event => { showSubmitMessage(event.detail.text, event.detail.state); });
 
 /* export CSV (3 files) - include mode in final summary export */
 exportBtn.addEventListener('click', ()=>{

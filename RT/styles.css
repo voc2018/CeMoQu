@@ -1047,3 +1047,10 @@ line-height:1.55;
 .rt-st-shell .rt-toolbar-top .viewer-toolbar #meta_hand { height: 44px !important; }
 .rt-st-shell .rt-toolbar-top .viewer-toolbar button { flex: 0 0 auto !important; width: auto !important; padding-inline: 14px !important; }
 .rt-st-shell .rt-toolbar-top .viewer-toolbar #meta_hand { flex: 0 1 auto !important; width: auto !important; min-width: 130px; }
+
+/* Submit messages, directly under the toolbar */
+.rt-st-shell .rt-toolbar-top .viewer-toolbar{position:relative}
+.submit-message{position:absolute;top:calc(100% + 8px);right:0;z-index:60;max-width:520px;padding:10px 14px;border:1px solid #f59e0b;border-radius:8px;background:#1f1604;color:#fde68a;font-size:14px;font-weight:600;line-height:1.35;white-space:normal}
+.submit-message[hidden]{display:none}
+.submit-message[data-state="saved"]{border-color:#22c55e;background:#06210f;color:#86efac}
+.submit-message[data-state="error"]{border-color:#ef4444;background:#260b0b;color:#fca5a5}
