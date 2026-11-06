@@ -2,7 +2,7 @@ async function loadHeader() {
     const container = document.getElementById('header-container');
     const base = container?.dataset?.base || '../';
 
-    const response = await fetch(base + 'shared/header.html?v=20261103-3');
+    const response = await fetch(base + 'shared/header.html?v=20261106-2');
     const text = await response.text();
     container.innerHTML = text;
 
@@ -13,6 +13,10 @@ async function loadHeader() {
         document.getElementById('nav-rt').href   = './RT/index.html';
         document.getElementById('nav-ld').href   = './LD/index.html';
         document.getElementById('nav-st').href   = './ST/index.html';
+        const dash = document.getElementById('nav-dash');
+        if (dash) dash.href = './Dashboard/index.html';
+        const research = document.getElementById('nav-research');
+        if (research) research.href = './research/index.html';
     }
 
     setupPersistence();

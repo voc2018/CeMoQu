@@ -12,7 +12,7 @@ method noted inline.
 
 > **These thresholds and weights are engineering placeholders, not clinically validated cutoffs.**
 > See the [README](./README.md#limitations) for what that means. Current scoring config version:
-> `sd-provisional-v1.8`.
+> `sd-provisional-v1.9`.
 
 ---
 
@@ -237,3 +237,22 @@ Every recording is also checked for signal-quality problems (see A1) and task-sp
 as covered in the [README](./README.md#data-quality-isnt-a-passfail-gate), those flags are shown
 alongside the score, not used to block scoring or force a re-recording, unless there is truly no
 usable data at all (B5).
+
+
+## Non-speech sounds (added in sd-provisional-v1.9)
+
+Pa-ta-ka and the sustained vowel exclude coughs, sighs and breaths. Reading is unchanged because it is scored from
+recognized words.
+
+1. Each active frame gets a voicing value: the peak normalized autocorrelation between 60 and 400 Hz, on audio reduced to
+   about 8 kHz, in a 40 ms window. A value under 0.5 counts as unvoiced.
+2. Unvoiced frames form runs. Voiced gaps up to 50 ms are bridged. At least 60% of a run must be unvoiced.
+3. A run is a cough at 0.15 s or longer with a peak at least 1.3 times the median voiced RMS. A run is a breath at 0.3 s or
+   longer. Shorter runs stay as speech, which protects p, t and k.
+4. Excluded time is removed from counts and denominators, padded by 20 ms. Pa-ta-ka events inside it are dropped, intervals
+   that span it are dropped, and vowel dropouts are bridged across it. Phonation is scaled back to the full duration.
+5. If runs exceed 40% of active frames nothing is excluded, because the voice may
+   be breathy. Exclusions are applied silently and are not stored as separate measures.
+
+A recording with no detected event gives the same measures as before. These values are engineering placeholders. They were
+tested with synthetic coughs and sighs added to one healthy voice, not with real coughs or patients.
