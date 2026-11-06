@@ -100,12 +100,6 @@ Calibration
 → Final result
 ```
 
-![Right-hand start message](docs/screenshots/right-hand-test-message.png)
-
-![3-2-1 countdown overlay](docs/screenshots/countdown-overlay.png)
-
-![target sequence running](docs/screenshots/target-running.png)
-
 ---
 
 ## Measurements produced
