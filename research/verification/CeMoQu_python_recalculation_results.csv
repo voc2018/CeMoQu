@@ -1,0 +1,86 @@
+﻿module,scenario_id,scenario_description,expected_score,website_score,python_score,all_three_match
+LD,SYN-P001,Ataxia absent: smooth line. Score 0: no turn above Tolerance.,0,0,0.0,yes
+LD,SYN-P002,"Line parallel to the guide, 0.7 cm away. Score 0: no turn above Tolerance.",0,0,0.0,yes
+LD,SYN-P003,"Slowed movement, 25 s. Score 0: no turn above Tolerance.",0,0,0.0,yes
+LD,SYN-P004,"Fine shaking below Tolerance, 0.2 cm. Score 0: no turn above Tolerance.",0,0,0.0,yes
+LD,SYN-P005,Lift followed by rejoin. Score 0: no turn above Tolerance.,0,0,0.0,yes
+LD,SYN-P006,Even tremor 1 cm. Score 1: mean turn amplitude 0.917 cm.,1,1,1.0,yes
+LD,SYN-P007,Intention tremor grows 0.4 to 1.8 cm near the end. Score 1: mean turn amplitude 0.965 cm.,1,1,1.0,yes
+LD,SYN-P008,Irregular corrections 0.5 to 1.5 cm. Score 1: mean turn amplitude 0.881 cm.,1,1,1.0,yes
+LD,SYN-P009,"Cut-off: just under 2 cm, 1.93 cm. Score 1: mean turn amplitude 1.929 cm.",1,1,1.0,yes
+LD,SYN-P010,"Calibration 5% large, 1.5 cm. Score 1: mean turn amplitude 1.317 cm.",1,1,1.0,yes
+LD,SYN-P011,Even tremor 3 cm. Score 2: mean turn amplitude 2.683 cm.,2,2,2.0,yes
+LD,SYN-P012,Intention tremor grows 1.5 to 5 cm near the end. Score 2: mean turn amplitude 2.96 cm.,2,2,2.0,yes
+LD,SYN-P013,"Decomposition: four segments, 3 cm. Score 2: mean turn amplitude 2.704 cm.",2,2,2.0,yes
+LD,SYN-P014,"One segment only, 3.5 cm. Score 2: mean turn amplitude 3.22 cm.",2,2,2.0,yes
+LD,SYN-P015,"Cut-off: just over 2 cm, 2.05 cm. Score 2: mean turn amplitude 2.05 cm.",2,2,2.0,yes
+LD,SYN-P016,Even tremor 6 cm. Score 3: mean turn amplitude 5.369 cm.,3,3,3.0,yes
+LD,SYN-P017,Hypermetria: large swings 5.5 to 8 cm. Score 3: mean turn amplitude 6.419 cm.,3,3,3.0,yes
+LD,SYN-P018,"Slow large tremor 6 cm, 25 s. Score 3: mean turn amplitude 5.403 cm.",3,3,3.0,yes
+LD,SYN-P019,"Cut-off: just over 5 cm, 5.05 cm. Score 3: mean turn amplitude 5.054 cm.",3,3,3.0,yes
+LD,SYN-P020,Calibration 5% small: true 4.9 cm reads 5.1 cm. Score 3: mean turn amplitude 5.114 cm.,3,3,3.0,yes
+LD,SYN-P021,SF: 3 failed starts. Score 4: reason SF.,4,4,4.0,yes
+LD,SYN-P022,TO: end boundary not crossed in 30 s. Score 4: reason TO.,4,4,4.0,yes
+LD,SYN-P023,OB: left the canvas 3 times. Score 4: reason OB.,4,4,4.0,yes
+LD,SYN-P024,DC: 10 lifts. Score 4: reason DC.,4,4,4.0,yes
+LD,SYN-P025,"OB and DC together. Score 4: reason OB, DC.",4,4,4.0,yes
+RT,SYN-P101,Accurate stop 0.4 cm. Hand score 0: this movement stopped 0.404 cm from the target.,0,0,0.0,yes
+RT,SYN-P102,"Overshoot of 3 cm, then back to 0.5 cm. Hand score 0: this movement stopped 0.458 cm from the target.",0,0,0.0,yes
+RT,SYN-P103,"Instability while holding, 0.3 cm at 4 Hz. Hand score 0: this movement stopped 0.356 cm from the target.",0,0,0.0,yes
+RT,SYN-P104,Delayed start and slow movement. Hand score 0: this movement stopped 0.434 cm from the target.,0,0,0.0,yes
+RT,SYN-P105,Cut-off: just under 1 cm. Hand score 0: this movement stopped 0.896 cm from the target.,0,0,0.0,yes
+RT,SYN-P106,Stop 3 cm from target. Hand score 1: this movement stopped 2.847 cm from the target.,1,1,1.0,yes
+RT,SYN-P107,"Overshoot of 5 cm, then back to 3.5 cm. Hand score 1: this movement stopped 3.272 cm from the target.",1,1,1.0,yes
+RT,SYN-P108,Slow small corrections after a stop 2.5 cm away. Hand score 1: this movement stopped 2.311 cm from the target.,1,1,1.0,yes
+RT,SYN-P109,"Low frame rate, 15 FPS. Hand score 1: this movement stopped 2.778 cm from the target.",1,1,1.0,yes
+RT,SYN-P110,Cut-off: just under 5 cm. Hand score 1: this movement stopped 4.903 cm from the target.,1,1,1.0,yes
+RT,SYN-P111,Stop 8 cm from target. Hand score 2: this movement stopped 7.506 cm from the target.,2,2,2.0,yes
+RT,SYN-P112,"Overshoot of 6 cm, then back to 10 cm. Hand score 2: this movement stopped 9.432 cm from the target.",2,2,2.0,yes
+RT,SYN-P113,"Intention tremor near the stop, 0.8 cm. Hand score 2: this movement stopped 7.612 cm from the target.",2,2,2.0,yes
+RT,SYN-P114,"Tracking loss, every 5th frame after arrival. Hand score 2: this movement stopped 8.456 cm from the target.",2,2,2.0,yes
+RT,SYN-P115,Cut-off: just under 15 cm. Hand score 2: this movement stopped 14.75 cm from the target.,2,2,2.0,yes
+RT,SYN-P116,Stop 18 cm from target. Hand score 3: this movement stopped 16.936 cm from the target.,3,3,3.0,yes
+RT,SYN-P117,"Overshoot of 4 cm, then back to 17 cm. Hand score 3: this movement stopped 16.005 cm from the target.",3,3,3.0,yes
+RT,SYN-P118,"Delayed start and slow movement, 20 cm. Hand score 3: this movement stopped 18.796 cm from the target.",3,3,3.0,yes
+RT,SYN-P119,"Calibration 5% small, reads 17 cm. Hand score 3: this movement stopped 15.828 cm from the target.",3,3,3.0,yes
+RT,SYN-P120,Cut-off: just over 15 cm. Hand score 3: this movement stopped 15.159 cm from the target.,3,3,3.0,yes
+RT,SYN-P121,Last 3 of 5 movements not tracked. Hand score 4: this movement stopped 2.813 cm from the target.,4,4,4,yes
+RT,SYN-P122,First 3 of 5 movements not tracked. Hand score 4: 3 of 5 movements not tracked.,4,4,4,yes
+RT,SYN-P123,"Movements 1, 3 and 5 not tracked. Hand score 4: 3 of 5 movements not tracked.",4,4,4,yes
+RT,SYN-P124,No movement tracked. Hand score 4: 5 of 5 movements not tracked.,4,4,4,yes
+RT,SYN-P125,"Movements 2, 4 and 5 not tracked. Hand score 4: this movement stopped 7.533 cm from the target.",4,4,4,yes
+SD,SYN-P201,"All speech tasks at the same level. Score 0: reading 0, pa-ta-ka 0, vowel 0, weighted 0.",0,0,0,yes
+SD,SYN-P202,"Scanning speech: slow reading and slow pa-ta-ka. Score 0: reading 0, pa-ta-ka 1, vowel 0, weighted 0.4.",0,0,0,yes
+SD,SYN-P203,"Irregular pa-ta-ka rhythm. Score 0: reading 0, pa-ta-ka 1, vowel 0, weighted 0.4.",0,0,0,yes
+SD,SYN-P204,"Imprecise articulation: more word errors, near-normal rate. Score 0: reading 0, pa-ta-ka 1, vowel 0, weighted 0.4.",0,0,0,yes
+SD,SYN-P205,"Pitch and loudness instability, values at a cut-off edge. Score 0: reading 0, pa-ta-ka 0, vowel 0, weighted 0.",0,0,0,yes
+SD,SYN-P206,"All speech tasks at the same level. Score 1: reading 1, pa-ta-ka 1, vowel 1, weighted 1.",1,1,1,yes
+SD,SYN-P207,"Scanning speech: slow reading and slow pa-ta-ka. Score 1: reading 1, pa-ta-ka 2, vowel 1, weighted 1.4.",1,1,1,yes
+SD,SYN-P208,"Irregular pa-ta-ka rhythm. Score 1: reading 1, pa-ta-ka 2, vowel 0, weighted 1.3.",1,1,1,yes
+SD,SYN-P209,"Imprecise articulation: more word errors, near-normal rate. Score 1: reading 1, pa-ta-ka 1, vowel 1, weighted 1.",1,1,1,yes
+SD,SYN-P210,"Pitch and loudness instability, values at a cut-off edge. Score 1: reading 1, pa-ta-ka 1, vowel 1, weighted 1.",1,1,1,yes
+SD,SYN-P211,"All speech tasks at the same level. Score 2: reading 2, pa-ta-ka 2, vowel 2, weighted 2.",2,2,2,yes
+SD,SYN-P212,"Scanning speech: slow reading and slow pa-ta-ka. Score 2: reading 2, pa-ta-ka 3, vowel 2, weighted 2.4.",2,2,2,yes
+SD,SYN-P213,"Irregular pa-ta-ka rhythm. Score 2: reading 2, pa-ta-ka 3, vowel 1, weighted 2.3.",2,2,2,yes
+SD,SYN-P214,"Imprecise articulation: more word errors, near-normal rate. Score 2: reading 2, pa-ta-ka 2, vowel 2, weighted 2.",2,2,2,yes
+SD,SYN-P215,"Pitch and loudness instability, values at a cut-off edge. Score 2: reading 2, pa-ta-ka 2, vowel 2, weighted 2.",2,2,2,yes
+SD,SYN-P216,"All speech tasks at the same level. Score 3: reading 3, pa-ta-ka 3, vowel 3, weighted 3.",3,3,3,yes
+SD,SYN-P217,"Scanning speech: slow reading and slow pa-ta-ka. Score 3: reading 3, pa-ta-ka 4, vowel 3, weighted 3.4.",3,3,3,yes
+SD,SYN-P218,"Irregular pa-ta-ka rhythm. Score 3: reading 3, pa-ta-ka 4, vowel 2, weighted 3.3.",3,3,3,yes
+SD,SYN-P219,"Imprecise articulation: more word errors, near-normal rate. Score 3: reading 3, pa-ta-ka 3, vowel 3, weighted 3.",3,3,3,yes
+SD,SYN-P220,"Pitch and loudness instability, values at a cut-off edge. Score 3: reading 3, pa-ta-ka 3, vowel 3, weighted 3.",3,3,3,yes
+SD,SYN-P221,"All speech tasks at the same level. Score 4: reading 4, pa-ta-ka 4, vowel 4, weighted 4.",4,4,4,yes
+SD,SYN-P222,"Scanning speech: slow reading and slow pa-ta-ka. Score 4: reading 4, pa-ta-ka 5, vowel 4, weighted 4.4.",4,4,4,yes
+SD,SYN-P223,"Irregular pa-ta-ka rhythm. Score 4: reading 4, pa-ta-ka 5, vowel 3, weighted 4.3.",4,4,4,yes
+SD,SYN-P224,"Imprecise articulation: more word errors, near-normal rate. Score 4: reading 4, pa-ta-ka 4, vowel 4, weighted 4.",4,4,4,yes
+SD,SYN-P225,"Intelligibility floor: reading 4, other tasks mild. Score 4: reading 4, pa-ta-ka 1, vowel 1, weighted 2.5.",4,4,4,yes
+SD,SYN-P226,"All speech tasks at the same level. Score 5: reading 5, pa-ta-ka 5, vowel 5, weighted 5.",5,5,5,yes
+SD,SYN-P227,"Scanning speech: slow reading and slow pa-ta-ka. Score 5: reading 5, pa-ta-ka 6, vowel 5, weighted 5.4.",5,5,5,yes
+SD,SYN-P228,"Irregular pa-ta-ka rhythm. Score 5: reading 5, pa-ta-ka 6, vowel 4, weighted 5.3.",5,5,5,yes
+SD,SYN-P229,"Imprecise articulation: more word errors, near-normal rate. Score 5: reading 5, pa-ta-ka 5, vowel 5, weighted 5.",5,5,5,yes
+SD,SYN-P230,"Intelligibility floor: reading 5, other tasks mild. Score 5: reading 5, pa-ta-ka 2, vowel 2, weighted 3.5.",5,5,5,yes
+SD,SYN-P231,"All speech tasks at the same level. Score 6: reading 6, pa-ta-ka 6, vowel 6, weighted 6.",6,6,6,yes
+SD,SYN-P232,"Scanning speech: slow reading and slow pa-ta-ka. Score 6: reading 6, pa-ta-ka 6, vowel 6, weighted 6.",6,6,6,yes
+SD,SYN-P233,"Irregular pa-ta-ka rhythm. Score 6: reading 6, pa-ta-ka 6, vowel 5, weighted 5.9.",6,6,6,yes
+SD,SYN-P234,"Imprecise articulation: more word errors, near-normal rate. Score 6: reading 6, pa-ta-ka 6, vowel 6, weighted 6.",6,6,6,yes
+SD,SYN-P235,"Intelligibility floor: reading 6, other tasks mild. Score 6: reading 6, pa-ta-ka 3, vowel 3, weighted 4.5.",6,6,6,yes
